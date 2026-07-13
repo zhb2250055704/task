@@ -1,0 +1,14 @@
+[
+  {
+    "id": "c243d4d8f2ed",
+    "name": "普工伤害计算",
+    "expression": "（我攻击*我攻击）/(我攻击*他防御)",
+    "variables": [
+      "我攻击，他防御"
+    ],
+    "category": "武将",
+    "description": "",
+    "create_time": "2026-06-25 11:32:43",
+    "update_time": "2026-06-25 11:32:43"
+  }
+]

@@ -1,0 +1,6 @@
+__pycache__/
+*.py[cod]
+*.log
+server-start*.log
+gm_users.json
+.env
