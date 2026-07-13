@@ -7,63 +7,109 @@
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
-    --accent: #6366f1;
-    --accent2: #06b6d4;
+    --accent: #20d3b0;
+    --accent2: #4d8dff;
+    --accent3: #f2b84b;
+    --panel: rgba(9, 15, 24, .58);
+    --line: rgba(167, 180, 203, .22);
+    --text: #edf4ff;
+    --muted: #9eacbe;
   }
   body {
-    font-family: -apple-system, "Microsoft YaHei", "Segoe UI", sans-serif;
+    font-family: "Microsoft YaHei UI", "Microsoft YaHei", "Segoe UI", sans-serif;
     min-height: 100vh; display: flex; align-items: center; justify-content: center;
-    background: #0a0e1a; position: relative; overflow: hidden;
+    padding: 40px 24px;
+    background:
+      radial-gradient(circle at 50% 50%, rgba(32,211,176,.08), transparent 24%),
+      linear-gradient(90deg, rgba(3,7,12,.18), rgba(3,7,12,.08) 46%, rgba(3,7,12,.18)),
+      url("assets/login-console-bg.png") center / cover no-repeat,
+      #070a0f;
+    position: relative; overflow: hidden;
   }
   body::before {
-    content: ''; position: absolute; width: 600px; height: 600px; border-radius: 50%;
-    background: radial-gradient(circle, rgba(99,102,241,.35), transparent 70%);
-    top: -150px; left: -100px; filter: blur(40px); animation: float1 12s ease-in-out infinite;
+    content: ''; position: absolute; inset: 0; pointer-events: none;
+    background:
+      linear-gradient(90deg, transparent calc(50% - 258px), rgba(32,211,176,.16) calc(50% - 258px), transparent calc(50% - 254px), transparent calc(50% + 254px), rgba(77,141,255,.14) calc(50% + 254px), transparent calc(50% + 258px)),
+      radial-gradient(circle at 50% 49%, rgba(32,211,176,.12), transparent 31%);
   }
   body::after {
-    content: ''; position: absolute; width: 500px; height: 500px; border-radius: 50%;
-    background: radial-gradient(circle, rgba(6,182,212,.3), transparent 70%);
-    bottom: -120px; right: -80px; filter: blur(40px); animation: float2 14s ease-in-out infinite;
+    content: ''; position: absolute; inset: 0; pointer-events: none;
+    background: linear-gradient(rgba(255,255,255,.035) 1px, transparent 1px);
+    background-size: 100% 6px; opacity: .22;
   }
   @keyframes float1 { 0%,100%{transform:translate(0,0)} 50%{transform:translate(60px,40px)} }
   @keyframes float2 { 0%,100%{transform:translate(0,0)} 50%{transform:translate(-50px,-30px)} }
   .login-box {
-    position: relative; z-index: 1; width: 380px; max-width: 92vw;
-    background: rgba(255,255,255,.06); backdrop-filter: blur(20px);
-    border: 1px solid rgba(255,255,255,.12); border-radius: 20px;
-    padding: 40px 36px; box-shadow: 0 20px 60px rgba(0,0,0,.5);
+    position: relative; z-index: 1; width: 400px; max-width: 92vw;
+    background:
+      linear-gradient(rgba(255,255,255,.028) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,.022) 1px, transparent 1px),
+      linear-gradient(180deg, rgba(18,27,40,.66), rgba(8,14,23,.54));
+    background-size: 28px 28px, 28px 28px, auto;
+    backdrop-filter: blur(12px) saturate(1.12);
+    border: 1px solid rgba(167,180,203,.24); border-radius: 14px;
+    padding: 34px 34px 32px;
+    box-shadow:
+      0 0 0 1px rgba(32,211,176,.08) inset,
+      0 18px 46px rgba(0,0,0,.28);
+    overflow: hidden;
   }
-  .brand { text-align: center; margin-bottom: 30px; }
+  .login-box::before {
+    content: ''; position: absolute; inset: 0; pointer-events: none;
+    border-radius: inherit;
+    background:
+      linear-gradient(90deg, var(--accent), transparent 34%, transparent 66%, var(--accent2)) top / 100% 2px no-repeat,
+      linear-gradient(90deg, var(--accent), transparent 34%, transparent 66%, var(--accent2)) bottom / 100% 2px no-repeat,
+      linear-gradient(180deg, var(--accent), transparent 34%, transparent 66%, var(--accent2)) left / 2px 100% no-repeat,
+      linear-gradient(180deg, var(--accent), transparent 34%, transparent 66%, var(--accent2)) right / 2px 100% no-repeat;
+    opacity: .78;
+  }
+  .login-box::after {
+    content: 'AUTH NODE';
+    position: absolute; right: 22px; top: 18px;
+    font-family: Consolas, "Cascadia Mono", monospace;
+    font-size: 11px; letter-spacing: .16em; color: rgba(158,172,190,.48);
+  }
+  .brand { text-align: center; margin-bottom: 28px; padding-top: 6px; }
   .brand .icon {
-    width: 60px; height: 60px; margin: 0 auto 14px; border-radius: 16px;
+    width: 56px; height: 56px; margin: 0 auto 14px; border-radius: 13px;
     background: linear-gradient(135deg, var(--accent), var(--accent2));
     display: flex; align-items: center; justify-content: center; font-size: 30px;
-    box-shadow: 0 8px 24px rgba(99,102,241,.4);
+    box-shadow: 0 0 0 1px rgba(255,255,255,.18) inset, 0 14px 30px rgba(32,211,176,.28);
   }
-  .brand h1 { font-size: 20px; color: #fff; font-weight: 600; letter-spacing: .5px; }
-  .brand .sub { color: #94a3b8; font-size: 13px; margin-top: 6px; }
+  .brand h1 { font-size: 20px; color: var(--text); font-weight: 800; letter-spacing: 0; }
+  .brand .sub { color: var(--muted); font-size: 13px; margin-top: 6px; }
   .field { margin-bottom: 18px; }
-  .field label { display: block; font-size: 12px; color: #94a3b8; margin-bottom: 8px; letter-spacing: .5px; }
+  .field label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 8px; letter-spacing: .5px; }
   .field input {
-    width: 100%; padding: 13px 14px; border: 1px solid rgba(255,255,255,.12);
-    border-radius: 10px; font-size: 15px; background: rgba(255,255,255,.04); color: #e2e8f0;
+    width: 100%; padding: 13px 14px; border: 1px solid rgba(167,180,203,.22);
+    border-radius: 7px; font-size: 15px; background: rgba(7,11,17,.48); color: var(--text);
     transition: .2s;
   }
-  .field input::placeholder { color: #64748b; }
+  .field input::placeholder { color: #66758a; }
   .field input:focus {
     outline: none; border-color: var(--accent);
-    box-shadow: 0 0 0 3px rgba(99,102,241,.2); background: rgba(255,255,255,.07);
+    box-shadow: 0 0 0 3px rgba(32,211,176,.12), 0 0 22px rgba(32,211,176,.08);
+    background: rgba(12,19,29,.62);
   }
   .btn {
-    width: 100%; padding: 14px; border: none; border-radius: 10px;
+    width: 100%; padding: 14px; border: none; border-radius: 7px;
     background: linear-gradient(135deg, var(--accent), var(--accent2));
-    color: #fff; font-size: 15px; font-weight: 600; cursor: pointer; margin-top: 6px;
-    transition: .2s; box-shadow: 0 8px 24px rgba(99,102,241,.35); letter-spacing: 2px;
+    color: #06110f; font-size: 15px; font-weight: 800; cursor: pointer; margin-top: 6px;
+    transition: .2s; box-shadow: 0 12px 28px rgba(32,211,176,.18); letter-spacing: 2px;
   }
-  .btn:hover { transform: translateY(-2px); box-shadow: 0 12px 30px rgba(99,102,241,.5); }
+  .btn:hover { transform: translateY(-2px); box-shadow: 0 16px 34px rgba(32,211,176,.32); }
   .btn:active { transform: translateY(0); }
   .err { color: #f87171; font-size: 13px; text-align: center; min-height: 18px; margin-top: 14px; }
-  .tip { margin-top: 22px; font-size: 12px; color: #64748b; text-align: center; line-height: 1.7; }
+  .tip { margin-top: 22px; font-size: 12px; color: #66758a; text-align: center; line-height: 1.7; }
+  @media (max-width: 720px) {
+    body {
+      justify-content: center;
+      padding: 24px;
+      background-position: 58% center;
+    }
+    .login-box { width: 100%; padding: 34px 28px; }
+  }
 </style>
 </head>
 <body>
