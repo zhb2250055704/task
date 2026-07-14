@@ -366,7 +366,52 @@ def parse_git_name_status_rows(output):
     return rows
 
 
-def compare_xlsx_sheets(before_sheets, after_sheets, max_rows=80, max_cols=26):
+def _xlsx_used_bounds(*cell_maps):
+    max_row = 0
+    max_col = 0
+    for cells in cell_maps:
+        for rnum, cnum in cells.keys():
+            max_row = max(max_row, rnum)
+            max_col = max(max_col, cnum)
+    return max_row, max_col
+
+
+def _xlsx_header_rows(before_cells, after_cells, max_col, max_header_rows=10):
+    header_rows = []
+    max_scan = min(max_header_rows, max((r for r, _ in set(before_cells.keys()) | set(after_cells.keys())), default=0))
+    for rnum in range(1, max_scan + 1):
+        values = []
+        has_value = False
+        for cnum in range(1, max_col + 1):
+            value = after_cells.get((rnum, cnum), before_cells.get((rnum, cnum), ''))
+            values.append(value)
+            if str(value).strip():
+                has_value = True
+        if has_value:
+            header_rows.append({'row': rnum, 'values': values})
+    return header_rows
+
+
+def _xlsx_column_headers(before_cells, after_cells, max_col, header_rows):
+    columns = []
+    for cnum in range(1, max_col + 1):
+        parts = []
+        for header in header_rows:
+            values = header.get('values') or []
+            value = values[cnum - 1] if cnum - 1 < len(values) else ''
+            value = str(value or '').strip()
+            if value and value not in parts:
+                parts.append(value)
+        columns.append({
+            'index': cnum,
+            'label': _col_label(cnum),
+            'header': ' / '.join(parts),
+            'headers': parts,
+        })
+    return columns
+
+
+def compare_xlsx_sheets(before_sheets, after_sheets, max_rows=80, max_cols=120):
     before_map = {s['name']: s for s in before_sheets}
     after_map = {s['name']: s for s in after_sheets}
     names = list(dict.fromkeys(list(before_map.keys()) + list(after_map.keys())))
@@ -381,7 +426,13 @@ def compare_xlsx_sheets(before_sheets, after_sheets, max_rows=80, max_cols=26):
         changed_rows = sorted(set(r for r, _ in changed))
         changed_cols = sorted(set(c for _, c in changed))
         rows_to_show = changed_rows[:max_rows]
-        cols_to_show = changed_cols[:max_cols]
+        _, max_used_col = _xlsx_used_bounds(before_cells, after_cells)
+        all_cols = list(range(1, max_used_col + 1))
+        cols_to_show = all_cols[:max_cols]
+        header_rows = _xlsx_header_rows(before_cells, after_cells, max_used_col)
+        column_headers = _xlsx_column_headers(before_cells, after_cells, max_used_col, header_rows)
+        column_header_map = {col['index']: col for col in column_headers}
+        changed_col_set = set(changed_cols)
         table_rows = []
         for rnum in rows_to_show:
             row_cells = []
@@ -396,16 +447,23 @@ def compare_xlsx_sheets(before_sheets, after_sheets, max_rows=80, max_cols=26):
                     status = 'deleted'
                 else:
                     status = 'changed'
-                row_cells.append({'col': cnum, 'label': _col_label(cnum), 'before': before,
-                                  'after': after, 'status': status})
+                col_header = column_header_map.get(cnum, {})
+                row_cells.append({'col': cnum, 'label': _col_label(cnum),
+                                  'header': col_header.get('header', ''),
+                                  'headers': col_header.get('headers', []),
+                                  'before': before, 'after': after,
+                                  'status': status, 'changed': cnum in changed_col_set})
             table_rows.append({'row': rnum, 'cells': row_cells})
         results.append({
             'name': name,
             'total_changes': len(changed),
             'shown_rows': len(rows_to_show),
             'shown_cols': len(cols_to_show),
-            'truncated': len(changed_rows) > max_rows or len(changed_cols) > max_cols,
-            'columns': [{'index': c, 'label': _col_label(c)} for c in cols_to_show],
+            'total_cols': max_used_col,
+            'changed_cols': [_col_label(c) for c in changed_cols],
+            'truncated': len(changed_rows) > max_rows or max_used_col > max_cols,
+            'headers': header_rows,
+            'columns': [column_header_map.get(c, {'index': c, 'label': _col_label(c), 'header': '', 'headers': []}) for c in cols_to_show],
             'rows': table_rows,
         })
     return results

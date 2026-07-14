@@ -331,12 +331,17 @@
   .excel-diff-table th, .excel-diff-table td { padding: 8px 10px; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); min-width: 130px; max-width: 280px; vertical-align: top; }
   .excel-diff-table th { position: sticky; top: 0; z-index: 1; background: var(--th-bg); color: var(--text); }
   .excel-diff-table .row-head { position: sticky; left: 0; z-index: 2; min-width: 58px; background: var(--th-bg); color: var(--text-dim); text-align: right; }
+  .excel-diff-col-label { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; color: var(--accent); font-weight: 900; }
+  .excel-diff-col-header { margin-top: 4px; color: var(--text); font-size: 12px; line-height: 1.35; white-space: pre-wrap; word-break: break-word; }
+  .excel-diff-changed-cols { color: var(--text-dim); font-size: 12px; margin: 6px 0 10px; line-height: 1.6; }
+  .excel-diff-changed-cols b { color: var(--text); }
   .excel-cell { white-space: pre-wrap; word-break: break-word; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; line-height: 1.45; }
   .excel-cell .old { color: #fca5a5; text-decoration: line-through; }
   .excel-cell .new { color: #86efac; font-weight: 800; }
   .excel-cell-added { background: rgba(34,197,94,.12); }
   .excel-cell-deleted { background: rgba(239,68,68,.12); }
   .excel-cell-changed { background: rgba(242,184,75,.14); }
+  .excel-cell-unchanged { opacity: .72; }
   .excel-cell-same { color: var(--text-dim); }
 
   /* ============ Visual refresh: GM control deck ============ */
@@ -2283,21 +2288,45 @@ function renderExcelCell(cell) {
   return '<div class="excel-cell excel-cell-same">' + esc(after || before || '') + '</div>';
 }
 
+function renderExcelColumnHeader(col) {
+  const header = col.header || (col.headers || []).join(' / ');
+  return '<th>' +
+    '<div class="excel-diff-col-label">' + esc(col.label || col.index || '') + '</div>' +
+    (header ? '<div class="excel-diff-col-header">' + esc(header) + '</div>' : '<div class="excel-diff-col-header">[无表头]</div>') +
+  '</th>';
+}
+
+function renderExcelChangedColumns(sheet) {
+  const columns = sheet.columns || [];
+  const changedLabels = new Set(sheet.changed_cols || []);
+  const items = columns.filter(col => changedLabels.has(col.label)).map(col => {
+    const header = col.header || (col.headers || []).join(' / ') || '[无表头]';
+    return esc(col.label || col.index) + '（' + esc(header) + '）';
+  });
+  if (!items.length) return '';
+  return '<div class="excel-diff-changed-cols"><b>变化字段：</b>' + items.join('、') + '</div>';
+}
+
 function renderExcelSheetDiff(sheet) {
   const columns = sheet.columns || [];
   const rows = sheet.rows || [];
   if (!rows.length || !columns.length) {
     return '<div class="empty" style="padding:16px">这个工作表没有可展示的单元格变化</div>';
   }
-  const head = '<tr><th class="row-head">行号</th>' + columns.map(col => '<th>' + esc(col.label || col.index) + '</th>').join('') + '</tr>';
+  const head = '<tr><th class="row-head">行号</th>' + columns.map(renderExcelColumnHeader).join('') + '</tr>';
   const body = rows.map(row => {
     return '<tr><th class="row-head">' + esc(row.row) + '</th>' +
-      (row.cells || []).map(cell => '<td class="excel-cell-' + esc(cell.status || 'same') + '">' + renderExcelCell(cell) + '</td>').join('') +
+      (row.cells || []).map(cell => {
+        const status = cell.status || 'same';
+        const cls = cell.changed ? ('excel-cell-' + esc(status)) : 'excel-cell-unchanged';
+        return '<td class="' + cls + '">' + renderExcelCell(cell) + '</td>';
+      }).join('') +
       '</tr>';
   }).join('');
-  const truncated = sheet.truncated ? '<div class="git-record-meta">变化范围较大，仅展示前 ' + sheet.shown_rows + ' 行 / ' + sheet.shown_cols + ' 列变化区域。</div>' : '';
+  const truncated = sheet.truncated ? '<div class="git-record-meta">变化范围较大，仅展示前 ' + sheet.shown_rows + ' 行 / ' + sheet.shown_cols + ' 列；当前表共 ' + esc(sheet.total_cols || sheet.shown_cols || 0) + ' 列。</div>' : '';
   return '<div class="excel-diff-sheet">' +
     '<div class="excel-diff-sheet-title">Sheet：' + esc(sheet.name || '-') + ' / 变化单元格 ' + esc(sheet.total_changes || 0) + ' 个</div>' +
+    renderExcelChangedColumns(sheet) +
     truncated +
     '<div class="excel-diff-wrap"><table class="excel-diff-table"><thead>' + head + '</thead><tbody>' + body + '</tbody></table></div>' +
   '</div>';
@@ -2310,7 +2339,7 @@ function renderExcelDiffs(excelDiffs) {
     '<span class="excel-cell-added">新增</span>' +
     '<span class="excel-cell-deleted">删除</span>' +
     '<span class="excel-cell-changed">修改</span>' +
-    '<span>只展示发生变化的行列</span>' +
+    '<span>展示变化行的全部字段和表头</span>' +
   '</div>';
   const files = list.map(file => {
     const sheets = file.sheets || [];
