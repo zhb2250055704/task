@@ -1504,6 +1504,165 @@
       grid-template-columns: 1fr;
     }
   }
+
+  /* ============ Aurora palette refresh ============ */
+  :root {
+    --accent: #9b8cff;
+    --accent2: #67d7ff;
+    --accent3: #ffcf70;
+    --accent-soft: rgba(155,140,255,.16);
+    --ok: #7dd3fc;
+    --warning: #ffcf70;
+  }
+  html[data-theme="dark"] {
+    --bg: #172554;
+    --bg-grad:
+      radial-gradient(980px 620px at 12% 12%, rgba(255, 128, 171, .18), transparent 58%),
+      radial-gradient(860px 560px at 82% 18%, rgba(103, 215, 255, .24), transparent 60%),
+      radial-gradient(760px 560px at 62% 92%, rgba(155, 140, 255, .24), transparent 62%),
+      linear-gradient(135deg, #1f2f6d 0%, #243b7a 48%, #163b63 100%);
+    --sidebar-bg: rgba(31, 45, 101, .62);
+    --panel: rgba(42, 59, 126, .58);
+    --panel-solid: #25376e;
+    --card: rgba(48, 67, 139, .56);
+    --card-bg: rgba(48, 67, 139, .62);
+    --border: rgba(220, 232, 255, .18);
+    --border-strong: rgba(236, 244, 255, .34);
+    --text: #f6f8ff;
+    --text-dim: #c7d5f4;
+    --text-faint: #93a6d1;
+    --th-bg: rgba(255,255,255,.08);
+    --row-hover: rgba(103, 215, 255, .12);
+    --input-bg: rgba(31, 45, 101, .46);
+    --ghost-bg: rgba(255,255,255,.08);
+    --ghost-hover: rgba(155,140,255,.18);
+    --code-bg: rgba(103, 215, 255, .13);
+    --shadow: 0 24px 70px rgba(24, 34, 86, .34);
+    --shadow-soft: 0 14px 38px rgba(24, 34, 86, .24);
+  }
+  body::before {
+    background:
+      linear-gradient(rgba(255,255,255,.045) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,.032) 1px, transparent 1px);
+    opacity: .28;
+  }
+  .topbar {
+    background:
+      linear-gradient(180deg, rgba(255,255,255,.13), rgba(255,255,255,.045)),
+      rgba(39, 54, 118, .66);
+  }
+  .topbar .logo .dot {
+    background: linear-gradient(135deg, #ff8ab3, var(--accent), var(--accent2));
+    box-shadow: 0 0 0 1px rgba(255,255,255,.22) inset, 0 16px 32px rgba(155,140,255,.28);
+  }
+  .nav-item {
+    color: #d2dcf7;
+  }
+  .nav-item:hover {
+    border-color: rgba(103,215,255,.28);
+    background: rgba(255,255,255,.075);
+  }
+  .nav-item.active {
+    color: #ffffff;
+    border-color: rgba(155,140,255,.5);
+    background:
+      linear-gradient(135deg, rgba(155,140,255,.32), rgba(103,215,255,.18)),
+      rgba(255,255,255,.08);
+    box-shadow: 0 14px 30px rgba(86,104,214,.18);
+  }
+  .nav-item.active::after {
+    background: var(--accent2);
+    box-shadow: 0 0 16px rgba(103,215,255,.85);
+  }
+  header {
+    background:
+      linear-gradient(120deg, rgba(255,255,255,.13), rgba(255,255,255,.05) 48%, rgba(255,207,112,.12)),
+      rgba(43, 59, 127, .64);
+  }
+  header::before {
+    background: radial-gradient(circle, rgba(255, 138, 179, .3), transparent 68%);
+  }
+  .toolbar,
+  .cat-group,
+  table,
+  .item-card,
+  .repo-card,
+  .git-commit-panel,
+  .git-record {
+    background:
+      linear-gradient(180deg, rgba(255,255,255,.09), rgba(255,255,255,.035)),
+      rgba(45, 62, 133, .58);
+  }
+  .btn-primary {
+    color: #161a42;
+    background: linear-gradient(135deg, #ffcf70, #ff8ab3 52%, #9b8cff);
+    box-shadow: 0 12px 28px rgba(155,140,255,.22);
+  }
+  .btn-primary:hover {
+    box-shadow: 0 16px 34px rgba(255,138,179,.24);
+  }
+  .btn-ghost:hover {
+    border-color: rgba(103,215,255,.36);
+    background: rgba(103,215,255,.12);
+  }
+  .item-card:hover,
+  .repo-card:hover,
+  .git-commit-panel:hover,
+  .git-record:hover {
+    border-color: rgba(255,207,112,.5);
+    box-shadow: 0 22px 48px rgba(47, 61, 138, .3);
+  }
+  .item-card::before,
+  .repo-card::before,
+  .git-commit-panel::before,
+  .git-record::before,
+  .cat-group-header .cat-bar {
+    background: linear-gradient(180deg, var(--accent2), var(--accent), var(--accent3));
+  }
+  .item-card .card-title .perm,
+  .badge {
+    color: var(--accent2);
+    background: rgba(103,215,255,.14);
+  }
+  .tag {
+    color: #ffd98c;
+    background: rgba(255,207,112,.14);
+  }
+  code,
+  .item-card .card-cmd,
+  .repo-meta code,
+  .git-commit-hash {
+    color: #9fe5ff;
+  }
+  .item-card .card-cmd,
+  pre.script-preview,
+  .repo-changes,
+  .git-output,
+  .git-record pre {
+    background: rgba(30, 44, 103, .45);
+    border-color: rgba(103,215,255,.2);
+  }
+  .git-commit-item:hover {
+    border-color: rgba(255,207,112,.34);
+    background: rgba(255,207,112,.1);
+  }
+  .git-progress-fill {
+    background: linear-gradient(90deg, var(--accent2), var(--accent), var(--accent3));
+    box-shadow: 0 0 18px rgba(155,140,255,.34);
+  }
+  #toast {
+    color: #151a43;
+    background: linear-gradient(135deg, #ffcf70, #ff8ab3);
+  }
+  ::selection {
+    background: rgba(255,207,112,.35);
+    color: var(--text);
+  }
+  .mask:not(.git-detail-modal) .modal {
+    background:
+      linear-gradient(180deg, rgba(255,255,255,.09), rgba(255,255,255,.04)),
+      rgba(44, 60, 130, .94);
+  }
   @media (prefers-reduced-motion: reduce) {
     *,
     *::before,
