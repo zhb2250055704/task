@@ -2514,6 +2514,410 @@
       padding: 18px 14px 22px;
     }
   }
+
+  /* ============ HRMA reference refactor ============ */
+  :root {
+    --accent: #f59d22;
+    --accent2: #8e3ff2;
+    --accent3: #262624;
+    --accent-soft: rgba(245,157,34,.14);
+    --office-scene: url("https://images.unsplash.com/photo-1497366754035-f200968a6e72?auto=format&fit=crop&w=1600&q=80");
+    --radius: 18px;
+  }
+  html[data-theme="dark"],
+  html[data-theme="light"] {
+    --bg: #d9d2ff;
+    --bg-grad: linear-gradient(135deg, #d9d2ff 0%, #eeeaff 48%, #cfc7ff 100%);
+    --sidebar-bg: #222321;
+    --panel: #ffffff;
+    --panel-solid: #ffffff;
+    --card: #ffffff;
+    --card-bg: #ffffff;
+    --border: rgba(38,38,36,.08);
+    --border-strong: rgba(38,38,36,.14);
+    --text: #242424;
+    --text-dim: #6f7078;
+    --text-faint: #a7a8b0;
+    --th-bg: #f5f4fb;
+    --row-hover: rgba(245,157,34,.08);
+    --input-bg: #f7f6fb;
+    --ghost-bg: #f1f0f5;
+    --ghost-hover: #e8e5ef;
+    --code-bg: #f5f1ff;
+    --shadow: 0 28px 70px rgba(70, 58, 130, .18);
+    --shadow-soft: 0 14px 34px rgba(70, 58, 130, .12);
+  }
+  body {
+    font-family: "Inter", "Aptos", "Microsoft YaHei UI", "Microsoft YaHei", "Segoe UI", sans-serif;
+    color: var(--text);
+    background: var(--bg-grad);
+  }
+  body::before {
+    display: none;
+  }
+  .layout {
+    width: min(1500px, calc(100vw - 68px));
+    min-height: min(880px, calc(100vh - 68px));
+    margin: 34px auto;
+    grid-template-columns: 190px minmax(0, 1fr);
+    gap: 0;
+    border: 4px solid #1f201f;
+    border-radius: 26px;
+    background: #ffffff;
+    box-shadow: 0 30px 80px rgba(67, 55, 127, .22);
+    overflow: hidden;
+  }
+  .topbar {
+    min-height: auto;
+    height: auto;
+    padding: 26px 0 22px;
+    border: 0;
+    border-radius: 0;
+    background: #222321;
+    box-shadow: none;
+    backdrop-filter: none;
+  }
+  .topbar .logo {
+    min-height: 58px;
+    padding: 0 20px 20px;
+    color: #ffffff;
+    font-size: 18px;
+    font-weight: 900;
+    letter-spacing: -.02em;
+  }
+  .topbar .logo .dot {
+    width: 18px;
+    height: 18px;
+    margin-right: 8px;
+    border-radius: 999px;
+    background: #f59d22;
+    box-shadow: none;
+    font-size: 11px;
+  }
+  .topnav {
+    gap: 4px;
+  }
+  .nav-item {
+    min-height: 44px;
+    padding: 12px 20px;
+    border: 0;
+    border-radius: 0;
+    color: rgba(255,255,255,.72);
+    background: transparent;
+    font-size: 13px;
+    font-weight: 700;
+  }
+  .nav-item:hover {
+    color: #ffffff;
+    background: rgba(255,255,255,.07);
+  }
+  .nav-item.active {
+    color: #ffffff;
+    background: #f59d22;
+    box-shadow: none;
+  }
+  .nav-item::after {
+    display: none;
+  }
+  .topbar-user {
+    border-top: 0;
+    padding: 18px 18px 0;
+    gap: 10px;
+  }
+  .topbar-user .u-info,
+  .topbar-user .u-acts a,
+  .zoom-box,
+  .theme-toggle {
+    border: 0;
+    border-radius: 16px;
+    color: rgba(255,255,255,.72);
+    background: rgba(255,255,255,.08);
+  }
+  .topbar-user .u-info .user-name,
+  .zoom-box input,
+  .zoom-box span,
+  .theme-toggle {
+    color: #ffffff;
+  }
+  .main {
+    background: #ffffff;
+    color: var(--text);
+  }
+  .view.active {
+    min-height: 100%;
+    grid-template-rows: auto auto minmax(0, 1fr);
+    gap: 0;
+  }
+  header {
+    min-height: 128px;
+    padding: 28px 32px 18px;
+    border: 0;
+    border-radius: 0;
+    color: var(--text);
+    background:
+      linear-gradient(90deg, rgba(255,255,255,.94), rgba(255,255,255,.84)),
+      var(--office-scene) center / cover no-repeat;
+    box-shadow: none;
+  }
+  header::before {
+    display: none;
+  }
+  header::after {
+    content: "HRMA / Workforce console";
+    left: 32px;
+    right: auto;
+    bottom: 16px;
+    color: var(--text-dim);
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0;
+  }
+  header h1 {
+    max-width: 580px;
+    color: var(--text);
+    font-size: clamp(28px, 3vw, 42px);
+    font-weight: 900;
+    letter-spacing: -.04em;
+  }
+  .count-badge {
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    color: var(--text);
+    background: #ffffff;
+    box-shadow: var(--shadow-soft);
+  }
+  .toolbar {
+    margin: 0 28px 0;
+    padding: 12px;
+    border: 0;
+    border-radius: 22px;
+    background: #ffffff;
+    box-shadow: var(--shadow-soft);
+  }
+  .toolbar input,
+  .toolbar select,
+  .field input,
+  .field textarea,
+  .field select,
+  .cat-add input {
+    min-height: 42px;
+    border: 0;
+    border-radius: 999px;
+    color: var(--text);
+    background: #f3f2f7;
+  }
+  .toolbar input::placeholder {
+    color: #a6a7ae;
+  }
+  .toolbar input:focus,
+  .toolbar select:focus,
+  .field input:focus,
+  .field textarea:focus,
+  .field select:focus,
+  .cat-add input:focus {
+    border-color: transparent;
+    box-shadow: 0 0 0 4px rgba(245,157,34,.16);
+  }
+  .btn {
+    border-radius: 999px;
+    font-weight: 800;
+  }
+  .btn-primary {
+    color: #ffffff;
+    background: #f59d22;
+    box-shadow: 0 12px 24px rgba(245,157,34,.28);
+  }
+  .btn-primary:hover {
+    box-shadow: 0 16px 30px rgba(245,157,34,.34);
+  }
+  .btn-ghost {
+    color: var(--text);
+    background: #f3f2f7;
+    border: 0;
+  }
+  .btn-ghost:hover {
+    background: #e9e7f0;
+  }
+  .container {
+    padding: 24px 28px 30px;
+  }
+  .cat-group,
+  table,
+  .repo-card,
+  .git-commit-panel,
+  .git-record,
+  .git-output,
+  .repo-changes,
+  .empty {
+    border: 0;
+    border-radius: 22px;
+    background: #ffffff;
+    color: var(--text);
+    box-shadow: var(--shadow-soft);
+  }
+  .cat-group {
+    padding: 20px;
+  }
+  .cat-group-header .cat-bar,
+  .item-card::before,
+  .repo-card::before,
+  .git-commit-panel::before,
+  .git-record::before {
+    display: none;
+  }
+  .cat-group-header .cat-name,
+  .item-card .card-title,
+  .repo-title,
+  .git-commit-title,
+  .git-record-title {
+    color: var(--text);
+  }
+  .card-grid {
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 14px;
+  }
+  .item-card {
+    border: 0;
+    border-radius: 20px;
+    background: #ffffff;
+    color: var(--text);
+    box-shadow: 0 12px 28px rgba(70,58,130,.1);
+  }
+  .item-card:hover,
+  .repo-card:hover,
+  .git-commit-panel:hover,
+  .git-record:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 18px 36px rgba(70,58,130,.16);
+  }
+  .item-card .card-title .perm,
+  .badge,
+  .tag,
+  .repo-status {
+    border-radius: 999px;
+  }
+  .item-card .card-title .perm,
+  .badge {
+    color: #8a5408;
+    background: rgba(245,157,34,.16);
+  }
+  .tag {
+    color: #ffffff;
+    background: #8e3ff2;
+  }
+  code,
+  .item-card .card-cmd,
+  .repo-meta code,
+  .git-commit-hash {
+    color: #8e3ff2;
+  }
+  .item-card .card-cmd,
+  pre.script-preview,
+  .repo-changes,
+  .git-output,
+  .git-record pre {
+    color: var(--text);
+    background: #f5f4fb;
+    border: 0;
+  }
+  th {
+    color: var(--text);
+    background: #f5f4fb;
+  }
+  td {
+    color: var(--text);
+  }
+  tbody tr:hover td {
+    background: rgba(245,157,34,.08);
+  }
+  .git-commit-item {
+    border: 0;
+    border-radius: 18px;
+    background: #f7f6fb;
+  }
+  .git-commit-item:hover {
+    background: #f0edf8;
+  }
+  .git-progress-fill {
+    background: linear-gradient(90deg, #f59d22, #8e3ff2);
+    box-shadow: none;
+  }
+  #toast {
+    color: #ffffff;
+    background: #f59d22;
+  }
+  .mask:not(.git-detail-modal) .modal {
+    border: 0;
+    border-radius: 24px;
+    background: #ffffff;
+    color: var(--text);
+    box-shadow: 0 26px 70px rgba(70,58,130,.18);
+  }
+  .modal h2,
+  .field label,
+  .detail-row .d-label,
+  .detail-row .d-text {
+    color: var(--text);
+  }
+  #detailMask.git-detail-modal {
+    --accent: #20d3b0;
+    --accent2: #4d8dff;
+    --accent3: #f2b84b;
+  }
+  @media (max-width: 1180px) {
+    .layout {
+      width: calc(100vw - 24px);
+      margin: 12px;
+      grid-template-columns: 1fr;
+    }
+    .topbar {
+      min-height: 0;
+      flex-direction: row;
+      overflow-x: auto;
+      padding: 14px;
+    }
+    .topbar .logo {
+      min-width: 130px;
+      padding: 0 12px 0 0;
+      border-right: 1px solid rgba(255,255,255,.12);
+    }
+    .topnav {
+      min-width: 560px;
+      display: flex;
+    }
+  }
+  @media (max-width: 720px) {
+    .layout {
+      width: calc(100vw - 12px);
+      margin: 6px;
+      border-radius: 22px;
+    }
+    .topbar {
+      flex-wrap: wrap;
+    }
+    .topnav {
+      min-width: 0;
+      overflow-x: auto;
+    }
+    header {
+      min-height: 128px;
+      padding: 22px;
+    }
+    header h1 {
+      font-size: 30px;
+    }
+    header::after {
+      left: 22px;
+      bottom: 14px;
+    }
+    .toolbar {
+      margin: 0 14px;
+    }
+    .container {
+      padding: 18px 14px 22px;
+    }
+  }
   @media (prefers-reduced-motion: reduce) {
     *,
     *::before,

@@ -447,6 +447,108 @@
       margin-right: auto;
     }
   }
+  /* HRMA reference refactor */
+  :root {
+    --accent: #f59d22;
+    --accent2: #8e3ff2;
+    --accent3: #262624;
+    --text: #242424;
+    --muted: #6f7078;
+  }
+  body {
+    font-family: "Inter", "Aptos", "Microsoft YaHei UI", "Microsoft YaHei", "Segoe UI", sans-serif;
+    justify-content: flex-end;
+    padding: 48px clamp(24px, 8vw, 120px);
+    background:
+      linear-gradient(90deg, rgba(217,210,255,.72), rgba(238,234,255,.36) 46%, rgba(217,210,255,.78)),
+      url("https://images.unsplash.com/photo-1497366754035-f200968a6e72?auto=format&fit=crop&w=1600&q=80") center / cover no-repeat,
+      #d9d2ff;
+  }
+  body::before {
+    background: linear-gradient(90deg, rgba(34,35,33,.94) 0 28%, transparent 28%);
+  }
+  body::after {
+    opacity: 0;
+  }
+  .login-box {
+    width: 430px;
+    padding: 38px;
+    border: 4px solid #1f201f;
+    border-radius: 26px;
+    background: #ffffff;
+    color: var(--text);
+    box-shadow: 0 30px 80px rgba(67,55,127,.22);
+    backdrop-filter: none;
+  }
+  .login-box::before {
+    opacity: 0;
+  }
+  .login-box::after {
+    content: "HRMA GM";
+    color: rgba(36,36,36,.26);
+  }
+  .brand {
+    text-align: left;
+  }
+  .brand .icon {
+    margin: 0 0 18px;
+    width: 52px;
+    height: 52px;
+    border-radius: 999px;
+    color: #fff;
+    background: #f59d22;
+    box-shadow: 0 14px 28px rgba(245,157,34,.28);
+  }
+  .brand h1 {
+    color: var(--text);
+    font-size: 26px;
+    letter-spacing: -.04em;
+  }
+  .brand .sub,
+  .field label {
+    color: var(--muted);
+  }
+  .field input {
+    min-height: 46px;
+    border: 0;
+    border-radius: 999px;
+    color: var(--text);
+    background: #f3f2f7;
+  }
+  .field input:focus {
+    border-color: transparent;
+    box-shadow: 0 0 0 4px rgba(245,157,34,.16);
+    background: #ffffff;
+  }
+  .btn {
+    min-height: 48px;
+    border-radius: 999px;
+    color: #ffffff;
+    background: #f59d22;
+    box-shadow: 0 14px 28px rgba(245,157,34,.28);
+  }
+  .tip {
+    color: var(--muted);
+    background: #f7f6fb;
+    border-color: transparent;
+    text-align: left;
+  }
+  @media (max-width: 900px) {
+    body {
+      justify-content: center;
+      padding: 24px;
+    }
+    body::before {
+      background: rgba(34,35,33,.18);
+    }
+    .brand {
+      text-align: center;
+    }
+    .brand .icon {
+      margin-left: auto;
+      margin-right: auto;
+    }
+  }
 </style>
 </head>
 <body>
