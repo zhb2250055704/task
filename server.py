@@ -239,6 +239,223 @@ def parse_item_xlsx(path=ITEM_XLSX):
     return fields, rows
 
 
+def _col_label(idx):
+    idx = int(idx)
+    label = ''
+    while idx > 0:
+        idx, rem = divmod(idx - 1, 26)
+        label = chr(ord('A') + rem) + label
+    return label or 'A'
+
+
+def _xlsx_shared_strings(zf):
+    shared = []
+    if 'xl/sharedStrings.xml' not in zf.namelist():
+        return shared
+    root = ET.fromstring(zf.read('xl/sharedStrings.xml'))
+    for si in root.findall(f'{_XL_NS}si'):
+        shared.append(''.join(t.text or '' for t in si.iter(f'{_XL_NS}t')))
+    return shared
+
+
+def _xlsx_sheet_paths(zf):
+    names = set(zf.namelist())
+    result = []
+    if 'xl/workbook.xml' in names and 'xl/_rels/workbook.xml.rels' in names:
+        workbook = ET.fromstring(zf.read('xl/workbook.xml'))
+        rels = ET.fromstring(zf.read('xl/_rels/workbook.xml.rels'))
+        rel_map = {}
+        for rel in rels:
+            rid = rel.get('Id')
+            target = rel.get('Target') or ''
+            if rid and target:
+                if not target.startswith('/'):
+                    target = 'xl/' + target.lstrip('/')
+                else:
+                    target = target.lstrip('/')
+                rel_map[rid] = target.replace('\\', '/')
+        for sheet in workbook.iter(f'{_XL_NS}sheet'):
+            title = sheet.get('name') or ('Sheet' + str(len(result) + 1))
+            rid = sheet.get('{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id')
+            path = rel_map.get(rid, '')
+            if path in names:
+                result.append((title, path))
+    if result:
+        return result
+    for path in sorted(n for n in names if n.startswith('xl/worksheets/sheet') and n.endswith('.xml')):
+        result.append((os.path.basename(path).replace('.xml', ''), path))
+    return result
+
+
+def parse_xlsx_bytes(raw):
+    if not raw:
+        return []
+    sheets = []
+    with zipfile.ZipFile(io.BytesIO(raw)) as zf:
+        shared = _xlsx_shared_strings(zf)
+        for title, path in _xlsx_sheet_paths(zf):
+            root = ET.fromstring(zf.read(path))
+            sheet_data = root.find(f'{_XL_NS}sheetData')
+            cells = {}
+            if sheet_data is not None:
+                for row in sheet_data.findall(f'{_XL_NS}row'):
+                    r_attr = row.get('r')
+                    fallback_row = int(r_attr) if r_attr else 0
+                    for cell in row.findall(f'{_XL_NS}c'):
+                        ref = cell.get('r') or ''
+                        rnum = _row_of_ref(ref) or fallback_row
+                        cnum = _col_to_index(ref) + 1 if ref else 1
+                        ctype = cell.get('t')
+                        value = ''
+                        if ctype == 's':
+                            v = cell.find(f'{_XL_NS}v')
+                            if v is not None and v.text is not None:
+                                try:
+                                    value = shared[int(v.text)]
+                                except (ValueError, IndexError):
+                                    value = ''
+                        elif ctype == 'inlineStr':
+                            inode = cell.find(f'{_XL_NS}is')
+                            if inode is not None:
+                                value = ''.join(t.text or '' for t in inode.iter(f'{_XL_NS}t'))
+                        elif ctype == 'b':
+                            v = cell.find(f'{_XL_NS}v')
+                            value = 'TRUE' if v is not None and v.text == '1' else 'FALSE'
+                        else:
+                            v = cell.find(f'{_XL_NS}v')
+                            if v is not None and v.text is not None:
+                                value = v.text
+                        if rnum and cnum and str(value) != '':
+                            cells[(rnum, cnum)] = str(value)
+            sheets.append({'name': title, 'cells': cells})
+    return sheets
+
+
+def run_git_command_bytes(repo, args, timeout=60):
+    path = repo.get('path', '')
+    if not os.path.isdir(path):
+        return {'ok': False, 'code': -1, 'stdout': b'', 'stderr': b'', 'output': f'目录不存在: {path}'}
+    env = os.environ.copy()
+    env['GIT_TERMINAL_PROMPT'] = '0'
+    try:
+        proc = subprocess.run(
+            [git_executable()] + list(args),
+            cwd=path,
+            capture_output=True,
+            timeout=timeout,
+            env=env,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired) as e:
+        return {'ok': False, 'code': -1, 'stdout': b'', 'stderr': b'', 'output': str(e)}
+    stderr = proc.stderr.decode('utf-8', errors='replace') if proc.stderr else ''
+    return {'ok': proc.returncode == 0, 'code': proc.returncode, 'stdout': proc.stdout,
+            'stderr': proc.stderr, 'output': stderr.strip()}
+
+
+def parse_git_name_status_rows(output):
+    rows = []
+    for line in (output or '').splitlines():
+        parts = line.split('\t')
+        if not parts:
+            continue
+        status = parts[0]
+        if status.startswith('R') and len(parts) >= 3:
+            rows.append({'status': status, 'old_path': parts[1], 'path': parts[2]})
+        elif len(parts) >= 2:
+            rows.append({'status': status, 'old_path': parts[1], 'path': parts[1]})
+    return rows
+
+
+def compare_xlsx_sheets(before_sheets, after_sheets, max_rows=80, max_cols=26):
+    before_map = {s['name']: s for s in before_sheets}
+    after_map = {s['name']: s for s in after_sheets}
+    names = list(dict.fromkeys(list(before_map.keys()) + list(after_map.keys())))
+    results = []
+    for name in names[:8]:
+        before_cells = before_map.get(name, {}).get('cells', {})
+        after_cells = after_map.get(name, {}).get('cells', {})
+        coords = sorted(set(before_cells.keys()) | set(after_cells.keys()))
+        changed = [coord for coord in coords if before_cells.get(coord, '') != after_cells.get(coord, '')]
+        if not changed:
+            continue
+        changed_rows = sorted(set(r for r, _ in changed))
+        changed_cols = sorted(set(c for _, c in changed))
+        rows_to_show = changed_rows[:max_rows]
+        cols_to_show = changed_cols[:max_cols]
+        table_rows = []
+        for rnum in rows_to_show:
+            row_cells = []
+            for cnum in cols_to_show:
+                before = before_cells.get((rnum, cnum), '')
+                after = after_cells.get((rnum, cnum), '')
+                if before == after:
+                    status = 'same'
+                elif before == '':
+                    status = 'added'
+                elif after == '':
+                    status = 'deleted'
+                else:
+                    status = 'changed'
+                row_cells.append({'col': cnum, 'label': _col_label(cnum), 'before': before,
+                                  'after': after, 'status': status})
+            table_rows.append({'row': rnum, 'cells': row_cells})
+        results.append({
+            'name': name,
+            'total_changes': len(changed),
+            'shown_rows': len(rows_to_show),
+            'shown_cols': len(cols_to_show),
+            'truncated': len(changed_rows) > max_rows or len(changed_cols) > max_cols,
+            'columns': [{'index': c, 'label': _col_label(c)} for c in cols_to_show],
+            'rows': table_rows,
+        })
+    return results
+
+
+def git_show_file_bytes(repo, spec):
+    return run_git_command_bytes(repo, ['show', spec], timeout=60)
+
+
+def git_excel_diffs(repo_id, commit_hash):
+    if repo_id != 'excel' or not safe_git_hash(commit_hash):
+        return []
+    repo = GIT_REPOS[repo_id]
+    files = run_git_command(repo, ['diff-tree', '--no-commit-id', '--name-status', '-r', '--find-renames', str(commit_hash)], timeout=60)
+    if not files.get('ok'):
+        return []
+    rows = parse_git_name_status_rows(files.get('stdout', ''))
+    excel_rows = []
+    for row in rows:
+        path = row.get('path', '')
+        base = os.path.basename(path)
+        if base.startswith('~$'):
+            continue
+        if path.lower().endswith(('.xlsx', '.xlsm')):
+            excel_rows.append(row)
+    results = []
+    for row in excel_rows[:4]:
+        status = row.get('status', '')
+        path = row.get('path', '')
+        old_path = row.get('old_path') or path
+        before_raw = b''
+        after_raw = b''
+        if not status.startswith('A'):
+            before = git_show_file_bytes(repo, f'{commit_hash}^:{old_path}')
+            before_raw = before.get('stdout', b'') if before.get('ok') else b''
+        if not status.startswith('D'):
+            after = git_show_file_bytes(repo, f'{commit_hash}:{path}')
+            after_raw = after.get('stdout', b'') if after.get('ok') else b''
+        try:
+            before_sheets = parse_xlsx_bytes(before_raw) if before_raw else []
+            after_sheets = parse_xlsx_bytes(after_raw) if after_raw else []
+            sheets = compare_xlsx_sheets(before_sheets, after_sheets)
+            results.append({'file': path, 'old_file': old_path, 'status': status,
+                            'sheet_count': len(sheets), 'sheets': sheets})
+        except Exception as e:
+            results.append({'file': path, 'old_file': old_path, 'status': status,
+                            'sheet_count': 0, 'sheets': [], 'error': str(e)})
+    return results
+
+
 def load_items():
     if os.path.exists(ITEM_FILE):
         try:
@@ -558,12 +775,14 @@ def git_commit_detail(repo_id, commit_hash):
     repo = GIT_REPOS[repo_id]
     stat = run_git_command(repo, ['show', '--stat', '--summary', '--find-renames', '--format=fuller', str(commit_hash)], timeout=60)
     patch = run_git_command(repo, ['show', '--find-renames', '--format=', '--patch', '--stat', str(commit_hash)], timeout=60)
+    excel_diffs = git_excel_diffs(repo_id, commit_hash)
     return {
         'ok': stat.get('ok') and patch.get('ok'),
         'repo': repo_id,
         'title': f'{repo["label"]} {commit_hash}',
         'summary': stat.get('output', ''),
         'diff': patch.get('output', ''),
+        'excel_diffs': excel_diffs,
         'msg': stat.get('output', '') if not stat.get('ok') else patch.get('output', ''),
     }
 
