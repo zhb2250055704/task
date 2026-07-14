@@ -725,6 +725,198 @@
     background: rgba(32,211,176,.28);
     color: var(--text);
   }
+  #detailMask.git-detail-modal {
+    align-items: stretch;
+    justify-content: center;
+    padding: 24px;
+  }
+  #detailMask.git-detail-modal .modal {
+    width: min(1280px, 96vw);
+    max-height: 92vh;
+    padding: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    background:
+      linear-gradient(180deg, rgba(32,211,176,.07), transparent 180px),
+      linear-gradient(135deg, rgba(15,22,33,.98), rgba(12,17,25,.98));
+  }
+  #detailMask.git-detail-modal .modal h2 {
+    margin: 0;
+    padding: 20px 24px 16px;
+    border-bottom: 1px solid var(--border);
+    font-size: 18px;
+    line-height: 1.35;
+    background: rgba(8,12,18,.78);
+    backdrop-filter: blur(16px);
+  }
+  #detailMask.git-detail-modal #detailBody {
+    flex: 1;
+    overflow: auto;
+    padding: 18px 22px 22px;
+  }
+  #detailMask.git-detail-modal .modal-footer {
+    margin: 0;
+    padding: 14px 22px 18px;
+    border-top: 1px solid var(--border);
+    background: rgba(8,12,18,.72);
+    backdrop-filter: blur(16px);
+  }
+  .git-detail-shell {
+    display: grid;
+    gap: 16px;
+  }
+  .git-detail-hero {
+    position: relative;
+    display: grid;
+    gap: 14px;
+    padding: 18px 18px 16px;
+    border: 1px solid rgba(32,211,176,.24);
+    border-radius: 8px;
+    background:
+      linear-gradient(135deg, rgba(32,211,176,.11), rgba(77,141,255,.07)),
+      rgba(6,10,16,.46);
+    overflow: hidden;
+  }
+  .git-detail-hero::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    background: linear-gradient(180deg, var(--accent), var(--accent2), var(--accent3));
+  }
+  .git-detail-kicker {
+    color: var(--accent);
+    font-size: 12px;
+    font-weight: 900;
+  }
+  .git-detail-subject {
+    color: var(--text);
+    font-size: 19px;
+    font-weight: 900;
+    line-height: 1.45;
+    word-break: break-word;
+  }
+  .git-detail-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .git-detail-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 28px;
+    padding: 5px 9px;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    color: var(--text-dim);
+    background: rgba(255,255,255,.045);
+    font-size: 12px;
+    font-weight: 800;
+  }
+  .git-detail-chip strong {
+    color: var(--text);
+    font-weight: 900;
+  }
+  .git-detail-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 16px;
+    align-items: start;
+  }
+  .git-detail-section {
+    position: relative;
+    min-width: 0;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background:
+      linear-gradient(180deg, rgba(255,255,255,.045), rgba(255,255,255,.018)),
+      rgba(12,17,25,.7);
+    box-shadow: var(--shadow-soft);
+    overflow: hidden;
+  }
+  .git-detail-section-wide {
+    grid-column: 1 / -1;
+  }
+  .git-detail-section-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(255,255,255,.028);
+  }
+  .git-detail-section-title {
+    color: var(--text);
+    font-size: 14px;
+    font-weight: 900;
+  }
+  .git-detail-section-tag {
+    flex: 0 0 auto;
+    color: var(--accent);
+    border: 1px solid rgba(32,211,176,.24);
+    border-radius: 6px;
+    padding: 3px 8px;
+    font-size: 11px;
+    font-weight: 900;
+  }
+  .git-detail-content {
+    padding: 14px;
+  }
+  .git-detail-pre {
+    margin: 0;
+    max-height: 340px;
+    overflow: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+    color: var(--text);
+    background: rgba(5,9,14,.58);
+    border: 1px solid rgba(167,180,203,.12);
+    border-radius: 7px;
+    padding: 12px 13px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.65;
+  }
+  .git-detail-pre.is-summary,
+  .git-detail-pre.is-impact {
+    font-family: var(--font-ui);
+    font-size: 13px;
+    line-height: 1.75;
+  }
+  .git-detail-pre.is-raw {
+    max-height: 520px;
+    color: #c9d4e2;
+  }
+  #detailMask.git-detail-modal .excel-diff {
+    gap: 12px;
+  }
+  #detailMask.git-detail-modal .excel-diff-file {
+    border-color: rgba(32,211,176,.2);
+    background: rgba(5,9,14,.42);
+  }
+  #detailMask.git-detail-modal .excel-diff-file-head {
+    background: linear-gradient(90deg, rgba(32,211,176,.09), rgba(77,141,255,.05));
+  }
+  #detailMask.git-detail-modal .excel-diff-wrap {
+    max-height: 560px;
+    background: rgba(5,9,14,.5);
+  }
+  @media (max-width: 900px) {
+    #detailMask.git-detail-modal {
+      padding: 12px;
+    }
+    .git-detail-layout {
+      grid-template-columns: 1fr;
+    }
+    .git-detail-subject {
+      font-size: 16px;
+    }
+  }
   @media (max-width: 1100px) {
     .topbar {
       height: auto;
@@ -1385,7 +1577,7 @@ function showCmdDetail(id) {
 }
 
 function closeDetail() {
-  document.getElementById('detailMask').classList.remove('show');
+  document.getElementById('detailMask').classList.remove('show', 'git-detail-modal');
 }
 
 async function copyText(text) {
@@ -2093,7 +2285,15 @@ function renderGitCommitPanel(repo, query) {
 }
 
 function gitCommitPayload(repoId, commit, kind) {
-  return esc(JSON.stringify({ repo: repoId, kind: kind || 'commit', value: commit.hash || '', title: (commit.hash || '') + ' ' + (commit.subject || commit.text || '') }));
+  return esc(JSON.stringify({
+    repo: repoId,
+    kind: kind || 'commit',
+    value: commit.hash || '',
+    title: (commit.hash || '') + ' ' + (commit.subject || commit.text || ''),
+    subject: commit.subject || commit.text || '',
+    author: commit.author || '',
+    time: commit.time || ''
+  }));
 }
 
 function gitChangePayload(repoId, line) {
@@ -2332,6 +2532,57 @@ function renderExcelSheetDiff(sheet) {
   '</div>';
 }
 
+function gitRepoLabel(repoId) {
+  if (repoId === 'client') return '客户端';
+  if (repoId === 'excel') return '配置表';
+  return repoId || '仓库';
+}
+
+function gitKindLabel(kind) {
+  if (kind === 'change') return '本地改动';
+  return '提交记录';
+}
+
+function gitShortHash(value) {
+  const text = String(value || '');
+  return text.length > 12 ? text.slice(0, 12) : text;
+}
+
+function gitDetailChip(label, value) {
+  if (!value) return '';
+  return '<span class="git-detail-chip">' + esc(label) + '<strong>' + esc(value) + '</strong></span>';
+}
+
+function gitDetailSection(title, tag, content, extraClass) {
+  return '<section class="git-detail-section ' + (extraClass || '') + '">' +
+    '<div class="git-detail-section-head">' +
+      '<div class="git-detail-section-title">' + esc(title) + '</div>' +
+      (tag ? '<div class="git-detail-section-tag">' + esc(tag) + '</div>' : '') +
+    '</div>' +
+    '<div class="git-detail-content">' + content + '</div>' +
+  '</section>';
+}
+
+function gitDetailPre(text, extraClass) {
+  return '<pre class="git-detail-pre ' + (extraClass || '') + '">' + esc(text || '') + '</pre>';
+}
+
+function renderGitDetailHero(payload, data) {
+  const subject = payload.subject || (payload.title || '').replace(/^([a-f0-9]{7,40})\s+/i, '') || data.title || '提交详情';
+  const chips = [
+    gitDetailChip('仓库', gitRepoLabel(data.repo || payload.repo)),
+    gitDetailChip('类型', gitKindLabel(payload.kind || 'commit')),
+    gitDetailChip('提交人', payload.author || ''),
+    gitDetailChip('时间', payload.time || ''),
+    gitDetailChip('标识', gitShortHash(payload.value || ''))
+  ].join('');
+  return '<div class="git-detail-hero">' +
+    '<div class="git-detail-kicker">变更审阅台</div>' +
+    '<div class="git-detail-subject">' + esc(subject) + '</div>' +
+    '<div class="git-detail-meta">' + chips + '</div>' +
+  '</div>';
+}
+
 function renderExcelDiffs(excelDiffs) {
   const list = excelDiffs || [];
   if (!list.length) return '';
@@ -2356,16 +2607,17 @@ function renderExcelDiffs(excelDiffs) {
       content +
     '</div>';
   }).join('');
-  return '<div class="detail-row"><div class="d-label">Excel 表格对比</div><div class="excel-diff">' + legend + files + '</div></div>';
+  return gitDetailSection('Excel 表格对比', '字段 + 表头', '<div class="excel-diff">' + legend + files + '</div>', 'git-detail-section-wide');
 }
 
 async function openGitDetail(payloadText) {
   let payload;
   try { payload = JSON.parse(payloadText || '{}'); } catch (e) { return; }
+  const mask = document.getElementById('detailMask');
   document.getElementById('detailTitle').textContent = payload.title || '提交详情';
-  document.getElementById('detailBody').innerHTML = '<div class="empty" style="padding:20px">正在加载变更详情...</div>';
+  document.getElementById('detailBody').innerHTML = '<div class="git-detail-shell"><div class="git-detail-hero"><div class="git-detail-kicker">变更审阅台</div><div class="git-detail-subject">正在加载变更详情...</div></div></div>';
   document.getElementById('detailCopyBtn').onclick = () => {};
-  document.getElementById('detailMask').classList.add('show');
+  mask.classList.add('show', 'git-detail-modal');
   try {
     const url = '/api/git/detail?repo=' + encodeURIComponent(payload.repo || '') + '&kind=' + encodeURIComponent(payload.kind || 'commit') + '&value=' + encodeURIComponent(payload.value || '');
     const res = await fetch(url);
@@ -2373,12 +2625,15 @@ async function openGitDetail(payloadText) {
     const chinese = describeGitDiffChinese(data.diff || '');
     const gameImpact = describeGameImpactChinese((data.summary || '') + String.fromCharCode(10) + (data.diff || ''));
     const excelDiff = renderExcelDiffs(data.excel_diffs || []);
-    const body = '<div class="item-detail-grid">' +
-      '<div class="detail-row"><div class="d-label">摘要</div><div class="d-text"><pre>' + esc(data.summary || data.msg || '') + '</pre></div></div>' +
-      excelDiff +
-      '<div class="detail-row"><div class="d-label">游戏内容影响</div><div class="d-text"><pre>' + esc(gameImpact) + '</pre></div></div>' +
-      '<div class="detail-row"><div class="d-label">中文说明</div><div class="d-text"><pre>' + esc(chinese) + '</pre></div></div>' +
-      '<div class="detail-row"><div class="d-label">前后变更</div><div class="d-text"><pre>' + esc(data.diff || '无变更内容') + '</pre></div></div>' +
+    const body = '<div class="git-detail-shell">' +
+      renderGitDetailHero(payload, data) +
+      '<div class="git-detail-layout">' +
+        gitDetailSection('摘要', 'Git', gitDetailPre(data.summary || data.msg || '暂无摘要', 'is-summary')) +
+        gitDetailSection('游戏内容影响', '分析', gitDetailPre(gameImpact || '未识别到明确的游戏内容影响', 'is-impact')) +
+        excelDiff +
+        gitDetailSection('中文说明', 'Diff 解析', gitDetailPre(chinese || '暂无中文说明', 'is-impact'), 'git-detail-section-wide') +
+        gitDetailSection('前后变更', '原始 Diff', gitDetailPre(data.diff || '无变更内容', 'is-raw'), 'git-detail-section-wide') +
+      '</div>' +
       '</div>';
     document.getElementById('detailTitle').textContent = data.title || payload.title || '提交详情';
     document.getElementById('detailBody').innerHTML = body;
