@@ -549,6 +549,107 @@
       margin-right: auto;
     }
   }
+  /* Calm workspace refactor */
+  :root {
+    --accent: #6f8f7a;
+    --accent2: #8fb2c7;
+    --accent3: #d8a85c;
+    --text: #25302c;
+    --muted: #6b7972;
+  }
+  body {
+    font-family: "Inter", "Aptos", "Microsoft YaHei UI", "Microsoft YaHei", "Segoe UI", sans-serif;
+    justify-content: center;
+    padding: 32px;
+    background: linear-gradient(135deg, #eef2ed 0%, #f7f5ee 52%, #e8eef1 100%);
+  }
+  body::before,
+  body::after {
+    display: none;
+  }
+  .login-box {
+    width: 430px;
+    max-width: 94vw;
+    padding: 36px;
+    border: 1px solid rgba(59,74,68,.1);
+    border-radius: 22px;
+    background: rgba(255,255,255,.86);
+    color: var(--text);
+    box-shadow: 0 20px 54px rgba(56,73,66,.14);
+    backdrop-filter: blur(16px);
+  }
+  .login-box::before {
+    opacity: 0;
+  }
+  .login-box::after {
+    content: "GM Workspace";
+    color: rgba(37,48,44,.26);
+  }
+  .brand {
+    text-align: left;
+  }
+  .brand .icon {
+    margin: 0 0 18px;
+    width: 50px;
+    height: 50px;
+    border-radius: 16px;
+    color: #ffffff;
+    background: var(--accent);
+    box-shadow: 0 12px 26px rgba(111,143,122,.22);
+  }
+  .brand h1 {
+    color: var(--text);
+    font-size: 25px;
+    letter-spacing: -.035em;
+  }
+  .brand .sub,
+  .field label {
+    color: var(--muted);
+  }
+  .field input {
+    min-height: 46px;
+    border: 1px solid rgba(59,74,68,.1);
+    border-radius: 14px;
+    color: var(--text);
+    background: #f5f7f4;
+  }
+  .field input:focus {
+    border-color: rgba(111,143,122,.45);
+    box-shadow: 0 0 0 4px rgba(111,143,122,.12);
+    background: #ffffff;
+  }
+  .btn {
+    min-height: 48px;
+    border-radius: 14px;
+    color: #ffffff;
+    background: var(--accent);
+    box-shadow: 0 12px 26px rgba(111,143,122,.2);
+  }
+  .btn:hover {
+    box-shadow: 0 16px 32px rgba(111,143,122,.24);
+  }
+  .tip {
+    color: var(--muted);
+    background: #f5f7f4;
+    border-color: rgba(59,74,68,.1);
+    text-align: left;
+  }
+  @media (max-width: 720px) {
+    body {
+      padding: 18px;
+    }
+    .login-box {
+      padding: 30px 24px;
+      border-radius: 18px;
+    }
+    .brand {
+      text-align: center;
+    }
+    .brand .icon {
+      margin-left: auto;
+      margin-right: auto;
+    }
+  }
 </style>
 </head>
 <body>
