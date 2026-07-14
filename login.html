@@ -235,6 +235,113 @@
     background: rgba(255,255,255,.055);
     border-color: rgba(220,232,255,.18);
   }
+  /* Ingenio reference refactor */
+  :root {
+    --accent: #252a63;
+    --accent2: #74cbd3;
+    --accent3: #e9b93f;
+    --text: #20243a;
+    --muted: #7f8798;
+  }
+  body {
+    font-family: "Inter", "SF Pro Display", "Microsoft YaHei UI", "Microsoft YaHei", "Segoe UI", sans-serif;
+    justify-content: flex-end;
+    padding: 48px clamp(24px, 8vw, 120px);
+    background:
+      linear-gradient(90deg, rgba(238,242,248,.88), rgba(238,242,248,.34) 46%, rgba(238,242,248,.78)),
+      url("https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?auto=format&fit=crop&w=1600&q=80") center / cover no-repeat,
+      #eef2f8;
+  }
+  body::before {
+    background:
+      linear-gradient(90deg, rgba(37,42,99,.92) 0 30%, transparent 30%),
+      radial-gradient(circle at 78% 26%, rgba(233,185,63,.18), transparent 34%);
+  }
+  body::after {
+    opacity: 0;
+  }
+  .login-box {
+    width: 430px;
+    padding: 38px;
+    border: 1px solid rgba(255,255,255,.88);
+    border-radius: 28px;
+    background: rgba(255,255,255,.9);
+    box-shadow: 0 28px 70px rgba(37,42,99,.18);
+    backdrop-filter: blur(20px);
+  }
+  .login-box::before {
+    opacity: 0;
+  }
+  .login-box::after {
+    content: "GM HOME";
+    color: rgba(37,42,99,.32);
+  }
+  .brand {
+    text-align: left;
+  }
+  .brand .icon {
+    margin: 0 0 18px;
+    width: 56px;
+    height: 56px;
+    border-radius: 18px;
+    background: #f0bf3f;
+    color: var(--accent);
+    box-shadow: 0 14px 26px rgba(233,185,63,.28);
+  }
+  .brand h1 {
+    color: var(--accent);
+    font-size: 26px;
+    letter-spacing: -.04em;
+  }
+  .brand .sub,
+  .field label {
+    color: var(--muted);
+  }
+  .field input {
+    min-height: 46px;
+    border-radius: 16px;
+    color: var(--text);
+    background: #f5f7fb;
+    border-color: rgba(37,42,99,.1);
+  }
+  .field input:focus {
+    border-color: var(--accent2);
+    box-shadow: 0 0 0 4px rgba(116,203,211,.18);
+    background: #ffffff;
+  }
+  .btn {
+    min-height: 48px;
+    border-radius: 16px;
+    color: var(--accent);
+    background: #f0bf3f;
+    box-shadow: 0 14px 30px rgba(233,185,63,.26);
+    letter-spacing: .08em;
+  }
+  .btn:hover {
+    box-shadow: 0 18px 36px rgba(233,185,63,.34);
+  }
+  .tip {
+    color: var(--muted);
+    background: #f6f8fb;
+    border-color: rgba(37,42,99,.08);
+    text-align: left;
+  }
+  @media (max-width: 900px) {
+    body {
+      justify-content: center;
+      padding: 24px;
+    }
+    body::before {
+      background: rgba(37,42,99,.22);
+    }
+    .brand {
+      text-align: center;
+    }
+    .brand .icon {
+      margin-left: auto;
+      margin-right: auto;
+    }
+  }
 </style>
 </head>
 <body>
