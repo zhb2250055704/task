@@ -2570,17 +2570,28 @@ function renderExcelSheetDiff(sheet) {
   if (!rows.length || !columns.length) {
     return '<div class="empty" style="padding:16px">这个工作表没有可展示的单元格变化</div>';
   }
-  const head = '<tr><th class="row-head">行号</th>' + columns.map(renderExcelColumnHeader).join('') + '</tr>';
+  const changedLabels = new Set(sheet.changed_cols || []);
+  let displayColumns = columns.map((col, index) => ({ col, index })).filter(item => changedLabels.has(item.col.label));
+  if (!displayColumns.length) {
+    displayColumns = columns.map((col, index) => ({ col, index })).filter(item =>
+      rows.some(row => ((row.cells || [])[item.index] || {}).changed)
+    );
+  }
+  if (!displayColumns.length) {
+    return '<div class="empty" style="padding:16px">这个工作表没有可展示的字段变化</div>';
+  }
+  const head = '<tr><th class="row-head">行号</th>' + displayColumns.map(item => renderExcelColumnHeader(item.col)).join('') + '</tr>';
   const body = rows.map(row => {
     return '<tr><th class="row-head">' + esc(row.row) + '</th>' +
-      (row.cells || []).map(cell => {
+      displayColumns.map(item => {
+        const cell = (row.cells || [])[item.index] || {};
         const status = cell.status || 'same';
         const cls = cell.changed ? ('excel-cell-' + esc(status)) : 'excel-cell-unchanged';
         return '<td class="' + cls + '">' + renderExcelCell(cell) + '</td>';
       }).join('') +
       '</tr>';
   }).join('');
-  const truncated = sheet.truncated ? '<div class="git-record-meta">变化范围较大，仅展示前 ' + sheet.shown_rows + ' 行 / ' + sheet.shown_cols + ' 列；当前表共 ' + esc(sheet.total_cols || sheet.shown_cols || 0) + ' 列。</div>' : '';
+  const truncated = sheet.truncated ? '<div class="git-record-meta">变化范围较大，仅展示前 ' + sheet.shown_rows + ' 行；当前表共 ' + esc(sheet.total_cols || sheet.shown_cols || 0) + ' 列，本视图只展示有变化的字段。</div>' : '';
   return '<div class="excel-diff-sheet">' +
     '<div class="excel-diff-sheet-title">Sheet：' + esc(sheet.name || '-') + ' / 变化单元格 ' + esc(sheet.total_changes || 0) + ' 个</div>' +
     renderExcelChangedColumns(sheet) +
@@ -2647,7 +2658,7 @@ function renderExcelDiffs(excelDiffs) {
     '<span class="excel-cell-added">新增</span>' +
     '<span class="excel-cell-deleted">删除</span>' +
     '<span class="excel-cell-changed">修改</span>' +
-    '<span>展示变化行的全部字段和表头</span>' +
+    '<span>只展示有变化的字段和表头</span>' +
   '</div>';
   const files = list.map(file => {
     const sheets = file.sheets || [];
