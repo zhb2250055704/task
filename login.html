@@ -102,6 +102,70 @@
   .btn:active { transform: translateY(0); }
   .err { color: #f87171; font-size: 13px; text-align: center; min-height: 18px; margin-top: 14px; }
   .tip { margin-top: 22px; font-size: 12px; color: #66758a; text-align: center; line-height: 1.7; }
+  /* Cockpit login refresh */
+  body {
+    justify-content: flex-end;
+    padding: 48px clamp(24px, 9vw, 130px);
+    background:
+      radial-gradient(860px 480px at 18% 18%, rgba(77,141,255,.18), transparent 58%),
+      radial-gradient(760px 480px at 78% 20%, rgba(32,211,176,.18), transparent 62%),
+      linear-gradient(90deg, rgba(3,7,12,.18), rgba(3,7,12,.06) 46%, rgba(3,7,12,.2)),
+      url("assets/login-console-bg.png") center / cover no-repeat,
+      #070a0f;
+  }
+  .login-box {
+    width: 440px;
+    border-radius: 8px;
+    padding: 38px 38px 34px;
+    background:
+      linear-gradient(rgba(255,255,255,.036) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,.028) 1px, transparent 1px),
+      linear-gradient(180deg, rgba(18,27,40,.76), rgba(8,14,23,.62));
+    background-size: 30px 30px, 30px 30px, auto;
+    backdrop-filter: blur(18px) saturate(1.18);
+    box-shadow:
+      0 0 0 1px rgba(255,255,255,.06) inset,
+      0 28px 74px rgba(0,0,0,.42);
+  }
+  .brand {
+    text-align: left;
+    margin-bottom: 30px;
+    padding-top: 12px;
+  }
+  .brand .icon {
+    margin: 0 0 16px;
+    width: 58px;
+    height: 58px;
+    border-radius: 8px;
+  }
+  .brand h1 {
+    font-size: 24px;
+    font-weight: 900;
+  }
+  .field input,
+  .btn {
+    border-radius: 8px;
+  }
+  .tip {
+    text-align: left;
+    padding: 12px 14px;
+    border: 1px solid rgba(167,180,203,.16);
+    border-radius: 8px;
+    background: rgba(255,255,255,.035);
+  }
+  @media (max-width: 900px) {
+    body {
+      justify-content: center;
+      padding: 28px;
+    }
+    .brand {
+      text-align: center;
+    }
+    .brand .icon {
+      margin-left: auto;
+      margin-right: auto;
+    }
+  }
   @media (max-width: 720px) {
     body {
       justify-content: center;
