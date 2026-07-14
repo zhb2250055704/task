@@ -342,6 +342,111 @@
       margin-right: auto;
     }
   }
+  /* Robot dashboard reference refactor */
+  :root {
+    --accent: #7d6bff;
+    --accent2: #9fc3ff;
+    --accent3: #ffd572;
+    --text: #f7f5ff;
+    --muted: rgba(247,245,255,.58);
+  }
+  body {
+    font-family: "Nunito", "Inter", "Microsoft YaHei UI", "Microsoft YaHei", "Segoe UI", sans-serif;
+    justify-content: center;
+    padding: 42px;
+    background:
+      radial-gradient(760px 440px at 82% 10%, rgba(255,255,255,.2), transparent 58%),
+      #a9c7f7;
+  }
+  body::before {
+    background:
+      radial-gradient(ellipse at 22% 100%, transparent 0 42%, rgba(12,17,37,.42) 43%, transparent 44%),
+      radial-gradient(ellipse at 72% -12%, transparent 0 46%, rgba(12,17,37,.4) 47%, transparent 48%);
+    background-size: 640px 270px, 760px 320px;
+  }
+  body::after {
+    opacity: 0;
+  }
+  .login-box {
+    width: 440px;
+    padding: 38px;
+    border: 4px solid #11131f;
+    border-radius: 34px;
+    background:
+      linear-gradient(180deg, rgba(255,255,255,.04), transparent),
+      #11131f;
+    color: var(--text);
+    box-shadow: 0 30px 70px rgba(39,62,129,.28);
+    backdrop-filter: none;
+  }
+  .login-box::before {
+    opacity: 0;
+  }
+  .login-box::after {
+    content: "SMART GM";
+    color: rgba(247,245,255,.28);
+  }
+  .brand {
+    text-align: left;
+  }
+  .brand .icon {
+    margin: 0 0 18px;
+    width: 58px;
+    height: 58px;
+    border-radius: 20px;
+    background: linear-gradient(135deg, #ff9db6, #ffd572);
+    color: #11131f;
+    box-shadow: none;
+  }
+  .brand h1 {
+    color: #fff;
+    font-size: 26px;
+    letter-spacing: -.035em;
+  }
+  .brand .sub,
+  .field label {
+    color: var(--muted);
+  }
+  .field input {
+    min-height: 46px;
+    border: 0;
+    border-radius: 18px;
+    color: var(--text);
+    background: #1b1d2e;
+  }
+  .field input:focus {
+    border-color: transparent;
+    box-shadow: 0 0 0 4px rgba(125,107,255,.22);
+    background: #24273a;
+  }
+  .btn {
+    min-height: 48px;
+    border-radius: 18px;
+    color: #fff;
+    background: linear-gradient(135deg, #6f7dff, #a35cff);
+    box-shadow: 0 14px 28px rgba(125,107,255,.25);
+  }
+  .tip {
+    color: var(--muted);
+    background: #1b1d2e;
+    border-color: transparent;
+    text-align: left;
+  }
+  @media (max-width: 720px) {
+    body {
+      padding: 20px;
+    }
+    .login-box {
+      border-radius: 28px;
+    }
+    .brand {
+      text-align: center;
+    }
+    .brand .icon {
+      margin-left: auto;
+      margin-right: auto;
+    }
+  }
 </style>
 </head>
 <body>

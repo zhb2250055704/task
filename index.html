@@ -2095,6 +2095,425 @@
       padding: 16px;
     }
   }
+
+  /* ============ Robot dashboard reference refactor ============ */
+  :root {
+    --accent: #7d6bff;
+    --accent2: #9fc3ff;
+    --accent3: #ffd572;
+    --accent-soft: rgba(125,107,255,.16);
+    --room-scene: url("https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?auto=format&fit=crop&w=1400&q=80");
+    --radius: 20px;
+  }
+  html[data-theme="dark"],
+  html[data-theme="light"] {
+    --bg: #a9c7f7;
+    --bg-grad:
+      linear-gradient(135deg, rgba(255,255,255,.16), transparent 34%),
+      radial-gradient(760px 440px at 80% 8%, rgba(255,255,255,.2), transparent 58%),
+      #a9c7f7;
+    --sidebar-bg: #10121f;
+    --panel: rgba(22, 24, 38, .9);
+    --panel-solid: #11131f;
+    --card: #1b1d2e;
+    --card-bg: #1b1d2e;
+    --border: rgba(255,255,255,.08);
+    --border-strong: rgba(255,255,255,.14);
+    --text: #f7f5ff;
+    --text-dim: rgba(247,245,255,.62);
+    --text-faint: rgba(247,245,255,.36);
+    --th-bg: rgba(255,255,255,.06);
+    --row-hover: rgba(159,195,255,.1);
+    --input-bg: #1f2235;
+    --ghost-bg: rgba(255,255,255,.06);
+    --ghost-hover: rgba(255,255,255,.1);
+    --code-bg: rgba(159,195,255,.12);
+    --shadow: 0 28px 60px rgba(25, 36, 83, .28);
+    --shadow-soft: 0 14px 32px rgba(8, 10, 22, .22);
+  }
+  body {
+    font-family: "Nunito", "Inter", "Microsoft YaHei UI", "Microsoft YaHei", "Segoe UI", sans-serif;
+    color: var(--text);
+    background: var(--bg-grad);
+  }
+  body::before {
+    display: block;
+    opacity: .52;
+    background:
+      radial-gradient(ellipse at 26% 98%, transparent 0 42%, rgba(12,17,37,.42) 43%, transparent 44%),
+      radial-gradient(ellipse at 64% -10%, transparent 0 46%, rgba(12,17,37,.4) 47%, transparent 48%);
+    background-size: 620px 260px, 720px 300px;
+    mask-image: none;
+  }
+  .layout {
+    width: min(1390px, calc(100vw - 72px));
+    min-height: min(820px, calc(100vh - 72px));
+    margin: 36px auto;
+    grid-template-columns: 188px minmax(0, 1fr);
+    gap: 0;
+    border: 4px solid #11131f;
+    border-radius: 34px;
+    background: #11131f;
+    box-shadow: 0 30px 70px rgba(39,62,129,.28);
+    overflow: hidden;
+  }
+  .topbar {
+    min-height: auto;
+    height: auto;
+    padding: 28px 18px 22px;
+    border: 0;
+    border-radius: 0;
+    background: #11131f;
+    box-shadow: none;
+    backdrop-filter: none;
+  }
+  .topbar .logo {
+    min-height: 52px;
+    padding: 0 0 18px;
+    color: #fff;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 900;
+    letter-spacing: 0;
+  }
+  .topbar .logo .dot {
+    width: 40px;
+    height: 40px;
+    margin-right: 8px;
+    border-radius: 14px;
+    background: linear-gradient(135deg, #ff9db6, #ffd572);
+    box-shadow: none;
+  }
+  .topnav {
+    gap: 8px;
+  }
+  .nav-item {
+    min-height: 40px;
+    border: 0;
+    border-radius: 15px;
+    color: rgba(247,245,255,.45);
+    background: transparent;
+    font-size: 13px;
+    font-weight: 800;
+  }
+  .nav-item:hover,
+  .nav-item.active {
+    color: #fff;
+    background: #1b1d2e;
+    box-shadow: none;
+  }
+  .nav-item::after {
+    display: none;
+  }
+  .topbar-user {
+    border-top: 0;
+    gap: 10px;
+  }
+  .topbar-user .u-info,
+  .topbar-user .u-acts a,
+  .zoom-box,
+  .theme-toggle {
+    border: 0;
+    border-radius: 16px;
+    background: #1b1d2e;
+    color: rgba(247,245,255,.66);
+  }
+  .topbar-user .u-info .user-name,
+  .zoom-box input,
+  .zoom-box span,
+  .theme-toggle {
+    color: #fff;
+  }
+  .main {
+    background: #11131f;
+    color: var(--text);
+  }
+  .view.active {
+    min-height: 100%;
+    grid-template-rows: 170px auto minmax(0, 1fr);
+    gap: 0;
+  }
+  header {
+    min-height: 170px;
+    padding: 30px 34px;
+    border: 0;
+    border-radius: 0;
+    background:
+      linear-gradient(90deg, rgba(17,19,31,.72), rgba(17,19,31,.28)),
+      var(--room-scene) center / cover no-repeat;
+    color: #fff;
+    box-shadow: none;
+  }
+  header::before {
+    display: none;
+  }
+  header::after {
+    content: "Mi robot vacuum mode";
+    left: 34px;
+    right: auto;
+    bottom: 28px;
+    color: rgba(255,255,255,.58);
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 800;
+    letter-spacing: 0;
+  }
+  header h1 {
+    max-width: 520px;
+    color: #fff;
+    font-size: clamp(28px, 3.4vw, 48px);
+    font-weight: 900;
+    letter-spacing: -.035em;
+  }
+  .count-badge {
+    border: 0;
+    border-radius: 16px;
+    background: rgba(255,255,255,.16);
+    color: #fff;
+    box-shadow: none;
+  }
+  .toolbar {
+    margin: -26px 26px 0;
+    padding: 12px;
+    border: 0;
+    border-radius: 22px;
+    background: #1b1d2e;
+    box-shadow: var(--shadow-soft);
+  }
+  .toolbar input,
+  .toolbar select,
+  .field input,
+  .field textarea,
+  .field select,
+  .cat-add input {
+    min-height: 42px;
+    border: 0;
+    border-radius: 16px;
+    color: var(--text);
+    background: #24273a;
+  }
+  .toolbar input::placeholder {
+    color: rgba(247,245,255,.34);
+  }
+  .toolbar input:focus,
+  .toolbar select:focus,
+  .field input:focus,
+  .field textarea:focus,
+  .field select:focus,
+  .cat-add input:focus {
+    border-color: transparent;
+    box-shadow: 0 0 0 4px rgba(125,107,255,.22);
+  }
+  .btn {
+    border-radius: 16px;
+    font-weight: 900;
+  }
+  .btn-primary {
+    color: #fff;
+    background: linear-gradient(135deg, #6f7dff, #a35cff);
+    box-shadow: 0 14px 28px rgba(125,107,255,.25);
+  }
+  .btn-ghost {
+    color: rgba(247,245,255,.72);
+    background: #24273a;
+    border: 0;
+  }
+  .btn-ghost:hover {
+    background: #2c3046;
+  }
+  .container {
+    padding: 26px;
+  }
+  .cat-group,
+  table,
+  .repo-card,
+  .git-commit-panel,
+  .git-record,
+  .git-output,
+  .repo-changes,
+  .empty {
+    border: 0;
+    border-radius: 24px;
+    background: #1b1d2e;
+    box-shadow: none;
+  }
+  .cat-group {
+    padding: 18px;
+  }
+  .cat-group-header .cat-bar,
+  .item-card::before,
+  .repo-card::before,
+  .git-commit-panel::before,
+  .git-record::before {
+    display: none;
+  }
+  .cat-group-header .cat-name,
+  .item-card .card-title,
+  .repo-title,
+  .git-commit-title,
+  .git-record-title {
+    color: #fff;
+  }
+  .card-grid {
+    grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+    gap: 14px;
+  }
+  .item-card {
+    min-height: 142px;
+    border: 0;
+    border-radius: 22px;
+    background: #24273a;
+    box-shadow: none;
+  }
+  .item-card:nth-child(6n + 1) { background: #dff7b8; color: #11131f; }
+  .item-card:nth-child(6n + 2) { background: #ff9fad; color: #11131f; }
+  .item-card:nth-child(6n + 3) { background: #b8d7ff; color: #11131f; }
+  .item-card:nth-child(6n + 4) { background: #bfb0ff; color: #11131f; }
+  .item-card:nth-child(6n + 5) { background: #ffd572; color: #11131f; }
+  .item-card:nth-child(6n + 6) { background: #24273a; color: #fff; }
+  .item-card:nth-child(-n + 5) .card-title,
+  .item-card:nth-child(-n + 5) .card-desc,
+  .item-card:nth-child(-n + 5) .card-foot a {
+    color: #11131f;
+  }
+  .item-card:hover,
+  .repo-card:hover,
+  .git-commit-panel:hover,
+  .git-record:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 16px 30px rgba(0,0,0,.16);
+  }
+  .item-card .card-title .perm,
+  .badge,
+  .tag,
+  .repo-status {
+    border-radius: 999px;
+  }
+  .item-card .card-title .perm,
+  .badge {
+    color: #11131f;
+    background: rgba(255,255,255,.42);
+  }
+  .tag {
+    color: #fff;
+    background: rgba(255,255,255,.14);
+  }
+  code,
+  .item-card .card-cmd,
+  .repo-meta code,
+  .git-commit-hash {
+    color: #9fc3ff;
+  }
+  .item-card .card-cmd,
+  pre.script-preview,
+  .repo-changes,
+  .git-output,
+  .git-record pre {
+    background: rgba(17,19,31,.22);
+    border: 0;
+  }
+  table {
+    color: var(--text);
+  }
+  th {
+    color: rgba(247,245,255,.72);
+    background: #24273a;
+  }
+  td {
+    color: var(--text);
+  }
+  tbody tr:hover td {
+    background: rgba(159,195,255,.08);
+  }
+  .git-commit-item {
+    border: 0;
+    border-radius: 18px;
+    background: #24273a;
+  }
+  .git-commit-item:hover {
+    background: #2c3046;
+  }
+  .git-progress-fill {
+    background: linear-gradient(90deg, #7ce784, #ffd572, #ff9fad);
+    box-shadow: none;
+  }
+  #toast {
+    color: #fff;
+    background: linear-gradient(135deg, #6f7dff, #a35cff);
+  }
+  .mask:not(.git-detail-modal) .modal {
+    border: 0;
+    border-radius: 28px;
+    background: #1b1d2e;
+    color: var(--text);
+    box-shadow: 0 26px 70px rgba(0,0,0,.34);
+  }
+  .modal h2,
+  .field label,
+  .detail-row .d-label,
+  .detail-row .d-text {
+    color: var(--text);
+  }
+  #detailMask.git-detail-modal {
+    --accent: #20d3b0;
+    --accent2: #4d8dff;
+    --accent3: #f2b84b;
+  }
+  @media (max-width: 1180px) {
+    .layout {
+      width: calc(100vw - 24px);
+      margin: 12px;
+      grid-template-columns: 1fr;
+    }
+    .topbar {
+      min-height: 0;
+      flex-direction: row;
+      overflow-x: auto;
+    }
+    .topbar .logo {
+      min-width: 136px;
+      border-right: 1px solid rgba(255,255,255,.08);
+    }
+    .topnav {
+      min-width: 560px;
+      display: flex;
+    }
+  }
+  @media (max-width: 720px) {
+    .layout {
+      width: calc(100vw - 12px);
+      margin: 6px;
+      border-radius: 26px;
+    }
+    .topbar {
+      padding: 14px;
+      flex-wrap: wrap;
+    }
+    .topnav {
+      min-width: 0;
+      overflow-x: auto;
+    }
+    .view.active {
+      grid-template-rows: 152px auto minmax(0, 1fr);
+    }
+    header {
+      min-height: 152px;
+      padding: 22px;
+    }
+    header h1 {
+      font-size: 30px;
+    }
+    header::after {
+      left: 22px;
+      bottom: 20px;
+    }
+    .toolbar {
+      margin: -22px 14px 0;
+    }
+    .container {
+      padding: 18px 14px 22px;
+    }
+  }
   @media (prefers-reduced-motion: reduce) {
     *,
     *::before,
