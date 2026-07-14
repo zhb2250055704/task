@@ -3308,6 +3308,56 @@
     --accent2: #4d8dff;
     --accent3: #f2b84b;
   }
+  .git-commit-panels,
+  .git-commit-panel,
+  .git-commit-head,
+  .git-commit-list,
+  .git-commit-item,
+  .git-commit-line,
+  .git-commit-title,
+  .git-commit-subject,
+  .git-commit-meta,
+  .git-record-meta {
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+  .git-commit-panels {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+    overflow: hidden;
+  }
+  .git-commit-panel {
+    overflow: hidden;
+    contain: layout paint;
+  }
+  .git-commit-list,
+  .git-commit-item {
+    overflow: hidden;
+  }
+  .git-commit-line {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    column-gap: 10px;
+  }
+  .git-commit-title,
+  .git-commit-subject,
+  .git-commit-meta,
+  .git-record-meta,
+  .git-commit-item pre {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+  .git-commit-item pre.git-commit-meta {
+    display: block;
+    overflow: hidden;
+  }
+  @media (max-width: 900px) {
+    .git-commit-panels {
+      grid-template-columns: 1fr;
+    }
+  }
   @media (max-width: 1180px) {
     .layout {
       width: calc(100vw - 24px);
