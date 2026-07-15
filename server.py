@@ -23,9 +23,9 @@ import xml.etree.ElementTree as ET
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 
-if sys.stdout.encoding != 'utf-8':
+if sys.stdout and sys.stdout.encoding != 'utf-8':
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
-if sys.stderr.encoding != 'utf-8':
+if sys.stderr and sys.stderr.encoding != 'utf-8':
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
 TOOL_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -1660,8 +1660,12 @@ class GMHandler(SimpleHTTPRequestHandler):
 
 if __name__ == '__main__':
     port = 9092
-    if len(sys.argv) > 1:
-        port = int(sys.argv[1])
+    open_browser = os.environ.get('GM_OPEN_BROWSER', '1').lower() not in ('0', 'false', 'no')
+    for arg in sys.argv[1:]:
+        if arg in ('--no-browser', '--headless'):
+            open_browser = False
+        else:
+            port = int(arg)
 
     if not os.path.exists(DATA_FILE):
         save_data([])
@@ -1692,7 +1696,8 @@ if __name__ == '__main__':
     print('  Ctrl+C 停止')
     print()
 
-    threading.Timer(0.5, lambda: webbrowser.open(f'http://localhost:{port}')).start()
+    if open_browser:
+        threading.Timer(0.5, lambda: webbrowser.open(f'http://localhost:{port}')).start()
 
     httpd = HTTPServer(('', port), GMHandler)
     try:
