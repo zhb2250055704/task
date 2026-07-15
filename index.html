@@ -3286,6 +3286,64 @@
     background: linear-gradient(90deg, var(--accent), var(--accent2));
     box-shadow: none;
   }
+  .git-progress {
+    width: min(720px, 100%);
+    margin: 2px auto 16px;
+    display: grid;
+    gap: 14px;
+    text-align: center;
+  }
+  .git-progress-head {
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 8px 14px;
+  }
+  .git-progress-title {
+    font-size: 16px;
+    font-weight: 900;
+  }
+  .git-progress-percent {
+    min-width: 64px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    color: #ffffff;
+    background: var(--accent);
+    font-size: 14px;
+    font-weight: 900;
+  }
+  .git-progress-track {
+    width: 100%;
+    height: 18px;
+    border-radius: 999px;
+    background: rgba(111,143,122,.14);
+    border: 1px solid rgba(111,143,122,.18);
+    overflow: hidden;
+  }
+  .git-progress-fill {
+    display: block;
+    width: 0%;
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    transition: width .35s ease;
+  }
+  .git-progress-meta {
+    justify-items: center;
+    color: var(--text-dim);
+  }
+  .git-progress-stage {
+    color: var(--text);
+    font-size: 14px;
+    font-weight: 900;
+  }
+  .git-progress.done .git-progress-percent,
+  .git-progress.done .git-progress-fill {
+    background: linear-gradient(90deg, #3f8f68, #72b783);
+  }
+  .git-progress.failed .git-progress-percent,
+  .git-progress.failed .git-progress-fill {
+    background: linear-gradient(90deg, #c56a5a, #d89a70);
+  }
   #toast {
     color: #ffffff;
     background: var(--accent);
@@ -3848,6 +3906,7 @@ let currentCalcFormula = null;
 let gitBusy = false;
 let gitRepoCache = [];
 let gitProgressTimer = null;
+let gitProgressValue = 0;
 let commandSearchUserEdited = false;
 let commandSearchAutofillGuard = null;
 
@@ -5214,13 +5273,10 @@ function gitPullTargetLabel(repo) {
   return found ? found.label : repo;
 }
 
-function renderGitProgress(percent, stage, detail) {
-  const output = document.getElementById('gitOutput');
-  if (!output) return;
+function gitProgressHtml(percent, stage, detail, state) {
   const value = Math.max(0, Math.min(100, Math.round(percent)));
-  output.style.display = 'block';
-  output.innerHTML =
-    '<div class="git-progress" role="status" aria-live="polite">' +
+  const stateClass = state ? ' ' + state : '';
+  return '<div class="git-progress' + stateClass + '" role="status" aria-live="polite">' +
       '<div class="git-progress-head">' +
         '<div class="git-progress-title">拉取进度</div>' +
         '<div class="git-progress-percent">' + value + '%</div>' +
@@ -5235,24 +5291,34 @@ function renderGitProgress(percent, stage, detail) {
     '</div>';
 }
 
+function renderGitProgress(percent, stage, detail, state) {
+  const output = document.getElementById('gitOutput');
+  if (!output) return;
+  output.style.display = 'block';
+  output.innerHTML = gitProgressHtml(percent, stage, detail, state);
+}
+
 function startGitProgress(repo) {
   stopGitProgress();
   const target = gitPullTargetLabel(repo);
   const stages = [
-    { pct: 8, stage: '准备拉取', detail: '正在确认 ' + target + ' 的拉取任务' },
-    { pct: 22, stage: '暂存本地改动', detail: '如有已跟踪的本地改动，会先自动暂存' },
-    { pct: 42, stage: '连接远端仓库', detail: '正在请求远端提交' },
-    { pct: 65, stage: '拉取远端提交', detail: '正在下载并合并可快进的提交' },
-    { pct: 82, stage: '刷新仓库状态', detail: '正在整理拉取后的提交记录' },
-    { pct: 92, stage: '等待结果', detail: '拉取仍在进行，请稍等' }
+    { limit: 18, stage: '准备拉取', detail: '正在确认 ' + target + ' 的拉取任务' },
+    { limit: 34, stage: '暂存本地改动', detail: '如有已跟踪的本地改动，会先自动暂存' },
+    { limit: 52, stage: '连接远端仓库', detail: '正在请求远端提交' },
+    { limit: 78, stage: '拉取远端提交', detail: '正在下载并合并可快进的提交' },
+    { limit: 90, stage: '刷新仓库状态', detail: '正在整理拉取后的提交记录' },
+    { limit: 96, stage: '等待结果', detail: '拉取仍在进行，请稍等' }
   ];
   let index = 0;
-  renderGitProgress(stages[0].pct, stages[0].stage, stages[0].detail);
+  gitProgressValue = 6;
+  renderGitProgress(gitProgressValue, stages[0].stage, stages[0].detail);
   gitProgressTimer = setInterval(() => {
-    index = Math.min(index + 1, stages.length - 1);
+    const targetStage = stages[index];
+    gitProgressValue = Math.min(targetStage.limit, gitProgressValue + Math.max(1, Math.round((targetStage.limit - gitProgressValue) / 3)));
+    if (gitProgressValue >= targetStage.limit && index < stages.length - 1) index += 1;
     const current = stages[index];
-    renderGitProgress(current.pct, current.stage, current.detail);
-  }, 1100);
+    renderGitProgress(gitProgressValue, current.stage, current.detail);
+  }, 500);
 }
 
 function stopGitProgress() {
@@ -5277,9 +5343,12 @@ async function pullGit(repo) {
     });
     const data = await res.json();
     stopGitProgress();
-    renderGitProgress(data && data.ok ? 100 : 100, data && data.ok ? '拉取完成' : '拉取失败', data && data.ok ? '正在展示最新结果' : '请查看下方错误信息');
-    output.innerHTML = renderGitOutput(data);
-    gitRepoCache = data.items.map(it => it.status).filter(Boolean);
+    const ok = !!(data && data.ok);
+    const stage = ok ? '拉取成功' : '拉取失败';
+    const detail = ok ? '远端提交已拉取完成，下面是本次拉取结果' : '拉取没有完成，请查看下方错误信息';
+    output.innerHTML = gitProgressHtml(100, stage, detail, ok ? 'done' : 'failed') + renderGitOutput(data);
+    if (ok) toast('拉取成功');
+    gitRepoCache = (data.items || []).map(it => it.status).filter(Boolean);
     renderGitFromCache();
     renderGitPullRecords(data);
     gitBusy = false;
@@ -5287,8 +5356,8 @@ async function pullGit(repo) {
     await loadGitRepos();
   } catch (e) {
     stopGitProgress();
-    renderGitProgress(100, '拉取失败', '请求没有完成，请查看错误信息');
-    output.innerHTML = '<div class="git-output-title">拉取失败</div><pre>' + esc(e) + '</pre>';
+    output.innerHTML = gitProgressHtml(100, '拉取失败', '请求没有完成，请查看错误信息', 'failed') +
+      '<div class="git-output-title">拉取失败</div><pre>' + esc(e) + '</pre>';
   } finally {
     stopGitProgress();
     gitBusy = false;
@@ -5322,11 +5391,12 @@ function renderGitOutput(data) {
   if (!data || !data.items) {
     return '<div class="git-output-title">拉取失败</div><pre>' + esc(data && data.msg || '未知错误') + '</pre>';
   }
+  const ok = data.items.every(it => it.ok);
   const body = data.items.map(it => {
     const title = (it.ok ? '成功' : '失败') + '：' + it.label;
     return (title + '\n' + (it.output || '')).trim();
   }).join('\n\n');
-  return '<div class="git-output-title">拉取结果</div><pre>' + esc(body) + '</pre>';
+  return '<div class="git-output-title">' + (ok ? '拉取成功' : '拉取失败') + '</div><pre>' + esc(body) + '</pre>';
 }
 
 /* ============ 用户管理 ============ */
