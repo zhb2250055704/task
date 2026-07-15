@@ -3344,6 +3344,15 @@
   .git-progress.failed .git-progress-fill {
     background: linear-gradient(90deg, #c56a5a, #d89a70);
   }
+  .git-status-loading {
+    display: grid;
+    justify-items: center;
+    gap: 14px;
+    width: 100%;
+  }
+  .git-status-loading .git-progress {
+    margin: 0 auto;
+  }
   #toast {
     color: #ffffff;
     background: var(--accent);
@@ -3907,6 +3916,8 @@ let gitBusy = false;
 let gitRepoCache = [];
 let gitProgressTimer = null;
 let gitProgressValue = 0;
+let gitStatusProgressTimer = null;
+let gitStatusProgressValue = 0;
 let commandSearchUserEdited = false;
 let commandSearchAutofillGuard = null;
 
@@ -4689,19 +4700,27 @@ async function delCategory(name) {
 async function loadGitRepos() {
   const grid = document.getElementById('gitRepoGrid');
   const count = document.getElementById('gitCount');
-  grid.innerHTML = '<div class="empty">正在检查仓库状态...</div>';
+  startGitStatusProgress();
   count.textContent = '';
   try {
     const res = await fetch(GIT_API + '/repos');
     const data = await res.json();
+    stopGitStatusProgress();
     if (!data.ok) {
-      grid.innerHTML = '<div class="empty">' + esc(data.msg || '检查失败') + '</div>';
+      grid.innerHTML = '<div class="empty">' +
+        gitProgressHtml(100, '检查失败', data.msg || '请稍后重试', 'failed', '检查进度') +
+        '<div>检查失败：' + esc(data.msg || '未知错误') + '</div>' +
+      '</div>';
       return;
     }
     gitRepoCache = data.items || [];
     renderGitFromCache();
   } catch (e) {
-    grid.innerHTML = '<div class="empty">检查失败：' + esc(e) + '</div>';
+    stopGitStatusProgress();
+    grid.innerHTML = '<div class="empty">' +
+      gitProgressHtml(100, '检查失败', '请求没有完成，请查看错误信息', 'failed', '检查进度') +
+      '<div>检查失败：' + esc(e) + '</div>' +
+    '</div>';
   }
 }
 
@@ -5273,12 +5292,12 @@ function gitPullTargetLabel(repo) {
   return found ? found.label : repo;
 }
 
-function gitProgressHtml(percent, stage, detail, state) {
+function gitProgressHtml(percent, stage, detail, state, title) {
   const value = Math.max(0, Math.min(100, Math.round(percent)));
   const stateClass = state ? ' ' + state : '';
   return '<div class="git-progress' + stateClass + '" role="status" aria-live="polite">' +
       '<div class="git-progress-head">' +
-        '<div class="git-progress-title">拉取进度</div>' +
+        '<div class="git-progress-title">' + esc(title || '拉取进度') + '</div>' +
         '<div class="git-progress-percent">' + value + '%</div>' +
       '</div>' +
       '<div class="git-progress-track" aria-label="拉取进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + value + '">' +
@@ -5289,6 +5308,44 @@ function gitProgressHtml(percent, stage, detail, state) {
         '<div>' + esc(detail || '') + '</div>' +
       '</div>' +
     '</div>';
+}
+
+function renderGitStatusProgress(percent, stage, detail) {
+  const grid = document.getElementById('gitRepoGrid');
+  if (!grid) return;
+  grid.innerHTML =
+    '<div class="empty git-status-loading">' +
+      '<div>正在检查仓库状态...</div>' +
+      gitProgressHtml(percent, stage, detail, '', '检查进度') +
+    '</div>';
+}
+
+function startGitStatusProgress() {
+  stopGitStatusProgress();
+  const stages = [
+    { limit: 20, stage: '准备检查', detail: '正在确认客户端和配置表仓库' },
+    { limit: 42, stage: '读取本地状态', detail: '正在检查分支、提交和本地改动' },
+    { limit: 68, stage: '刷新远端信息', detail: '正在获取远端待拉取提交' },
+    { limit: 88, stage: '统计提交记录', detail: '正在整理提交人、历史记录和待拉取数量' },
+    { limit: 96, stage: '等待结果', detail: '检查仍在进行，请稍等' }
+  ];
+  let index = 0;
+  gitStatusProgressValue = 8;
+  renderGitStatusProgress(gitStatusProgressValue, stages[0].stage, stages[0].detail);
+  gitStatusProgressTimer = setInterval(() => {
+    const targetStage = stages[index];
+    gitStatusProgressValue = Math.min(targetStage.limit, gitStatusProgressValue + Math.max(1, Math.round((targetStage.limit - gitStatusProgressValue) / 3)));
+    if (gitStatusProgressValue >= targetStage.limit && index < stages.length - 1) index += 1;
+    const current = stages[index];
+    renderGitStatusProgress(gitStatusProgressValue, current.stage, current.detail);
+  }, 500);
+}
+
+function stopGitStatusProgress() {
+  if (gitStatusProgressTimer) {
+    clearInterval(gitStatusProgressTimer);
+    gitStatusProgressTimer = null;
+  }
 }
 
 function renderGitProgress(percent, stage, detail, state) {
