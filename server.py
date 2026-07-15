@@ -922,7 +922,7 @@ def git_pull_failure_hint(output):
     text = str(output or '')
     m = re.search(r"unable to unlink old '([^']+)': Invalid argument", text)
     if m:
-        return '文件被占用，Git 无法覆盖：' + m.group(1) + '。请关闭 Excel/WPS 或其他正在打开该文件的程序后重试。'
+        return '文件被占用，Git 无法覆盖：' + m.group(1) + '。在 Windows 下，Excel/WPS 打开的表格不能被 Git 更新；工具已尽量刷新远端信息，请关闭该表格后重试以应用到本地工作区。'
     if 'Your local changes to the following files would be overwritten by merge' in text:
         return '本地改动会被远端覆盖，工具会尝试自动暂存后重试；如果仍失败，请检查这些文件是否被其他程序占用。'
     if 'untracked working tree files would be overwritten by merge' in text:
@@ -1750,15 +1750,6 @@ class GMHandler(SimpleHTTPRequestHandler):
                                 'ok': False, 'output': before.get('msg', '状态检查失败'),
                                 'status': before})
                 continue
-            lock_files = git_office_lock_files(repo)
-            if lock_files:
-                results.append({'id': rid, 'label': repo['label'], 'path': repo['path'],
-                                'ok': False, 'code': 'office_locked',
-                                'output': git_office_lock_message(lock_files),
-                                'lock_files': lock_files,
-                                'status': before})
-                print(f'[GIT] pull {rid}: office files locked')
-                continue
             stashed = git_stash_before_pull(repo, rid)
             if not stashed.get('ok'):
                 after = git_repo_status(rid)
@@ -1772,6 +1763,7 @@ class GMHandler(SimpleHTTPRequestHandler):
             pulled = run_git_command(repo, ['pull', '--ff-only'], timeout=GIT_TIMEOUT)
             retry_stash = None
             retry_output = ''
+            fetch_fallback = None
             if not pulled.get('ok'):
                 blocking_paths = git_parse_overwrite_paths(pulled.get('output', ''))
                 if blocking_paths:
@@ -1781,6 +1773,8 @@ class GMHandler(SimpleHTTPRequestHandler):
                     )
                     if retry_stash.get('ok'):
                         pulled = run_git_command(repo, ['pull', '--ff-only'], timeout=GIT_TIMEOUT)
+            if not pulled.get('ok') and git_pull_failure_hint(pulled.get('output', '')):
+                fetch_fallback = run_git_command(repo, ['fetch', '--prune'], timeout=GIT_TIMEOUT)
             after = git_repo_status(rid)
             output_parts = []
             stash_output = stashed.get('output') or ''
@@ -1795,11 +1789,18 @@ class GMHandler(SimpleHTTPRequestHandler):
             hint = git_pull_failure_hint(pull_output)
             if hint:
                 output_parts.append('提示：' + hint)
+            if fetch_fallback:
+                output_parts.append('远端刷新：' + (
+                    '已刷新远端提交信息，但被占用文件未能更新到本地工作区'
+                    if fetch_fallback.get('ok') else
+                    '刷新远端信息失败：' + (fetch_fallback.get('output') or '未知错误')
+                ))
             results.append({'id': rid, 'label': repo['label'], 'path': repo['path'],
                             'ok': pulled.get('ok'), 'code': pulled.get('code'),
                             'output': '\n'.join(output_parts),
                             'stash': stashed,
                             'retry_stash': retry_stash,
+                            'fetch_fallback': fetch_fallback,
                             'status': after})
             print(f'[GIT] pull {rid}: {"ok" if pulled.get("ok") else "failed"}')
         self._send_json({'ok': all(it.get('ok') for it in results), 'items': results})
