@@ -23,6 +23,13 @@ import xml.etree.ElementTree as ET
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 
+if os.name == 'nt':
+    try:
+        import ctypes
+        ctypes.windll.kernel32.SetErrorMode(0x0001 | 0x0002 | 0x8000)
+    except Exception:
+        pass
+
 LOG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'gm_server.log')
 if sys.stdout is None:
     sys.stdout = open(LOG_FILE, 'a', encoding='utf-8', buffering=1)
@@ -349,6 +356,7 @@ def run_git_command_bytes(repo, args, timeout=60):
             capture_output=True,
             timeout=timeout,
             env=env,
+            **git_subprocess_options(),
         )
     except (FileNotFoundError, subprocess.TimeoutExpired) as e:
         return {'ok': False, 'code': -1, 'stdout': b'', 'stderr': b'', 'output': str(e)}
@@ -733,6 +741,18 @@ def git_executable():
     return os.environ.get('GM_GIT_EXE') or shutil.which('git') or 'git'
 
 
+def git_subprocess_options():
+    if os.name != 'nt':
+        return {}
+    startupinfo = subprocess.STARTUPINFO()
+    startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+    startupinfo.wShowWindow = 0
+    return {
+        'creationflags': subprocess.CREATE_NO_WINDOW,
+        'startupinfo': startupinfo,
+    }
+
+
 def run_git_command(repo, args, timeout=60):
     path = repo.get('path', '')
     if not os.path.isdir(path):
@@ -754,6 +774,7 @@ def run_git_command(repo, args, timeout=60):
             errors='replace',
             timeout=timeout,
             env=env,
+            **git_subprocess_options(),
         )
     except FileNotFoundError:
         return {'ok': False, 'code': -1, 'stdout': '', 'stderr': '',
