@@ -930,6 +930,100 @@ def git_pull_failure_hint(output):
     return ''
 
 
+def git_pull_repo_result(rid):
+    repo = GIT_REPOS[rid]
+    before = git_repo_status(rid)
+    if not before.get('ok'):
+        return {'id': rid, 'label': repo['label'], 'path': repo['path'],
+                'ok': False, 'output': before.get('msg', '状态检查失败'),
+                'status': before}
+    stashed = git_stash_before_pull(repo, rid)
+    if not stashed.get('ok'):
+        after = git_repo_status(rid)
+        print(f'[GIT] pull {rid}: stash failed')
+        return {'id': rid, 'label': repo['label'], 'path': repo['path'],
+                'ok': False, 'code': stashed.get('code'),
+                'output': '暂存失败，未执行拉取\n' + (stashed.get('output') or ''),
+                'stash': stashed,
+                'status': after}
+    pulled = run_git_command(repo, ['pull', '--ff-only'], timeout=GIT_TIMEOUT)
+    retry_stash = None
+    retry_output = ''
+    fetch_fallback = None
+    if not pulled.get('ok'):
+        blocking_paths = git_parse_overwrite_paths(pulled.get('output', ''))
+        if blocking_paths:
+            retry_stash = git_stash_paths(repo, rid, blocking_paths, include_untracked=True, reason='blocked')
+            retry_output = '阻塞文件暂存：' + (
+                retry_stash.get('output') or retry_stash.get('message', '已暂存阻塞文件')
+            )
+            if retry_stash.get('ok'):
+                pulled = run_git_command(repo, ['pull', '--ff-only'], timeout=GIT_TIMEOUT)
+    if not pulled.get('ok') and git_pull_failure_hint(pulled.get('output', '')):
+        fetch_fallback = run_git_command(repo, ['fetch', '--prune'], timeout=GIT_TIMEOUT)
+    after = git_repo_status(rid)
+    output_parts = []
+    stash_output = stashed.get('output') or ''
+    if stashed.get('skipped'):
+        output_parts.append('暂存：没有需要暂存的已跟踪本地改动')
+    else:
+        output_parts.append('暂存：' + (stash_output or stashed.get('message', '已暂存本地改动')))
+    if retry_output:
+        output_parts.append(retry_output)
+    pull_output = pulled.get('output') or ('Already up to date.' if pulled.get('ok') else '')
+    output_parts.append('拉取：' + pull_output)
+    hint = git_pull_failure_hint(pull_output)
+    if hint:
+        output_parts.append('提示：' + hint)
+    if fetch_fallback:
+        output_parts.append('远端刷新：' + (
+            '已刷新远端提交信息，但被占用文件未能更新到本地工作区'
+            if fetch_fallback.get('ok') else
+            '刷新远端信息失败：' + (fetch_fallback.get('output') or '未知错误')
+        ))
+    print(f'[GIT] pull {rid}: {"ok" if pulled.get("ok") else "failed"}')
+    return {'id': rid, 'label': repo['label'], 'path': repo['path'],
+            'ok': pulled.get('ok'), 'code': pulled.get('code'),
+            'output': '\n'.join(output_parts),
+            'stash': stashed,
+            'retry_stash': retry_stash,
+            'fetch_fallback': fetch_fallback,
+            'status': after}
+
+
+def git_close_office_processes():
+    if os.name != 'nt':
+        return []
+    results = []
+    for image in ('wps.exe', 'et.exe', 'excel.exe'):
+        proc = subprocess.run(
+            ['taskkill', '/F', '/T', '/IM', image],
+            capture_output=True,
+            text=True,
+            encoding='utf-8',
+            errors='replace',
+            **git_subprocess_options(),
+        )
+        text = (proc.stdout + ('\n' if proc.stdout and proc.stderr else '') + proc.stderr).strip()
+        results.append({'image': image, 'ok': proc.returncode == 0, 'output': text})
+    return results
+
+
+def git_remove_office_locks(repo):
+    removed = []
+    failed = []
+    for rel in git_office_lock_files(repo):
+        path = os.path.join(repo.get('path', ''), rel.replace('/', os.sep))
+        try:
+            os.remove(path)
+            removed.append(rel)
+        except FileNotFoundError:
+            removed.append(rel)
+        except OSError as e:
+            failed.append({'path': rel, 'error': str(e)})
+    return {'removed': removed, 'failed': failed}
+
+
 
 def parse_git_commit_lines(output):
     commits = []
@@ -1198,6 +1292,8 @@ class GMHandler(SimpleHTTPRequestHandler):
             self._create_category()
         elif path == '/api/git/pull':
             self._git_pull()
+        elif path == '/api/git/resolve-excel-pull':
+            self._git_resolve_excel_pull()
         else:
             self.send_error(404)
 
@@ -1743,67 +1839,24 @@ class GMHandler(SimpleHTTPRequestHandler):
 
         results = []
         for rid in repo_ids:
-            repo = GIT_REPOS[rid]
-            before = git_repo_status(rid)
-            if not before.get('ok'):
-                results.append({'id': rid, 'label': repo['label'], 'path': repo['path'],
-                                'ok': False, 'output': before.get('msg', '状态检查失败'),
-                                'status': before})
-                continue
-            stashed = git_stash_before_pull(repo, rid)
-            if not stashed.get('ok'):
-                after = git_repo_status(rid)
-                results.append({'id': rid, 'label': repo['label'], 'path': repo['path'],
-                                'ok': False, 'code': stashed.get('code'),
-                                'output': '暂存失败，未执行拉取\n' + (stashed.get('output') or ''),
-                                'stash': stashed,
-                                'status': after})
-                print(f'[GIT] pull {rid}: stash failed')
-                continue
-            pulled = run_git_command(repo, ['pull', '--ff-only'], timeout=GIT_TIMEOUT)
-            retry_stash = None
-            retry_output = ''
-            fetch_fallback = None
-            if not pulled.get('ok'):
-                blocking_paths = git_parse_overwrite_paths(pulled.get('output', ''))
-                if blocking_paths:
-                    retry_stash = git_stash_paths(repo, rid, blocking_paths, include_untracked=True, reason='blocked')
-                    retry_output = '阻塞文件暂存：' + (
-                        retry_stash.get('output') or retry_stash.get('message', '已暂存阻塞文件')
-                    )
-                    if retry_stash.get('ok'):
-                        pulled = run_git_command(repo, ['pull', '--ff-only'], timeout=GIT_TIMEOUT)
-            if not pulled.get('ok') and git_pull_failure_hint(pulled.get('output', '')):
-                fetch_fallback = run_git_command(repo, ['fetch', '--prune'], timeout=GIT_TIMEOUT)
-            after = git_repo_status(rid)
-            output_parts = []
-            stash_output = stashed.get('output') or ''
-            if stashed.get('skipped'):
-                output_parts.append('暂存：没有需要暂存的已跟踪本地改动')
-            else:
-                output_parts.append('暂存：' + (stash_output or stashed.get('message', '已暂存本地改动')))
-            if retry_output:
-                output_parts.append(retry_output)
-            pull_output = pulled.get('output') or ('Already up to date.' if pulled.get('ok') else '')
-            output_parts.append('拉取：' + pull_output)
-            hint = git_pull_failure_hint(pull_output)
-            if hint:
-                output_parts.append('提示：' + hint)
-            if fetch_fallback:
-                output_parts.append('远端刷新：' + (
-                    '已刷新远端提交信息，但被占用文件未能更新到本地工作区'
-                    if fetch_fallback.get('ok') else
-                    '刷新远端信息失败：' + (fetch_fallback.get('output') or '未知错误')
-                ))
-            results.append({'id': rid, 'label': repo['label'], 'path': repo['path'],
-                            'ok': pulled.get('ok'), 'code': pulled.get('code'),
-                            'output': '\n'.join(output_parts),
-                            'stash': stashed,
-                            'retry_stash': retry_stash,
-                            'fetch_fallback': fetch_fallback,
-                            'status': after})
-            print(f'[GIT] pull {rid}: {"ok" if pulled.get("ok") else "failed"}')
+            results.append(git_pull_repo_result(rid))
         self._send_json({'ok': all(it.get('ok') for it in results), 'items': results})
+
+    def _git_resolve_excel_pull(self):
+        repo = GIT_REPOS['excel']
+        closed = git_close_office_processes()
+        time.sleep(1)
+        locks = git_remove_office_locks(repo)
+        result = git_pull_repo_result('excel')
+        prefix = [
+            '处理：已尝试关闭 WPS/Excel/ET 进程，并清理配置表锁文件。',
+            '清理锁文件：' + (', '.join(locks.get('removed') or []) if locks.get('removed') else '无'),
+        ]
+        if locks.get('failed'):
+            prefix.append('仍有锁文件无法清理：' + json.dumps(locks.get('failed'), ensure_ascii=False))
+        result['output'] = '\n'.join(prefix + [result.get('output') or ''])
+        result['resolver'] = {'closed': closed, 'locks': locks}
+        self._send_json({'ok': bool(result.get('ok')), 'items': [result], 'resolver': result['resolver']})
 
     def _read_json(self):
         length = int(self.headers.get('Content-Length', 0))

@@ -3839,6 +3839,21 @@
   </div>
 </div>
 
+<!-- Git 拉取失败处理弹窗 -->
+<div class="mask" id="gitFailMask">
+  <div class="modal" style="width:560px">
+    <h2>配置表拉取失败</h2>
+    <div class="git-output" style="margin-top:0">
+      <div class="git-output-title">失败原因</div>
+      <pre id="gitFailReason"></pre>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeGitFailModal()">关闭</button>
+      <button class="btn btn-primary" id="gitResolveBtn" onclick="resolveExcelPullFailure()">解决并重新拉取</button>
+    </div>
+  </div>
+</div>
+
 <!-- 管理分类弹窗 -->
 <div class="mask" id="catMask">
   <div class="modal" style="width:420px">
@@ -3918,6 +3933,7 @@ let gitProgressTimer = null;
 let gitProgressValue = 0;
 let gitStatusProgressTimer = null;
 let gitStatusProgressValue = 0;
+let lastExcelPullFailure = null;
 let commandSearchUserEdited = false;
 let commandSearchAutofillGuard = null;
 
@@ -5397,6 +5413,56 @@ function stopGitProgress() {
   }
 }
 
+function findExcelPullFailure(data) {
+  const items = data && data.items ? data.items : [];
+  return items.find(it => it && it.id === 'excel' && !it.ok) || null;
+}
+
+function openGitFailModal(item) {
+  lastExcelPullFailure = item;
+  document.getElementById('gitFailReason').textContent = (item && item.output) || '配置表拉取失败，未返回详细原因。';
+  document.getElementById('gitResolveBtn').disabled = false;
+  document.getElementById('gitResolveBtn').textContent = '解决并重新拉取';
+  document.getElementById('gitFailMask').classList.add('show');
+}
+
+function closeGitFailModal() {
+  document.getElementById('gitFailMask').classList.remove('show');
+}
+
+async function resolveExcelPullFailure() {
+  if (!confirm('将尝试关闭 WPS/Excel/ET 并重新拉取配置表。请确认表格内容已经保存。')) return;
+  const btn = document.getElementById('gitResolveBtn');
+  btn.disabled = true;
+  btn.textContent = '处理中...';
+  renderGitPullProgress(12, '正在处理占用', '正在关闭 WPS/Excel/ET 并清理表格锁文件');
+  try {
+    const res = await fetch(GIT_API + '/resolve-excel-pull', { method: 'POST' });
+    const data = await res.json();
+    const ok = !!(data && data.ok);
+    const stage = ok ? '拉取成功' : '拉取失败';
+    const detail = ok ? '配置表已重新拉取完成' : '自动处理后仍未成功，请查看失败原因';
+    renderGitPullProgress(100, stage, detail, ok ? 'done' : 'failed');
+    const output = document.getElementById('gitOutput');
+    output.style.display = 'block';
+    output.innerHTML = gitProgressHtml(100, stage, detail, ok ? 'done' : 'failed') + renderGitOutput(data);
+    renderGitPullRecords(data);
+    const failed = findExcelPullFailure(data);
+    if (failed) {
+      openGitFailModal(failed);
+    } else {
+      closeGitFailModal();
+      toast('配置表拉取成功');
+      setTimeout(() => { if (currentView === 'git') loadGitRepos(); }, 1000);
+    }
+  } catch (e) {
+    document.getElementById('gitFailReason').textContent = '自动处理失败：' + e;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '解决并重新拉取';
+  }
+}
+
 async function pullGit(repo) {
   if (gitBusy) return;
   gitBusy = true;
@@ -5420,6 +5486,8 @@ async function pullGit(repo) {
     if (ok) toast('拉取成功');
     gitRepoCache = (data.items || []).map(it => it.status).filter(Boolean);
     renderGitPullRecords(data);
+    const excelFailure = findExcelPullFailure(data);
+    if (excelFailure) openGitFailModal(excelFailure);
     gitBusy = false;
     if (allBtn) allBtn.disabled = false;
     if (ok) {
@@ -5614,6 +5682,7 @@ document.getElementById('catMask').addEventListener('click', e => { if (e.target
 document.getElementById('userMask').addEventListener('click', e => { if (e.target.id === 'userMask') closeUserModal(); });
 document.getElementById('pwdMask').addEventListener('click', e => { if (e.target.id === 'pwdMask') closePwdModal(); });
 document.getElementById('detailMask').addEventListener('click', e => { if (e.target.id === 'detailMask') closeDetail(); });
+document.getElementById('gitFailMask').addEventListener('click', e => { if (e.target.id === 'gitFailMask') closeGitFailModal(); });
 document.getElementById('newCategory').addEventListener('keydown', e => { if (e.key === 'Enter') addCategory(); });
 window.addEventListener('keydown', e => {
   if (!e.ctrlKey && !e.metaKey) return;
