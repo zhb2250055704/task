@@ -5320,6 +5320,16 @@ function renderGitStatusProgress(percent, stage, detail) {
     '</div>';
 }
 
+function renderGitPullProgress(percent, stage, detail, state) {
+  const grid = document.getElementById('gitRepoGrid');
+  if (!grid) return;
+  grid.innerHTML =
+    '<div class="empty git-status-loading">' +
+      '<div>正在拉取远端提交...</div>' +
+      gitProgressHtml(percent, stage, detail, state || '', '拉取进度') +
+    '</div>';
+}
+
 function startGitStatusProgress() {
   stopGitStatusProgress();
   const stages = [
@@ -5369,12 +5379,14 @@ function startGitProgress(repo) {
   let index = 0;
   gitProgressValue = 6;
   renderGitProgress(gitProgressValue, stages[0].stage, stages[0].detail);
+  renderGitPullProgress(gitProgressValue, stages[0].stage, stages[0].detail);
   gitProgressTimer = setInterval(() => {
     const targetStage = stages[index];
     gitProgressValue = Math.min(targetStage.limit, gitProgressValue + Math.max(1, Math.round((targetStage.limit - gitProgressValue) / 3)));
     if (gitProgressValue >= targetStage.limit && index < stages.length - 1) index += 1;
     const current = stages[index];
     renderGitProgress(gitProgressValue, current.stage, current.detail);
+    renderGitPullProgress(gitProgressValue, current.stage, current.detail);
   }, 500);
 }
 
@@ -5403,16 +5415,23 @@ async function pullGit(repo) {
     const ok = !!(data && data.ok);
     const stage = ok ? '拉取成功' : '拉取失败';
     const detail = ok ? '远端提交已拉取完成，下面是本次拉取结果' : '拉取没有完成，请查看下方错误信息';
+    renderGitPullProgress(100, stage, detail, ok ? 'done' : 'failed');
     output.innerHTML = gitProgressHtml(100, stage, detail, ok ? 'done' : 'failed') + renderGitOutput(data);
     if (ok) toast('拉取成功');
     gitRepoCache = (data.items || []).map(it => it.status).filter(Boolean);
-    renderGitFromCache();
     renderGitPullRecords(data);
     gitBusy = false;
     if (allBtn) allBtn.disabled = false;
-    await loadGitRepos();
+    if (ok) {
+      setTimeout(() => {
+        if (currentView === 'git') loadGitRepos();
+      }, 1200);
+    } else {
+      renderGitFromCache();
+    }
   } catch (e) {
     stopGitProgress();
+    renderGitPullProgress(100, '拉取失败', '请求没有完成，请查看错误信息', 'failed');
     output.innerHTML = gitProgressHtml(100, '拉取失败', '请求没有完成，请查看错误信息', 'failed') +
       '<div class="git-output-title">拉取失败</div><pre>' + esc(e) + '</pre>';
   } finally {
