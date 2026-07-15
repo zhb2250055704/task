@@ -20,12 +20,17 @@ import re
 import shutil
 import subprocess
 import xml.etree.ElementTree as ET
-from http.server import HTTPServer, SimpleHTTPRequestHandler
+from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 
-if sys.stdout and sys.stdout.encoding != 'utf-8':
+LOG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'gm_server.log')
+if sys.stdout is None:
+    sys.stdout = open(LOG_FILE, 'a', encoding='utf-8', buffering=1)
+elif sys.stdout.encoding != 'utf-8':
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
-if sys.stderr and sys.stderr.encoding != 'utf-8':
+if sys.stderr is None:
+    sys.stderr = sys.stdout
+elif sys.stderr.encoding != 'utf-8':
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
 TOOL_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -1699,7 +1704,8 @@ if __name__ == '__main__':
     if open_browser:
         threading.Timer(0.5, lambda: webbrowser.open(f'http://localhost:{port}')).start()
 
-    httpd = HTTPServer(('', port), GMHandler)
+    httpd = ThreadingHTTPServer(('', port), GMHandler)
+    httpd.daemon_threads = True
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:

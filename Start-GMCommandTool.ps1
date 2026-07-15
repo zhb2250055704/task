@@ -5,7 +5,20 @@ $Port = 9092
 
 $existing = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
 if ($existing) {
-    exit 0
+    try {
+        $response = Invoke-WebRequest -Uri "http://127.0.0.1:$Port/" -UseBasicParsing -TimeoutSec 3
+        if ($response.StatusCode -ge 200 -and $response.StatusCode -lt 500) {
+            exit 0
+        }
+    } catch {
+        foreach ($conn in $existing) {
+            $proc = Get-CimInstance Win32_Process -Filter "ProcessId=$($conn.OwningProcess)" -ErrorAction SilentlyContinue
+            if ($proc -and $proc.CommandLine -like '*server.py*') {
+                Stop-Process -Id $conn.OwningProcess -Force -ErrorAction SilentlyContinue
+            }
+        }
+        Start-Sleep -Milliseconds 500
+    }
 }
 
 $pythonCandidates = @(
