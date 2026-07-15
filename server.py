@@ -803,16 +803,131 @@ def git_tracked_changes(repo):
     return {'ok': True, 'changed': worktree.get('code') == 1 or staged.get('code') == 1, 'output': ''}
 
 
+def git_changed_paths(repo):
+    paths = []
+    for args in (['diff', '--name-only'], ['diff', '--cached', '--name-only']):
+        result = run_git_command(repo, args, timeout=30)
+        if not result.get('ok'):
+            return {'ok': False, 'paths': [], 'output': result.get('output', '读取本地改动文件失败')}
+        for line in result.get('stdout', '').splitlines():
+            path = line.strip()
+            if path and path not in paths:
+                paths.append(path)
+    return {'ok': True, 'paths': paths, 'output': ''}
+
+
+def git_tool_repo_prefix(repo):
+    try:
+        repo_path = os.path.abspath(repo.get('path', ''))
+        tool_path = os.path.abspath(TOOL_DIR)
+        if os.path.commonpath([repo_path, tool_path]) != repo_path:
+            return ''
+        return os.path.relpath(tool_path, repo_path).replace(os.sep, '/') + '/'
+    except ValueError:
+        return ''
+
+
+def git_filter_stash_paths(repo, paths):
+    prefix = git_tool_repo_prefix(repo)
+    filtered = []
+    for path in paths:
+        clean = str(path or '').strip().replace('\\', '/')
+        if not clean:
+            continue
+        if prefix and (clean == prefix.rstrip('/') or clean.startswith(prefix)):
+            continue
+        if clean not in filtered:
+            filtered.append(clean)
+    return filtered
+
+
+def git_office_lock_files(repo):
+    root = repo.get('path', '')
+    if not os.path.isdir(root):
+        return []
+    locks = []
+    skip_prefix = git_tool_repo_prefix(repo)
+    for dirpath, dirnames, filenames in os.walk(root):
+        if '.git' in dirnames:
+            dirnames.remove('.git')
+        rel_dir = os.path.relpath(dirpath, root).replace(os.sep, '/')
+        rel_prefix = '' if rel_dir == '.' else rel_dir + '/'
+        if skip_prefix and (rel_prefix == skip_prefix or rel_prefix.startswith(skip_prefix)):
+            dirnames[:] = []
+            continue
+        for name in filenames:
+            lower = name.lower()
+            if not name.startswith('~$') or not lower.endswith(('.xls', '.xlsx', '.xlsm')):
+                continue
+            rel = (rel_prefix + name).replace('\\', '/')
+            locks.append(rel)
+    return locks[:20]
+
+
+def git_office_lock_message(paths):
+    if not paths:
+        return ''
+    body = '\n'.join(' - ' + path for path in paths)
+    return '检测到表格文件正在被 Excel/WPS 占用，请关闭这些表格后再拉取：\n' + body
+
+
+def git_stash_paths(repo, repo_id, paths, include_untracked=False, reason='local'):
+    paths = git_filter_stash_paths(repo, paths)
+    if not paths:
+        return {'ok': True, 'skipped': True, 'output': '没有需要暂存的文件'}
+    message = f'gm-tool-before-pull-{repo_id}-{reason}-{time.strftime("%Y%m%d-%H%M%S")}'
+    args = ['stash', 'push', '-m', message]
+    if include_untracked:
+        args.append('--include-untracked')
+    args.append('--')
+    args.extend(paths)
+    result = run_git_command(repo, args, timeout=GIT_TIMEOUT)
+    result['message'] = message
+    result['paths'] = paths
+    return result
+
+
 def git_stash_before_pull(repo, repo_id):
     tracked = git_tracked_changes(repo)
     if not tracked.get('ok'):
         return tracked
     if not tracked.get('changed'):
         return {'ok': True, 'skipped': True, 'output': '没有需要暂存的已跟踪本地改动'}
-    message = f'gm-tool-before-pull-{repo_id}-{time.strftime("%Y%m%d-%H%M%S")}'
-    result = run_git_command(repo, ['stash', 'push', '-m', message], timeout=GIT_TIMEOUT)
-    result['message'] = message
-    return result
+    changed = git_changed_paths(repo)
+    if not changed.get('ok'):
+        return changed
+    return git_stash_paths(repo, repo_id, changed.get('paths', []), reason='tracked')
+
+
+def git_parse_overwrite_paths(output):
+    paths = []
+    capture = False
+    for line in str(output or '').splitlines():
+        text = line.rstrip()
+        if 'would be overwritten by merge' in text:
+            capture = True
+            continue
+        if capture:
+            if text.startswith('\t') or text.startswith('    '):
+                path = text.strip()
+                if path and path not in paths:
+                    paths.append(path)
+                continue
+            if text.startswith('Please ') or text.startswith('Aborting'):
+                break
+    return paths
+
+
+def git_pull_failure_hint(output):
+    text = str(output or '')
+    m = re.search(r"unable to unlink old '([^']+)': Invalid argument", text)
+    if m:
+        return '文件被占用，Git 无法覆盖：' + m.group(1) + '。请关闭 Excel/WPS 或其他正在打开该文件的程序后重试。'
+    if 'Your local changes to the following files would be overwritten by merge' in text:
+        return '本地改动会被远端覆盖，工具会尝试自动暂存后重试；如果仍失败，请检查这些文件是否被其他程序占用。'
+    if 'untracked working tree files would be overwritten by merge' in text:
+        return '未跟踪文件会被远端覆盖，工具会尝试自动暂存阻塞文件后重试。'
+    return ''
 
 
 
@@ -1635,6 +1750,15 @@ class GMHandler(SimpleHTTPRequestHandler):
                                 'ok': False, 'output': before.get('msg', '状态检查失败'),
                                 'status': before})
                 continue
+            lock_files = git_office_lock_files(repo)
+            if lock_files:
+                results.append({'id': rid, 'label': repo['label'], 'path': repo['path'],
+                                'ok': False, 'code': 'office_locked',
+                                'output': git_office_lock_message(lock_files),
+                                'lock_files': lock_files,
+                                'status': before})
+                print(f'[GIT] pull {rid}: office files locked')
+                continue
             stashed = git_stash_before_pull(repo, rid)
             if not stashed.get('ok'):
                 after = git_repo_status(rid)
@@ -1646,6 +1770,17 @@ class GMHandler(SimpleHTTPRequestHandler):
                 print(f'[GIT] pull {rid}: stash failed')
                 continue
             pulled = run_git_command(repo, ['pull', '--ff-only'], timeout=GIT_TIMEOUT)
+            retry_stash = None
+            retry_output = ''
+            if not pulled.get('ok'):
+                blocking_paths = git_parse_overwrite_paths(pulled.get('output', ''))
+                if blocking_paths:
+                    retry_stash = git_stash_paths(repo, rid, blocking_paths, include_untracked=True, reason='blocked')
+                    retry_output = '阻塞文件暂存：' + (
+                        retry_stash.get('output') or retry_stash.get('message', '已暂存阻塞文件')
+                    )
+                    if retry_stash.get('ok'):
+                        pulled = run_git_command(repo, ['pull', '--ff-only'], timeout=GIT_TIMEOUT)
             after = git_repo_status(rid)
             output_parts = []
             stash_output = stashed.get('output') or ''
@@ -1653,11 +1788,18 @@ class GMHandler(SimpleHTTPRequestHandler):
                 output_parts.append('暂存：没有需要暂存的已跟踪本地改动')
             else:
                 output_parts.append('暂存：' + (stash_output or stashed.get('message', '已暂存本地改动')))
-            output_parts.append('拉取：' + (pulled.get('output') or ('Already up to date.' if pulled.get('ok') else '')))
+            if retry_output:
+                output_parts.append(retry_output)
+            pull_output = pulled.get('output') or ('Already up to date.' if pulled.get('ok') else '')
+            output_parts.append('拉取：' + pull_output)
+            hint = git_pull_failure_hint(pull_output)
+            if hint:
+                output_parts.append('提示：' + hint)
             results.append({'id': rid, 'label': repo['label'], 'path': repo['path'],
                             'ok': pulled.get('ok'), 'code': pulled.get('code'),
                             'output': '\n'.join(output_parts),
                             'stash': stashed,
+                            'retry_stash': retry_stash,
                             'status': after})
             print(f'[GIT] pull {rid}: {"ok" if pulled.get("ok") else "failed"}')
         self._send_json({'ok': all(it.get('ok') for it in results), 'items': results})
