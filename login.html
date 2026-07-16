@@ -650,12 +650,158 @@
       margin-right: auto;
     }
   }
+
+  /* Taste login polish */
+  :root {
+    --accent: #52715f;
+    --accent2: #789184;
+    --text: #243129;
+    --muted: #68766d;
+    --border: rgba(42,57,49,.12);
+  }
+  body {
+    min-height: 100dvh;
+    display: grid;
+    place-items: center;
+    padding: 28px;
+    color: var(--text);
+    background:
+      radial-gradient(820px 420px at 78% 12%, rgba(120,145,132,.22), transparent 62%),
+      linear-gradient(135deg, rgba(238,243,239,.96), rgba(247,248,243,.93)),
+      url("assets/login-console-bg.png") center / cover no-repeat;
+    font-family: "Aptos", "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
+  }
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    background:
+      linear-gradient(90deg, rgba(36,49,41,.04) 1px, transparent 1px),
+      linear-gradient(rgba(36,49,41,.035) 1px, transparent 1px);
+    background-size: 44px 44px;
+    mask-image: linear-gradient(135deg, transparent, #000 18%, #000 82%, transparent);
+  }
+  body::after {
+    display: none;
+  }
+  .login-box {
+    width: min(430px, calc(100vw - 36px));
+    padding: 34px;
+    border: 1px solid var(--border);
+    border-radius: 24px;
+    color: var(--text);
+    background: rgba(255,255,255,.88);
+    box-shadow: 0 26px 70px rgba(50,65,57,.16);
+    backdrop-filter: blur(18px);
+  }
+  .login-box::before,
+  .login-box::after {
+    display: none;
+  }
+  .brand {
+    margin-bottom: 26px;
+    text-align: left;
+  }
+  .brand .icon {
+    width: 44px;
+    height: 44px;
+    margin: 0 0 16px;
+    border-radius: 15px;
+    display: grid;
+    place-items: center;
+    color: #ffffff;
+    background: #243129;
+    font-size: 13px;
+    font-weight: 900;
+    letter-spacing: -.02em;
+    box-shadow: none;
+  }
+  .brand h1 {
+    color: var(--text);
+    font-size: 27px;
+    line-height: 1.15;
+    letter-spacing: -.035em;
+  }
+  .brand .sub {
+    margin-top: 8px;
+    color: var(--muted);
+    font-size: 13px;
+    letter-spacing: 0;
+  }
+  .field {
+    margin-bottom: 16px;
+  }
+  .field label {
+    margin-bottom: 8px;
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 800;
+    letter-spacing: 0;
+  }
+  .field input {
+    min-height: 46px;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    color: var(--text);
+    background: #f7f9f6;
+    font-size: 15px;
+  }
+  .field input::placeholder {
+    color: #9aa69f;
+  }
+  .field input:focus {
+    border-color: rgba(82,113,95,.45);
+    background: #ffffff;
+    box-shadow: 0 0 0 4px rgba(82,113,95,.12);
+  }
+  .btn {
+    min-height: 48px;
+    border-radius: 14px;
+    color: #ffffff;
+    background: #243129;
+    font-weight: 900;
+    box-shadow: 0 16px 32px rgba(36,49,41,.2);
+  }
+  .btn:hover {
+    transform: translateY(-1px);
+    background: #314239;
+    box-shadow: 0 20px 38px rgba(36,49,41,.22);
+  }
+  .btn:active {
+    transform: translateY(1px);
+  }
+  .tip {
+    color: var(--muted);
+    background: #f3f6f2;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+  }
+  .err {
+    color: #b85248;
+  }
+  @media (max-width: 720px) {
+    body {
+      padding: 18px;
+    }
+    .login-box {
+      padding: 28px 24px;
+      border-radius: 20px;
+    }
+    .brand {
+      text-align: left;
+    }
+    .brand .icon {
+      margin-left: 0;
+      margin-right: 0;
+    }
+  }
 </style>
 </head>
 <body>
 <div class="login-box">
   <div class="brand">
-    <div class="icon">🎮</div>
+    <div class="icon">GM</div>
     <h1>GM 命令管理工具</h1>
     <div class="sub">GM Command Console</div>
   </div>

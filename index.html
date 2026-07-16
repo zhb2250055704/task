@@ -3507,19 +3507,394 @@
       transition-duration: .01ms !important;
     }
   }
+
+  /* ============ Taste workspace polish ============ */
+  :root {
+    --accent: #52715f;
+    --accent2: #789184;
+    --accent3: #b9824c;
+    --accent-soft: rgba(82, 113, 95, .12);
+    --radius: 16px;
+  }
+  html[data-theme="dark"],
+  html[data-theme="light"] {
+    --bg: #eef3ef;
+    --bg-grad:
+      radial-gradient(820px 360px at 78% -8%, rgba(120, 145, 132, .18), transparent 62%),
+      linear-gradient(135deg, #eef3ef 0%, #f7f8f3 50%, #e7eee8 100%);
+    --sidebar-bg: rgba(250, 251, 247, .9);
+    --panel: rgba(255,255,255,.9);
+    --panel-solid: #ffffff;
+    --card: #ffffff;
+    --card-bg: #ffffff;
+    --border: rgba(42, 57, 49, .11);
+    --border-strong: rgba(42, 57, 49, .18);
+    --text: #243129;
+    --text-dim: #68766d;
+    --text-faint: #9aa69f;
+    --th-bg: #f5f7f3;
+    --row-hover: rgba(82, 113, 95, .075);
+    --input-bg: #f7f9f6;
+    --ghost-bg: #f2f5f1;
+    --ghost-hover: #e7ede7;
+    --code-bg: #edf4ef;
+    --shadow: 0 22px 52px rgba(50, 65, 57, .13);
+    --shadow-soft: 0 10px 28px rgba(50, 65, 57, .09);
+    --danger: #b85248;
+  }
+  body {
+    min-height: 100vh;
+    color: var(--text);
+    background: var(--bg-grad);
+    font-family: "Aptos", "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
+  }
+  .layout {
+    width: min(1640px, calc(100vw - 36px));
+    grid-template-columns: 246px minmax(0, 1fr);
+    gap: 20px;
+  }
+  .topbar {
+    align-content: start;
+    gap: 18px;
+    border-radius: 22px;
+    background: linear-gradient(180deg, rgba(255,255,255,.94), rgba(248,250,246,.88));
+    box-shadow: 0 18px 46px rgba(45, 59, 52, .12);
+  }
+  .topbar .logo {
+    width: 100%;
+    min-height: 64px;
+    padding: 0 2px 18px;
+    font-size: 19px;
+    letter-spacing: -.03em;
+  }
+  .topbar .logo .dot {
+    width: 38px;
+    height: 38px;
+    border-radius: 13px;
+    font-size: 12px;
+    font-weight: 900;
+    letter-spacing: -.02em;
+    background: #243129;
+  }
+  .topnav {
+    width: 100%;
+    display: grid;
+    gap: 8px;
+  }
+  .nav-item {
+    position: relative;
+    width: 100%;
+    min-height: 44px;
+    justify-content: flex-start;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: 14px;
+    color: var(--text-dim);
+    font-size: 14px;
+    letter-spacing: 0;
+  }
+  .nav-item::before {
+    content: attr(data-mark);
+    width: 34px;
+    height: 24px;
+    border-radius: 9px;
+    display: inline-grid;
+    place-items: center;
+    flex: 0 0 auto;
+    color: #6b7d71;
+    background: rgba(82, 113, 95, .1);
+    font-size: 10px;
+    font-weight: 900;
+    letter-spacing: .02em;
+  }
+  .nav-item:hover {
+    background: rgba(82, 113, 95, .08);
+    border-color: rgba(82, 113, 95, .16);
+  }
+  .nav-item.active {
+    color: #ffffff;
+    background: #243129;
+    box-shadow: 0 16px 30px rgba(36, 49, 41, .18);
+  }
+  .nav-item.active::before {
+    color: #243129;
+    background: #e8eee8;
+  }
+  .topbar-user {
+    width: 100%;
+    margin-top: auto;
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+  .topbar-user .u-info {
+    width: 100%;
+    padding: 12px;
+    text-align: left;
+  }
+  .topbar-user .u-acts {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .topbar-user .u-acts a {
+    min-height: 36px;
+    display: grid;
+    place-items: center;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 800;
+  }
+  .zoom-box,
+  .theme-toggle {
+    min-height: 38px;
+    justify-content: center;
+  }
+  .theme-toggle {
+    width: 100%;
+    font-size: 13px;
+    font-weight: 900;
+  }
+  .view.active {
+    gap: 16px;
+  }
+  header {
+    min-height: 124px;
+    padding: 30px 32px;
+    border-radius: 22px;
+    background:
+      linear-gradient(135deg, rgba(255,255,255,.96), rgba(255,255,255,.78)),
+      linear-gradient(135deg, rgba(82,113,95,.15), rgba(185,130,76,.08));
+    overflow: hidden;
+  }
+  header h1 {
+    font-size: clamp(30px, 3.2vw, 44px);
+  }
+  header::after {
+    content: "工作台";
+    bottom: 24px;
+    letter-spacing: 0;
+  }
+  .toolbar {
+    padding: 14px;
+    border-radius: 18px;
+    background: rgba(255,255,255,.88);
+  }
+  .toolbar input[type=text],
+  .toolbar input[type=search] {
+    width: min(360px, 100%);
+  }
+  .toolbar input,
+  .toolbar select,
+  .field input,
+  .field textarea,
+  .field select,
+  .cat-add input {
+    border-radius: 13px;
+    font-size: 14px;
+  }
+  .btn {
+    min-height: 40px;
+    padding: 9px 16px;
+    border-radius: 13px;
+    letter-spacing: 0;
+  }
+  .btn:active {
+    transform: translateY(1px);
+  }
+  .btn-primary {
+    background: #243129;
+    box-shadow: 0 14px 26px rgba(36,49,41,.18);
+  }
+  .btn-primary:hover {
+    background: #314239;
+    box-shadow: 0 18px 32px rgba(36,49,41,.2);
+  }
+  .btn-danger,
+  .actions a.del {
+    color: #ffffff;
+    background: var(--danger);
+  }
+  .container {
+    padding-bottom: 34px;
+  }
+  .cat-group,
+  table,
+  .repo-card,
+  .git-commit-panel,
+  .git-record,
+  .git-output,
+  .repo-changes,
+  .empty {
+    border-radius: 20px;
+    background: rgba(255,255,255,.9);
+    box-shadow: 0 12px 34px rgba(50,65,57,.09);
+  }
+  .cat-group {
+    padding: 20px;
+  }
+  .card-grid {
+    grid-template-columns: repeat(auto-fill, minmax(310px, 1fr));
+    gap: 16px;
+  }
+  .card-grid .item-card,
+  .card-grid .item-card:nth-child(n) {
+    border-radius: 18px;
+    padding: 18px;
+    box-shadow: 0 10px 26px rgba(50,65,57,.08);
+  }
+  .item-card .card-cmd,
+  code,
+  pre.script-preview,
+  .repo-meta code,
+  .git-commit-hash {
+    font-family: "Cascadia Mono", Consolas, monospace;
+  }
+  table {
+    overflow: hidden;
+  }
+  th,
+  td {
+    padding: 13px 15px;
+  }
+  .repo-grid {
+    gap: 16px;
+  }
+  .repo-card {
+    padding: 18px;
+  }
+  .git-commit-panels {
+    gap: 16px;
+  }
+  .git-commit-panel {
+    padding: 18px;
+  }
+  .git-commit-item {
+    border-radius: 16px;
+    background: #ffffff;
+  }
+  .git-record {
+    padding: 18px;
+  }
+  .git-progress-track {
+    height: 16px;
+    background: #e5ede6;
+  }
+  .git-progress-fill {
+    background: linear-gradient(90deg, #52715f, #8aa28f);
+  }
+  .mask:not(.git-detail-modal) {
+    background: rgba(36,49,41,.24);
+  }
+  .mask:not(.git-detail-modal) .modal {
+    border-radius: 22px;
+    background: #ffffff;
+  }
+  #detailMask.git-detail-modal {
+    --accent: #20d3b0;
+    --accent2: #4d8dff;
+    --accent3: #f2b84b;
+  }
+  @media (max-width: 1180px) {
+    .layout {
+      width: calc(100vw - 24px);
+      grid-template-columns: 1fr;
+    }
+    .topbar {
+      height: auto;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      align-items: center;
+    }
+    .topbar .logo {
+      width: auto;
+      min-width: 136px;
+    }
+    .topnav {
+      display: flex;
+      width: auto;
+      min-width: 0;
+      overflow-x: auto;
+    }
+    .nav-item {
+      width: auto;
+      min-width: max-content;
+    }
+    .topbar-user {
+      width: auto;
+      margin-top: 0;
+      grid-template-columns: max-content max-content max-content max-content;
+      align-items: center;
+    }
+    .topbar-user .u-info {
+      width: auto;
+    }
+  }
+  @media (max-width: 760px) {
+    .layout {
+      width: calc(100vw - 12px);
+      margin: 6px;
+    }
+    .topbar {
+      grid-template-columns: 1fr;
+    }
+    .topbar .logo {
+      width: 100%;
+      border-right: 0;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 12px;
+    }
+    .topbar-user {
+      width: 100%;
+      grid-template-columns: 1fr;
+    }
+    .toolbar {
+      display: grid;
+      grid-template-columns: 1fr;
+    }
+    .toolbar input,
+    .toolbar select,
+    .toolbar input[type=text],
+    .toolbar input[type=search],
+    .btn {
+      width: 100%;
+    }
+    header {
+      min-height: 112px;
+      padding: 24px 22px;
+      display: grid;
+      gap: 14px;
+      align-items: start;
+      justify-content: stretch;
+    }
+    header::after {
+      display: none;
+    }
+    header h1 {
+      font-size: clamp(34px, 14vw, 56px);
+      line-height: 1;
+    }
+    .header-right {
+      justify-content: flex-start;
+    }
+    .count-badge {
+      width: max-content;
+    }
+  }
 </style>
 </head>
 <body>
 <div class="layout">
   <div class="topbar">
-    <div class="logo"><span class="dot">⚡</span> GM 工具</div>
+    <div class="logo"><span class="dot">GM</span> GM 工具</div>
     <div class="topnav">
-      <div class="nav-item active" data-view="commands" onclick="switchView('commands')">📋 命令管理</div>
-      <div class="nav-item" data-view="scripts" onclick="switchView('scripts')">📜 脚本管理</div>
-      <div class="nav-item" data-view="formulas" onclick="switchView('formulas')">🧮 计算公式</div>
-      <div class="nav-item" data-view="items" onclick="switchView('items')">🎒 道具表</div>
-      <div class="nav-item admin-only" data-view="git" onclick="switchView('git')" style="display:none">🔄 Git 拉取</div>
-      <div class="nav-item admin-only" data-view="users" onclick="switchView('users')" style="display:none">👥 用户管理</div>
+      <div class="nav-item active" data-view="commands" onclick="switchView('commands')" data-mark="CMD">命令管理</div>
+      <div class="nav-item" data-view="scripts" onclick="switchView('scripts')" data-mark="SCR">脚本管理</div>
+      <div class="nav-item" data-view="formulas" onclick="switchView('formulas')" data-mark="CAL">计算公式</div>
+      <div class="nav-item" data-view="items" onclick="switchView('items')" data-mark="ITM">道具表</div>
+      <div class="nav-item admin-only" data-view="git" onclick="switchView('git')" style="display:none" data-mark="GIT">Git 拉取</div>
+      <div class="nav-item admin-only" data-view="users" onclick="switchView('users')" style="display:none" data-mark="USR">用户管理</div>
     </div>
     <div class="topbar-user" id="userPanel">
       <div class="u-info">
@@ -3535,7 +3910,7 @@
                onchange="applyZoom(this.value)" onkeydown="if(event.key==='Enter')applyZoom(this.value)">
         <span>%</span>
       </div>
-      <button class="theme-toggle" onclick="toggleTheme()" title="切换主题"><span id="themeIcon">🌙</span></button>
+      <button class="theme-toggle" onclick="toggleTheme()" title="切换主题"><span id="themeIcon">浅</span></button>
     </div>
   </div>
 
@@ -3551,10 +3926,10 @@
       <div class="toolbar">
         <input type="search" id="search" name="gmCommandSearchFilter" placeholder="搜索命令名 / 内容 / 标签 / 描述 / 参数…" autocomplete="new-password" autocapitalize="off" spellcheck="false">
         <select id="filterCategory"><option value="">全部分类</option></select>
-        <button class="btn btn-ghost" onclick="loadList()">🔍 查询</button>
-        <button class="btn btn-ghost" onclick="clearSearch()">✖ 清空</button>
-        <button class="btn btn-primary admin-only" onclick="openModal()" style="display:none">➕ 新增命令</button>
-        <button class="btn btn-ghost admin-only" onclick="openCategoryModal()" style="display:none">⚙️ 管理分类</button>
+        <button class="btn btn-ghost" onclick="loadList()">查询</button>
+        <button class="btn btn-ghost" onclick="clearSearch()">清空</button>
+        <button class="btn btn-primary admin-only" onclick="openModal()" style="display:none">新增命令</button>
+        <button class="btn btn-ghost admin-only" onclick="openCategoryModal()" style="display:none">管理分类</button>
       </div>
       <div class="container">
         <div id="cmdGroups"></div>
@@ -3573,9 +3948,9 @@
       <div class="toolbar">
         <input type="text" id="scriptSearch" name="gmScriptSearch" placeholder="搜索脚本名 / 内容 / 标签 / 描述…" autocomplete="off" autocapitalize="off" spellcheck="false">
         <select id="scriptFilterCategory"><option value="">全部分类</option></select>
-        <button class="btn btn-ghost" onclick="loadScripts()">🔍 查询</button>
-        <button class="btn btn-ghost" onclick="clearScriptSearch()">✖ 清空</button>
-        <button class="btn btn-primary admin-only" onclick="openScriptModal()" style="display:none">➕ 新增脚本</button>
+        <button class="btn btn-ghost" onclick="loadScripts()">查询</button>
+        <button class="btn btn-ghost" onclick="clearScriptSearch()">清空</button>
+        <button class="btn btn-primary admin-only" onclick="openScriptModal()" style="display:none">新增脚本</button>
       </div>
       <div class="container">
         <div id="scriptGroups"></div>
@@ -3594,9 +3969,9 @@
       <div class="toolbar">
         <input type="text" id="formulaSearch" name="gmFormulaSearch" placeholder="搜索公式名 / 表达式 / 变量 / 描述…" autocomplete="off" autocapitalize="off" spellcheck="false">
         <select id="formulaFilterCategory"><option value="">全部分类</option></select>
-        <button class="btn btn-ghost" onclick="loadFormulas()">🔍 查询</button>
-        <button class="btn btn-ghost" onclick="clearFormulaSearch()">✖ 清空</button>
-        <button class="btn btn-primary admin-only" onclick="openFormulaModal()" style="display:none">➕ 新增公式</button>
+        <button class="btn btn-ghost" onclick="loadFormulas()">查询</button>
+        <button class="btn btn-ghost" onclick="clearFormulaSearch()">清空</button>
+        <button class="btn btn-primary admin-only" onclick="openFormulaModal()" style="display:none">新增公式</button>
       </div>
       <div class="container">
         <div id="formulaGroups"></div>
@@ -3615,9 +3990,9 @@
       </header>
       <div class="toolbar">
         <input type="text" id="itemSearch" name="gmItemSearch" placeholder="搜索 id / 名称 / 描述 / 任意字段…" autocomplete="off" autocapitalize="off" spellcheck="false">
-        <button class="btn btn-ghost" onclick="loadItems()">🔍 查询</button>
-        <button class="btn btn-ghost" onclick="clearItemSearch()">✖ 清空</button>
-        <button class="btn btn-primary admin-only" id="itemRefreshBtn" onclick="refreshItems()" style="display:none">🔄 自动更新</button>
+        <button class="btn btn-ghost" onclick="loadItems()">查询</button>
+        <button class="btn btn-ghost" onclick="clearItemSearch()">清空</button>
+        <button class="btn btn-primary admin-only" id="itemRefreshBtn" onclick="refreshItems()" style="display:none">自动更新</button>
       </div>
       <div class="container">
         <table id="itemTable">
@@ -3649,9 +4024,9 @@
       </header>
       <div class="toolbar">
         <input type="text" id="gitAuthorSearch" name="gmGitAuthorSearch" placeholder="搜索提交人" autocomplete="off" autocapitalize="off" spellcheck="false" oninput="renderGitFromCache()" onkeydown="if(event.key==='Enter')renderGitFromCache()">
-        <button class="btn btn-ghost" onclick="loadGitRepos()">🔍 检查状态</button>
-        <button class="btn btn-ghost" onclick="clearGitAuthorSearch()">✖ 清空</button>
-        <button class="btn btn-primary" id="gitPullAllBtn" onclick="pullGit('all')">⬇️ 全部拉取</button>
+        <button class="btn btn-ghost" onclick="loadGitRepos()">检查状态</button>
+        <button class="btn btn-ghost" onclick="clearGitAuthorSearch()">清空</button>
+        <button class="btn btn-primary" id="gitPullAllBtn" onclick="pullGit('all')">全部拉取</button>
       </div>
       <div class="container">
         <div id="gitRepoGrid" class="repo-grid"></div>
@@ -3670,7 +4045,7 @@
         </div>
       </header>
       <div class="toolbar">
-        <button class="btn btn-primary" onclick="openUserModal()">➕ 新增用户</button>
+        <button class="btn btn-primary" onclick="openUserModal()">新增用户</button>
       </div>
       <div class="container">
         <table>
@@ -4458,7 +4833,7 @@ function renderFormulaTable(items) {
           <div class="item-card" onclick='openCalc(${JSON.stringify(it.id)})'>
             <div class="card-title">
               <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(it.name)}</span>
-              <span class="perm">🧮 计算</span>
+              <span class="perm">计算</span>
             </div>
             <div class="card-cmd" title="${esc(it.expression)}"><code>${esc(it.expression)}</code></div>
             ${it.description ? `<div class="card-desc">${esc(it.description)}</div>` : ''}
@@ -5296,7 +5671,7 @@ function renderGitRepos(items) {
         '<span>上游</span><code>' + esc(repo.upstream || '-') + '</code>' +
         '<span>状态</span><code>' + esc(repo.status_line || '-') + '</code>' +
       '</div>' +
-      '<button class="btn btn-primary" onclick="pullGit(\'' + esc(repo.id) + '\')" ' + (gitBusy || !repo.ok ? 'disabled' : '') + '>⬇️ 拉取</button>' +
+      '<button class="btn btn-primary" onclick="pullGit(\'' + esc(repo.id) + '\')" ' + (gitBusy || !repo.ok ? 'disabled' : '') + '>拉取</button>' +
       msg +
     '</div>';
   }).join('');
@@ -5694,7 +6069,7 @@ window.addEventListener('keydown', e => {
 /* ============ 主题切换 ============ */
 function applyTheme(theme) {
   document.documentElement.setAttribute('data-theme', theme);
-  document.getElementById('themeIcon').textContent = theme === 'dark' ? '🌙' : '☀️';
+  document.getElementById('themeIcon').textContent = theme === 'dark' ? '深' : '浅';
 }
 function toggleTheme() {
   const cur = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
@@ -5708,10 +6083,11 @@ const ZOOM_MIN = 50, ZOOM_MAX = 300, ZOOM_DEFAULT = 140;
 function applyZoom(z) {
   z = Math.round(parseInt(z, 10) || ZOOM_DEFAULT);
   z = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, z));
+  const effectiveZoom = window.innerWidth <= 760 ? Math.min(z, 100) : z;
   const main = document.querySelector('.main');
-  if (main) main.style.zoom = (z / 100).toString();
+  if (main) main.style.zoom = (effectiveZoom / 100).toString();
   const inp = document.getElementById('zoomInput');
-  if (inp && +inp.value !== z) inp.value = z;
+  if (inp && +inp.value !== effectiveZoom) inp.value = effectiveZoom;
   localStorage.setItem('gm_zoom', z);
   return z;
 }
@@ -5720,6 +6096,9 @@ function changeZoom(dir) {
   applyZoom(cur + dir * 10);
 }
 function resetZoom() { applyZoom(ZOOM_DEFAULT); }
+window.addEventListener('resize', () => {
+  applyZoom(parseInt(localStorage.getItem('gm_zoom') || ZOOM_DEFAULT, 10));
+});
 if (!localStorage.getItem('gm_zoom_v2')) {
   localStorage.setItem('gm_zoom', ZOOM_DEFAULT);
   localStorage.setItem('gm_zoom_v2', '1');
