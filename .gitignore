@@ -4,3 +4,5 @@ __pycache__/
 server-start*.log
 gm_users.json
 .env
+runtime/
+public-url.txt
