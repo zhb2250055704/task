@@ -3882,6 +3882,107 @@
       width: max-content;
     }
   }
+
+  /* ============ React Bits component layer ============ */
+  .rb-spotlight {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+  }
+  .rb-spotlight::before {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    z-index: 0;
+    pointer-events: none;
+    opacity: 0;
+    background:
+      radial-gradient(
+        420px circle at var(--rb-x, 50%) var(--rb-y, 50%),
+        rgba(82, 113, 95, .18),
+        rgba(185, 130, 76, .08) 28%,
+        transparent 58%
+      );
+    transition: opacity .22s ease;
+  }
+  .rb-spotlight:hover::before {
+    opacity: 1;
+  }
+  .rb-spotlight > * {
+    position: relative;
+    z-index: 1;
+  }
+  .rb-magnetic {
+    transform: translate3d(var(--rb-mx, 0), var(--rb-my, 0), 0);
+    transition:
+      transform .22s cubic-bezier(.2, .8, .2, 1),
+      background .18s ease,
+      border-color .18s ease,
+      box-shadow .18s ease;
+    will-change: transform;
+  }
+  .rb-magnetic:active {
+    transform: translate3d(var(--rb-mx, 0), calc(var(--rb-my, 0) + 1px), 0) scale(.985);
+  }
+  .rb-shiny {
+    position: relative;
+    overflow: hidden;
+  }
+  .rb-shiny::after {
+    content: "";
+    position: absolute;
+    top: -80%;
+    bottom: -80%;
+    left: -40%;
+    width: 34%;
+    pointer-events: none;
+    opacity: 0;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,.42), transparent);
+    transform: translateX(-120%) rotate(18deg);
+  }
+  .rb-shiny:hover::after {
+    opacity: 1;
+    animation: rbShinySweep .82s ease;
+  }
+  @keyframes rbShinySweep {
+    from { transform: translateX(-140%) rotate(18deg); }
+    to { transform: translateX(430%) rotate(18deg); }
+  }
+  .rb-reveal {
+    animation: rbReveal .42s cubic-bezier(.2, .8, .2, 1) both;
+    animation-delay: var(--rb-delay, 0ms);
+  }
+  @keyframes rbReveal {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  .rb-progress-fill {
+    background-image:
+      linear-gradient(90deg, rgba(255,255,255,.24), rgba(255,255,255,0) 34%),
+      linear-gradient(90deg, #52715f, #8aa28f);
+    background-size: 90px 100%, 100% 100%;
+    animation: rbProgressLight 1.2s linear infinite;
+  }
+  @keyframes rbProgressLight {
+    from { background-position: -90px 0, 0 0; }
+    to { background-position: 90px 0, 0 0; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .rb-reveal,
+    .rb-progress-fill,
+    .rb-shiny:hover::after {
+      animation: none !important;
+    }
+    .rb-magnetic {
+      transform: none !important;
+    }
+  }
 </style>
 </head>
 <body>
@@ -4311,6 +4412,71 @@ let gitStatusProgressValue = 0;
 let lastExcelPullFailure = null;
 let commandSearchUserEdited = false;
 let commandSearchAutofillGuard = null;
+
+function enhanceReactBitsComponents(root) {
+  const scope = root && root.querySelectorAll ? root : document;
+
+  scope.querySelectorAll('.btn, .nav-item').forEach(el => {
+    el.classList.add('rb-magnetic');
+    if (el.classList.contains('btn-primary') || el.classList.contains('active')) {
+      el.classList.add('rb-shiny');
+    }
+    if (!el.dataset.rbMagnetBound) {
+      el.dataset.rbMagnetBound = '1';
+      el.addEventListener('pointermove', e => {
+        const rect = el.getBoundingClientRect();
+        const dx = (e.clientX - rect.left - rect.width / 2) * 0.08;
+        const dy = (e.clientY - rect.top - rect.height / 2) * 0.08;
+        el.style.setProperty('--rb-mx', dx.toFixed(1) + 'px');
+        el.style.setProperty('--rb-my', dy.toFixed(1) + 'px');
+      });
+      el.addEventListener('pointerleave', () => {
+        el.style.setProperty('--rb-mx', '0px');
+        el.style.setProperty('--rb-my', '0px');
+      });
+    }
+  });
+
+  scope.querySelectorAll('header, .toolbar, .cat-group, .item-card, .repo-card, .git-commit-panel, .git-commit-item, .git-record, .git-output, .repo-changes, .empty, .git-progress, .mask:not(#detailMask) .modal').forEach(el => {
+    if (el.closest('#detailMask')) return;
+    el.classList.add('rb-spotlight');
+    if (!el.dataset.rbSpotlightBound) {
+      el.dataset.rbSpotlightBound = '1';
+      el.addEventListener('pointermove', e => {
+        const rect = el.getBoundingClientRect();
+        el.style.setProperty('--rb-x', (((e.clientX - rect.left) / rect.width) * 100).toFixed(2) + '%');
+        el.style.setProperty('--rb-y', (((e.clientY - rect.top) / rect.height) * 100).toFixed(2) + '%');
+      });
+    }
+  });
+
+  scope.querySelectorAll('.item-card, .repo-card, .git-commit-item, .git-record').forEach((el, index) => {
+    if (el.closest('#detailMask')) return;
+    if (!el.dataset.rbRevealBound) {
+      el.dataset.rbRevealBound = '1';
+      el.style.setProperty('--rb-delay', Math.min(index * 28, 180) + 'ms');
+      el.classList.add('rb-reveal');
+    }
+  });
+
+  scope.querySelectorAll('.git-progress-fill').forEach(el => {
+    el.classList.add('rb-progress-fill');
+  });
+}
+
+let reactBitsEnhanceQueued = false;
+function queueReactBitsEnhance() {
+  if (reactBitsEnhanceQueued) return;
+  reactBitsEnhanceQueued = true;
+  requestAnimationFrame(() => {
+    reactBitsEnhanceQueued = false;
+    enhanceReactBitsComponents(document);
+  });
+}
+
+const reactBitsObserver = new MutationObserver(queueReactBitsEnhance);
+reactBitsObserver.observe(document.body, { childList: true, subtree: true });
+queueReactBitsEnhance();
 
 function isAdmin() {
   return currentUser && currentUser.role === 'admin';

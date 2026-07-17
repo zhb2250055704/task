@@ -796,6 +796,79 @@
       margin-right: 0;
     }
   }
+
+  /* React Bits component layer */
+  .rb-spotlight {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+  }
+  .rb-spotlight::before {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    z-index: 0;
+    pointer-events: none;
+    opacity: 0;
+    background:
+      radial-gradient(
+        420px circle at var(--rb-x, 50%) var(--rb-y, 50%),
+        rgba(82,113,95,.2),
+        rgba(185,130,76,.08) 28%,
+        transparent 58%
+      );
+    transition: opacity .22s ease;
+  }
+  .rb-spotlight:hover::before {
+    opacity: 1;
+  }
+  .rb-spotlight > * {
+    position: relative;
+    z-index: 1;
+  }
+  .rb-magnetic {
+    transform: translate3d(var(--rb-mx, 0), var(--rb-my, 0), 0);
+    transition:
+      transform .22s cubic-bezier(.2, .8, .2, 1),
+      background .18s ease,
+      box-shadow .18s ease;
+    will-change: transform;
+  }
+  .rb-magnetic:active {
+    transform: translate3d(var(--rb-mx, 0), calc(var(--rb-my, 0) + 1px), 0) scale(.985);
+  }
+  .rb-shiny {
+    position: relative;
+    overflow: hidden;
+  }
+  .rb-shiny::after {
+    content: "";
+    position: absolute;
+    top: -80%;
+    bottom: -80%;
+    left: -40%;
+    width: 34%;
+    pointer-events: none;
+    opacity: 0;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,.42), transparent);
+    transform: translateX(-120%) rotate(18deg);
+  }
+  .rb-shiny:hover::after {
+    opacity: 1;
+    animation: rbShinySweep .82s ease;
+  }
+  @keyframes rbShinySweep {
+    from { transform: translateX(-140%) rotate(18deg); }
+    to { transform: translateX(430%) rotate(18deg); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .rb-magnetic {
+      transform: none !important;
+    }
+    .rb-shiny:hover::after {
+      animation: none !important;
+    }
+  }
 </style>
 </head>
 <body>
@@ -842,6 +915,34 @@ async function doLogin() {
 }
 document.getElementById('password').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
 document.getElementById('username').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('password').focus(); });
+
+function enhanceReactBitsLogin() {
+  const panel = document.querySelector('.login-box');
+  if (panel) {
+    panel.classList.add('rb-spotlight');
+    panel.addEventListener('pointermove', e => {
+      const rect = panel.getBoundingClientRect();
+      panel.style.setProperty('--rb-x', (((e.clientX - rect.left) / rect.width) * 100).toFixed(2) + '%');
+      panel.style.setProperty('--rb-y', (((e.clientY - rect.top) / rect.height) * 100).toFixed(2) + '%');
+    });
+  }
+
+  document.querySelectorAll('.btn').forEach(btn => {
+    btn.classList.add('rb-magnetic', 'rb-shiny');
+    btn.addEventListener('pointermove', e => {
+      const rect = btn.getBoundingClientRect();
+      const dx = (e.clientX - rect.left - rect.width / 2) * 0.08;
+      const dy = (e.clientY - rect.top - rect.height / 2) * 0.08;
+      btn.style.setProperty('--rb-mx', dx.toFixed(1) + 'px');
+      btn.style.setProperty('--rb-my', dy.toFixed(1) + 'px');
+    });
+    btn.addEventListener('pointerleave', () => {
+      btn.style.setProperty('--rb-mx', '0px');
+      btn.style.setProperty('--rb-my', '0px');
+    });
+  });
+}
+enhanceReactBitsLogin();
 
 (async () => {
   try {
