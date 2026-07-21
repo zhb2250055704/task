@@ -100,7 +100,7 @@ GIT_JOB_TTL = 30 * 60
 COCOS_WS_PORT = int(os.environ.get('GM_COCOS_WS_PORT', '5101'))
 COCOS_RPC_TIMEOUT = 15
 _cocos_bridge_lock = threading.Lock()
-_cocos_connection = None
+_cocos_connections = {}
 _cocos_bridge_error = ''
 
 
@@ -1421,12 +1421,16 @@ class CocosBridgeConnection:
     def __init__(self, sock, address):
         self.sock = sock
         self.address = address
+        self.connection_id = uuid.uuid4().hex
         self.alive = True
         self.send_lock = threading.Lock()
         self.command_lock = threading.Lock()
         self.pending_lock = threading.Lock()
+        self.info_lock = threading.Lock()
         self.pending = {}
         self.next_id = 1
+        self.target_info = {}
+        self.target_info_updated_at = 0
 
     def send_frame(self, payload, opcode=1):
         with self.send_lock:
@@ -1505,6 +1509,66 @@ class CocosBridgeConnection:
         finally:
             self.close()
 
+    def refresh_target_info(self):
+        result = self.send_rpc('getGmTargetInfo', [])
+        if not result.get('ok') or not isinstance(result.get('result'), dict):
+            return False
+        info = result['result']
+        allowed = {
+            'environment', 'environmentUrl', 'accountId', 'accountName',
+            'roleId', 'roleName', 'playerId', 'serverId', 'ready',
+        }
+        normalized = {key: info.get(key) for key in allowed if key in info}
+        with self.info_lock:
+            self.target_info = normalized
+            self.target_info_updated_at = time.time()
+        return True
+
+    def target_snapshot(self):
+        with self.info_lock:
+            info = dict(self.target_info)
+            updated_at = self.target_info_updated_at
+        environment_url = str(info.get('environmentUrl') or '').strip()
+        environment = str(info.get('environment') or '').strip()
+        if not environment:
+            environment = _cocos_environment_name(environment_url)
+        account_id = str(info.get('accountId') or '').strip()
+        role_id = str(info.get('roleId') or '').strip()
+        player_id = str(info.get('playerId') or '').strip()
+        account_name = str(info.get('accountName') or '').strip()
+        role_name = str(info.get('roleName') or '').strip()
+        server_id = str(info.get('serverId') or '').strip()
+        ready = bool(info.get('ready')) and bool(account_id or role_id or player_id)
+        if role_name:
+            label = role_name
+        elif account_name and account_name not in ('TUGuest', 'Guest'):
+            label = account_name
+        elif role_id:
+            label = f'角色 {role_id}'
+        elif account_id:
+            label = f'账号 {account_id}'
+        else:
+            label = f'未登录账号 ({self.address[1]})'
+        account_key = account_id or role_id or player_id or self.connection_id
+        environment_key = environment_url.lower() or environment.lower() or 'unknown'
+        return {
+            'id': self.connection_id,
+            'environment': environment or '未识别环境',
+            'environment_key': environment_key,
+            'environment_url': environment_url,
+            'account_id': account_id,
+            'account_name': account_name,
+            'account_key': account_key,
+            'account_label': label,
+            'role_id': role_id,
+            'role_name': role_name,
+            'player_id': player_id,
+            'server_id': server_id,
+            'ready': ready,
+            'address': f'{self.address[0]}:{self.address[1]}',
+            'updated_at': int(updated_at) if updated_at else 0,
+        }
+
     def _is_final_frame(self, payload):
         # Cocos 的 RPC 响应均为单帧文本；保留此方法让读取逻辑对普通文本帧保持清晰。
         return True
@@ -1528,9 +1592,36 @@ class CocosBridgeConnection:
             event.set()
         if was_alive:
             with _cocos_bridge_lock:
-                global _cocos_connection
-                if _cocos_connection is self:
-                    _cocos_connection = None
+                _cocos_connections.pop(self.connection_id, None)
+
+
+def _cocos_environment_name(environment_url):
+    value = str(environment_url or '').strip()
+    if not value:
+        return '未识别环境'
+    host = urlparse(value if '://' in value else '//' + value).hostname or value
+    host = host.lower()
+    known = {
+        '138-sanguo2-login-ts01.bjxuejing.cn': '提审服 ts01',
+        '138-sanguo2-login-sim01.bjxuejing.cn': '仿真服 sim01',
+    }
+    if host in known:
+        return known[host]
+    name = host.split('.')[0]
+    for prefix in ('138-sanguo2-login-', 'login-'):
+        if name.startswith(prefix):
+            name = name[len(prefix):]
+            break
+    return name or host
+
+
+def _cocos_target_refresh_loop(connection):
+    while connection.alive:
+        connection.refresh_target_info()
+        for _ in range(10):
+            if not connection.alive:
+                return
+            time.sleep(0.5)
 
 
 def _cocos_client_thread(sock, address):
@@ -1538,12 +1629,14 @@ def _cocos_client_thread(sock, address):
         _cocos_handshake(sock)
         connection = CocosBridgeConnection(sock, address)
         with _cocos_bridge_lock:
-            global _cocos_connection
-            previous = _cocos_connection
-            _cocos_connection = connection
-        if previous:
-            previous.close()
-        print(f'[COCOS] connected: {address[0]}:{address[1]}')
+            _cocos_connections[connection.connection_id] = connection
+        threading.Thread(
+            target=_cocos_target_refresh_loop,
+            args=(connection,),
+            name=f'cocos-target-{connection.connection_id[:8]}',
+            daemon=True,
+        ).start()
+        print(f'[COCOS] connected: {connection.connection_id[:8]} {address[0]}:{address[1]}')
         connection.read_loop()
     except (ConnectionError, OSError, ValueError) as exc:
         print(f'[COCOS] connection failed: {exc}')
@@ -1587,19 +1680,44 @@ def start_cocos_bridge():
 
 def cocos_bridge_status():
     with _cocos_bridge_lock:
-        connection = _cocos_connection
-        connected = bool(connection and connection.alive)
-        address = connection.address if connected else None
+        connections = [item for item in _cocos_connections.values() if item.alive]
+    targets = [item.target_snapshot() for item in connections]
+    grouped = {}
+    for target in targets:
+        key = target['environment_key']
+        group = grouped.setdefault(key, {
+            'key': key,
+            'name': target['environment'],
+            'url': target['environment_url'],
+            'accounts': [],
+        })
+        group['accounts'].append(target)
+    environments = []
+    unique_accounts = set()
+    for group in grouped.values():
+        group['accounts'].sort(key=lambda item: (
+            not item['ready'], item['account_label'], item['id']))
+        account_keys = {item['account_key'] for item in group['accounts']}
+        unique_accounts.update(
+            f'{group["key"]}:{account_key}' for account_key in account_keys)
+        group['account_count'] = len(account_keys)
+        group['instance_count'] = len(group['accounts'])
+        environments.append(group)
+    environments.sort(key=lambda item: (item['name'] == '未识别环境', item['name']))
     return {
-        'connected': connected,
-        'address': f'{address[0]}:{address[1]}' if address else '',
+        'connected': bool(targets),
+        'address': targets[0]['address'] if len(targets) == 1 else '',
         'url': f'ws://127.0.0.1:{COCOS_WS_PORT}',
         'port': COCOS_WS_PORT,
         'error': _cocos_bridge_error,
+        'environment_count': len(environments),
+        'account_count': len(unique_accounts),
+        'instance_count': len(targets),
+        'environments': environments,
     }
 
 
-def execute_cocos_commands(commands):
+def execute_cocos_commands(commands, target_id=''):
     normalized = []
     for command in commands if isinstance(commands, list) else [commands]:
         for line in str(command or '').splitlines():
@@ -1610,7 +1728,22 @@ def execute_cocos_commands(commands):
         return {'ok': False, 'code': 'empty_command', 'msg': '命令内容不能为空'}
 
     with _cocos_bridge_lock:
-        connection = _cocos_connection
+        connections = [item for item in _cocos_connections.values() if item.alive]
+        connection = _cocos_connections.get(str(target_id or '').strip()) if target_id else None
+    if target_id and (not connection or not connection.alive):
+        return {
+            'ok': False,
+            'code': 'cocos_target_offline',
+            'msg': '选中的游戏账号已离线，请刷新后重新选择',
+        }
+    if connection is None and len(connections) == 1:
+        connection = connections[0]
+    if connection is None and len(connections) > 1:
+        return {
+            'ok': False,
+            'code': 'cocos_target_required',
+            'msg': '检测到多个在线账号，请先选择要执行命令的账号',
+        }
     if not connection or not connection.alive:
         return {
             'ok': False,
@@ -1638,7 +1771,12 @@ def execute_cocos_commands(commands):
                         'msg': value, 'results': results}
             if index < len(normalized) - 1:
                 time.sleep(0.1)
-    return {'ok': True, 'commands': normalized, 'results': results}
+    return {
+        'ok': True,
+        'commands': normalized,
+        'results': results,
+        'target': connection.target_snapshot(),
+    }
 
 
 class GMHandler(SimpleHTTPRequestHandler):
@@ -2282,7 +2420,8 @@ class GMHandler(SimpleHTTPRequestHandler):
         if data is None:
             return
         command = data.get('command', '')
-        result = execute_cocos_commands(command)
+        target_id = data.get('target_id', '')
+        result = execute_cocos_commands(command, target_id)
         self._send_json(result, status=200 if result.get('ok') else 409)
 
     # ---------- Git 拉取 ----------
