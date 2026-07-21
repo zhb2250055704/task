@@ -91,6 +91,9 @@ DEFAULT_ADMIN = {'username': 'admin', 'password': 'admin123', 'role': 'admin'}
 _lock = threading.Lock()
 _session_lock = threading.Lock()
 _sessions = {}
+_git_job_lock = threading.Lock()
+_git_jobs = {}
+GIT_JOB_TTL = 30 * 60
 
 
 def load_data():
@@ -930,22 +933,51 @@ def git_pull_failure_hint(output):
     return ''
 
 
-def git_pull_repo_result(rid):
+def git_pull_repo_result(rid, progress=None):
     repo = GIT_REPOS[rid]
-    before = git_repo_status(rid)
+
+    def report(percent, stage, detail):
+        if progress:
+            try:
+                progress(percent, stage, detail)
+            except Exception:
+                pass
+
+    report(4, '准备拉取', f'正在读取{repo["label"]}本地状态')
+    before = git_repo_status(rid, fetch_remote=False, enrich=False)
     if not before.get('ok'):
-        return {'id': rid, 'label': repo['label'], 'path': repo['path'],
-                'ok': False, 'output': before.get('msg', '状态检查失败'),
-                'status': before}
+        result = {'id': rid, 'label': repo['label'], 'path': repo['path'],
+                  'ok': False, 'failure_type': 'status_failed',
+                  'output': before.get('msg', '状态检查失败'), 'status': before}
+        report(100, '拉取失败', result['output'])
+        return result
+
+    report(18, '检查表格占用', '正在检查是否有 Excel/WPS 锁文件')
+    office_locks = git_office_lock_files(repo) if rid == 'excel' else []
+    if office_locks:
+        output = git_office_lock_message(office_locks)
+        result = {'id': rid, 'label': repo['label'], 'path': repo['path'],
+                  'ok': False, 'failure_type': 'office_lock',
+                  'office_locks': office_locks, 'output': output,
+                  'status': before}
+        report(100, '拉取失败', output)
+        print(f'[GIT] pull {rid}: office lock')
+        return result
+
+    report(28, '暂存本地改动', '如有已跟踪的本地改动，正在自动暂存')
     stashed = git_stash_before_pull(repo, rid)
     if not stashed.get('ok'):
-        after = git_repo_status(rid)
+        after = git_repo_status(rid, fetch_remote=False, enrich=False)
+        output = '暂存失败，未执行拉取\n' + (stashed.get('output') or '')
+        result = {'id': rid, 'label': repo['label'], 'path': repo['path'],
+                  'ok': False, 'code': stashed.get('code'),
+                  'failure_type': 'stash_failed', 'output': output,
+                  'stash': stashed, 'status': after}
+        report(100, '拉取失败', output)
         print(f'[GIT] pull {rid}: stash failed')
-        return {'id': rid, 'label': repo['label'], 'path': repo['path'],
-                'ok': False, 'code': stashed.get('code'),
-                'output': '暂存失败，未执行拉取\n' + (stashed.get('output') or ''),
-                'stash': stashed,
-                'status': after}
+        return result
+
+    report(42, '拉取远端提交', '正在下载并合并可快进的远端提交')
     pulled = run_git_command(repo, ['pull', '--ff-only'], timeout=GIT_TIMEOUT)
     retry_stash = None
     retry_output = ''
@@ -953,6 +985,7 @@ def git_pull_repo_result(rid):
     if not pulled.get('ok'):
         blocking_paths = git_parse_overwrite_paths(pulled.get('output', ''))
         if blocking_paths:
+            report(48, '处理阻塞文件', '正在暂存会被远端覆盖的本地文件并重试')
             retry_stash = git_stash_paths(repo, rid, blocking_paths, include_untracked=True, reason='blocked')
             retry_output = '阻塞文件暂存：' + (
                 retry_stash.get('output') or retry_stash.get('message', '已暂存阻塞文件')
@@ -960,8 +993,11 @@ def git_pull_repo_result(rid):
             if retry_stash.get('ok'):
                 pulled = run_git_command(repo, ['pull', '--ff-only'], timeout=GIT_TIMEOUT)
     if not pulled.get('ok') and git_pull_failure_hint(pulled.get('output', '')):
+        report(58, '刷新远端信息', '本地文件被占用，正在刷新远端引用以保留远端提交记录')
         fetch_fallback = run_git_command(repo, ['fetch', '--prune'], timeout=GIT_TIMEOUT)
-    after = git_repo_status(rid)
+
+    report(78, '刷新仓库状态', '正在读取拉取后的分支和提交记录')
+    after = git_repo_status(rid, fetch_remote=False, enrich=False)
     output_parts = []
     stash_output = stashed.get('output') or ''
     if stashed.get('skipped'):
@@ -981,10 +1017,14 @@ def git_pull_repo_result(rid):
             if fetch_fallback.get('ok') else
             '刷新远端信息失败：' + (fetch_fallback.get('output') or '未知错误')
         ))
-    print(f'[GIT] pull {rid}: {"ok" if pulled.get("ok") else "failed"}')
+    ok = bool(pulled.get('ok'))
+    output = '\n'.join(output_parts)
+    report(100, '拉取成功' if ok else '拉取失败', output)
+    print(f'[GIT] pull {rid}: {"ok" if ok else "failed"}')
     return {'id': rid, 'label': repo['label'], 'path': repo['path'],
-            'ok': pulled.get('ok'), 'code': pulled.get('code'),
-            'output': '\n'.join(output_parts),
+            'ok': ok, 'code': pulled.get('code'),
+            'failure_type': '' if ok else 'pull_failed',
+            'output': output,
             'stash': stashed,
             'retry_stash': retry_stash,
             'fetch_fallback': fetch_fallback,
@@ -1126,12 +1166,15 @@ def enrich_git_commits(repo, commits):
     return commits
 
 
-def git_repo_status(repo_id):
+def git_repo_status(repo_id, fetch_remote=True, enrich=False):
     repo = GIT_REPOS[repo_id]
     item = {'id': repo_id, 'label': repo['label'], 'path': repo['path']}
 
-    # 先 fetch，确保远端提交列表基于最新远端引用；失败时仍展示本地状态。
-    fetch = run_git_command(repo, ['fetch', '--prune'], timeout=GIT_TIMEOUT)
+    # 状态列表只需要一次 fetch 和几次 log。提交文件明细在点击记录时懒加载，
+    # 避免为几十条提交逐条执行 git show。
+    fetch = run_git_command(repo, ['fetch', '--prune'], timeout=GIT_TIMEOUT) if fetch_remote else {
+        'ok': True, 'output': ''
+    }
     status = run_git_command(repo, ['status', '-sb'], timeout=30)
     if not status.get('ok'):
         item.update({'ok': False, 'branch': '', 'commit': '', 'upstream': '',
@@ -1159,9 +1202,10 @@ def git_repo_status(repo_id):
             remote_commits = parse_git_commit_lines(remote.get('stdout', ''))
         if local.get('ok'):
             local_commits = parse_git_commit_lines(local.get('stdout', ''))
-    remote_commits = enrich_git_commits(repo, remote_commits)
-    local_commits = enrich_git_commits(repo, local_commits)
-    recent_commits = enrich_git_commits(repo, recent_commits)
+    if enrich:
+        remote_commits = enrich_git_commits(repo, remote_commits)
+        local_commits = enrich_git_commits(repo, local_commits)
+        recent_commits = enrich_git_commits(repo, recent_commits)
 
     item.update({
         'ok': True,
@@ -1182,6 +1226,110 @@ def git_repo_status(repo_id):
         'msg': '',
     })
     return item
+
+
+def git_cleanup_jobs(now=None):
+    now = now or time.time()
+    with _git_job_lock:
+        expired = [job_id for job_id, job in _git_jobs.items()
+                   if job.get('state') in ('done', 'failed')
+                   and now - job.get('updated_at', now) > GIT_JOB_TTL]
+        for job_id in expired:
+            _git_jobs.pop(job_id, None)
+
+
+def git_job_update(job_id, **updates):
+    with _git_job_lock:
+        job = _git_jobs.get(job_id)
+        if not job:
+            return None
+        job.update(updates)
+        job['updated_at'] = time.time()
+        return dict(job)
+
+
+def git_job_snapshot(job_id):
+    git_cleanup_jobs()
+    with _git_job_lock:
+        job = _git_jobs.get(job_id)
+        return dict(job) if job else None
+
+
+def start_git_pull_job(repo_ids, resolve_excel=False):
+    job_id = uuid.uuid4().hex
+    label = '配置表占用处理' if resolve_excel else '远端提交拉取'
+    with _git_job_lock:
+        _git_jobs[job_id] = {
+            'job_id': job_id,
+            'state': 'queued',
+            'percent': 0,
+            'stage': '任务排队',
+            'detail': f'{label}任务已创建',
+            'result': None,
+            'created_at': time.time(),
+            'updated_at': time.time(),
+        }
+
+    def worker():
+        try:
+            total = max(1, len(repo_ids))
+            results = []
+
+            for index, rid in enumerate(repo_ids):
+                repo = GIT_REPOS[rid]
+                base = index / total * 100
+                span = 100 / total
+
+                def report(percent, stage, detail, base=base, span=span, label=repo['label']):
+                    overall = min(99, round(base + span * max(0, min(100, percent)) / 100))
+                    git_job_update(job_id, state='running', percent=overall,
+                                   stage=f'{label}：{stage}', detail=detail)
+
+                resolver = None
+                if resolve_excel and rid == 'excel':
+                    git_job_update(job_id, state='running', percent=3,
+                                   stage='处理配置表占用', detail='正在尝试关闭 WPS/Excel/ET 进程')
+                    closed = git_close_office_processes()
+                    time.sleep(0.5)
+                    git_job_update(job_id, state='running', percent=8,
+                                   stage='处理配置表占用', detail='正在清理 Excel/WPS 锁文件')
+                    locks = git_remove_office_locks(repo)
+                    resolver = {'closed': closed, 'locks': locks}
+
+                result = git_pull_repo_result(rid, progress=report)
+                if resolver is not None:
+                    prefix = [
+                        '处理：已尝试关闭 WPS/Excel/ET 进程，并清理配置表锁文件。',
+                        '清理锁文件：' + (', '.join(resolver['locks'].get('removed') or [])
+                                          if resolver['locks'].get('removed') else '无'),
+                    ]
+                    if resolver['locks'].get('failed'):
+                        prefix.append('仍有锁文件无法清理：' + json.dumps(
+                            resolver['locks'].get('failed'), ensure_ascii=False))
+                    result['output'] = '\n'.join(prefix + [result.get('output') or ''])
+                    result['resolver'] = resolver
+                results.append(result)
+
+            final = {'ok': all(item.get('ok') for item in results), 'items': results}
+            final_ok = bool(final['ok'])
+            git_job_update(
+                job_id,
+                state='done' if final_ok else 'failed',
+                percent=100,
+                stage='处理完成' if final_ok else '处理失败',
+                detail='所有仓库已完成拉取' if final_ok else '至少有一个仓库未能完成拉取',
+                result=final,
+            )
+        except Exception as exc:
+            message = f'后台拉取任务异常：{exc}'
+            print(f'[GIT] job {job_id} failed: {message}')
+            git_job_update(job_id, state='failed', percent=100,
+                           stage='处理失败', detail=message,
+                           result={'ok': False, 'items': [], 'msg': message})
+
+    thread = threading.Thread(target=worker, name=f'git-pull-{job_id[:8]}', daemon=True)
+    thread.start()
+    return job_id
 
 
 class GMHandler(SimpleHTTPRequestHandler):
@@ -1259,6 +1407,10 @@ class GMHandler(SimpleHTTPRequestHandler):
                 if self._require_admin() is None:
                     return
                 self._git_detail(parse_qs(parsed.query))
+            elif path == '/api/git/pull-progress':
+                if self._require_admin() is None:
+                    return
+                self._git_pull_progress(parse_qs(parsed.query))
             elif path == '/api/categories':
                 self._list_categories()
             else:
@@ -1824,6 +1976,17 @@ class GMHandler(SimpleHTTPRequestHandler):
         status = 200 if data.get('ok') else 400
         self._send_json(data, status=status)
 
+    def _git_pull_progress(self, params):
+        job_id = params.get('id', [''])[0].strip()
+        if not job_id:
+            self._send_json({'ok': False, 'msg': '缺少任务编号'}, status=400)
+            return
+        job = git_job_snapshot(job_id)
+        if not job:
+            self._send_json({'ok': False, 'msg': '任务不存在或已过期'}, status=404)
+            return
+        self._send_json({'ok': True, **job})
+
     def _git_pull(self):
         data = self._read_json()
         if data is None:
@@ -1837,26 +2000,12 @@ class GMHandler(SimpleHTTPRequestHandler):
             self._send_json({'ok': False, 'msg': '未知仓库'}, status=400)
             return
 
-        results = []
-        for rid in repo_ids:
-            results.append(git_pull_repo_result(rid))
-        self._send_json({'ok': all(it.get('ok') for it in results), 'items': results})
+        job_id = start_git_pull_job(repo_ids)
+        self._send_json({'ok': True, 'job_id': job_id, 'state': 'queued'}, status=202)
 
     def _git_resolve_excel_pull(self):
-        repo = GIT_REPOS['excel']
-        closed = git_close_office_processes()
-        time.sleep(1)
-        locks = git_remove_office_locks(repo)
-        result = git_pull_repo_result('excel')
-        prefix = [
-            '处理：已尝试关闭 WPS/Excel/ET 进程，并清理配置表锁文件。',
-            '清理锁文件：' + (', '.join(locks.get('removed') or []) if locks.get('removed') else '无'),
-        ]
-        if locks.get('failed'):
-            prefix.append('仍有锁文件无法清理：' + json.dumps(locks.get('failed'), ensure_ascii=False))
-        result['output'] = '\n'.join(prefix + [result.get('output') or ''])
-        result['resolver'] = {'closed': closed, 'locks': locks}
-        self._send_json({'ok': bool(result.get('ok')), 'items': [result], 'resolver': result['resolver']})
+        job_id = start_git_pull_job(['excel'], resolve_excel=True)
+        self._send_json({'ok': True, 'job_id': job_id, 'state': 'queued'}, status=202)
 
     def _read_json(self):
         length = int(self.headers.get('Content-Length', 0))

@@ -5403,7 +5403,7 @@ function gitChangePayload(repoId, line) {
 
 function renderGitCommitFiles(commit) {
   const files = commit.files || [];
-  if (!files.length) return '<div class="git-commit-meta">更新文件：无文件列表</div>';
+  if (!files.length) return '<div class="git-commit-meta">更新文件：点击查看更新文件</div>';
   const preview = files.slice(0, 8).map(f => f.text || ((f.status || '') + ' ' + (f.path || ''))).join('\n');
   const more = files.length > 8 ? '\n... 还有 ' + (files.length - 8) + ' 个文件' : '';
   return '<pre class="git-commit-meta">更新文件（' + files.length + '）：\n' + esc(preview + more) + '</pre>';
@@ -5877,13 +5877,14 @@ function renderGitStatusProgress(percent, stage, detail) {
     '</div>';
 }
 
-function renderGitPullProgress(percent, stage, detail, state) {
+function renderGitPullProgress(percent, stage, detail, state, title) {
   const grid = document.getElementById('gitRepoGrid');
   if (!grid) return;
+  const heading = state === 'done' ? '处理完成' : (state === 'failed' ? '处理失败' : '正在拉取远端提交...');
   grid.innerHTML =
     '<div class="empty git-status-loading">' +
-      '<div>正在拉取远端提交...</div>' +
-      gitProgressHtml(percent, stage, detail, state || '', '拉取进度') +
+      '<div>' + heading + '</div>' +
+      gitProgressHtml(percent, stage, detail, state || '', title || '拉取进度') +
     '</div>';
 }
 
@@ -5915,36 +5916,11 @@ function stopGitStatusProgress() {
   }
 }
 
-function renderGitProgress(percent, stage, detail, state) {
+function renderGitProgress(percent, stage, detail, state, title) {
   const output = document.getElementById('gitOutput');
   if (!output) return;
   output.style.display = 'block';
-  output.innerHTML = gitProgressHtml(percent, stage, detail, state);
-}
-
-function startGitProgress(repo) {
-  stopGitProgress();
-  const target = gitPullTargetLabel(repo);
-  const stages = [
-    { limit: 18, stage: '准备拉取', detail: '正在确认 ' + target + ' 的拉取任务' },
-    { limit: 34, stage: '暂存本地改动', detail: '如有已跟踪的本地改动，会先自动暂存' },
-    { limit: 52, stage: '连接远端仓库', detail: '正在请求远端提交' },
-    { limit: 78, stage: '拉取远端提交', detail: '正在下载并合并可快进的提交' },
-    { limit: 90, stage: '刷新仓库状态', detail: '正在整理拉取后的提交记录' },
-    { limit: 96, stage: '等待结果', detail: '拉取仍在进行，请稍等' }
-  ];
-  let index = 0;
-  gitProgressValue = 6;
-  renderGitProgress(gitProgressValue, stages[0].stage, stages[0].detail);
-  renderGitPullProgress(gitProgressValue, stages[0].stage, stages[0].detail);
-  gitProgressTimer = setInterval(() => {
-    const targetStage = stages[index];
-    gitProgressValue = Math.min(targetStage.limit, gitProgressValue + Math.max(1, Math.round((targetStage.limit - gitProgressValue) / 3)));
-    if (gitProgressValue >= targetStage.limit && index < stages.length - 1) index += 1;
-    const current = stages[index];
-    renderGitProgress(gitProgressValue, current.stage, current.detail);
-    renderGitPullProgress(gitProgressValue, current.stage, current.detail);
-  }, 500);
+  output.innerHTML = gitProgressHtml(percent, stage, detail, state, title || '拉取进度');
 }
 
 function stopGitProgress() {
@@ -5971,78 +5947,121 @@ function closeGitFailModal() {
   document.getElementById('gitFailMask').classList.remove('show');
 }
 
+function renderGitJobProgress(job) {
+  const state = job && (job.state === 'done' || job.state === 'failed') ? job.state : '';
+  const title = state === 'done' ? '处理完成' : (state === 'failed' ? '处理失败' : '拉取进度');
+  const percent = job && Number.isFinite(Number(job.percent)) ? Number(job.percent) : 0;
+  const stage = job && job.stage ? job.stage : '准备中';
+  const detail = job && job.detail ? job.detail : '';
+  renderGitPullProgress(percent, stage, detail, state, title);
+  renderGitProgress(percent, stage, detail, state, title);
+}
+
+function gitRequestError(data, fallback) {
+  return (data && (data.msg || data.detail)) || fallback || '请求未完成';
+}
+
+async function pollGitPullJob(jobId) {
+  while (true) {
+    const res = await fetch(GIT_API + '/pull-progress?id=' + encodeURIComponent(jobId), { cache: 'no-store' });
+    let job;
+    try { job = await res.json(); } catch (e) { throw new Error('进度响应不是有效数据'); }
+    if (!res.ok || !job.ok) throw new Error(gitRequestError(job, '无法读取拉取进度'));
+    renderGitJobProgress(job);
+    if (job.state === 'done' || job.state === 'failed') return job.result || { ok: job.state === 'done', items: [] };
+    await new Promise(resolve => setTimeout(resolve, 450));
+  }
+}
+
+async function startGitPullJob(endpoint, payload) {
+  const res = await fetch(GIT_API + endpoint, {
+    method: 'POST',
+    headers: payload ? { 'Content-Type': 'application/json' } : undefined,
+    body: payload ? JSON.stringify(payload) : undefined
+  });
+  let accepted;
+  try { accepted = await res.json(); } catch (e) { throw new Error('服务器没有返回有效结果'); }
+  if (!res.ok || !accepted.ok) throw new Error(gitRequestError(accepted, '拉取任务创建失败'));
+  if (!accepted.job_id) return accepted;
+  return pollGitPullJob(accepted.job_id);
+}
+
+function mergeGitPullStatuses(data) {
+  const updates = (data && data.items || []).map(item => item && item.status).filter(Boolean);
+  updates.forEach(update => {
+    const index = gitRepoCache.findIndex(repo => repo.id === update.id);
+    if (index >= 0) gitRepoCache[index] = update;
+    else gitRepoCache.push(update);
+  });
+}
+
+function applyGitPullResult(data) {
+  const items = data && data.items || [];
+  const ok = !!(data && data.ok);
+  const stage = ok ? '拉取成功' : '拉取失败';
+  const detail = ok ? '远端提交已拉取完成，下面是本次拉取结果' : '拉取没有完成，请查看失败原因和处理建议';
+  const state = ok ? 'done' : 'failed';
+  renderGitPullProgress(100, stage, detail, state, ok ? '处理完成' : '处理失败');
+  const output = document.getElementById('gitOutput');
+  if (output) {
+    output.style.display = 'block';
+    output.innerHTML = gitProgressHtml(100, stage, detail, state, ok ? '处理完成' : '处理失败') + renderGitOutput(data);
+  }
+  mergeGitPullStatuses(data);
+  renderGitPullRecords(data);
+  const excelFailure = findExcelPullFailure(data);
+  if (excelFailure) openGitFailModal(excelFailure);
+  else if (ok) {
+    closeGitFailModal();
+    toast('拉取成功');
+  }
+  setTimeout(() => { if (currentView === 'git') loadGitRepos(); }, 900);
+}
+
 async function resolveExcelPullFailure() {
   if (!confirm('将尝试关闭 WPS/Excel/ET 并重新拉取配置表。请确认表格内容已经保存。')) return;
   const btn = document.getElementById('gitResolveBtn');
   btn.disabled = true;
   btn.textContent = '处理中...';
-  renderGitPullProgress(12, '正在处理占用', '正在关闭 WPS/Excel/ET 并清理表格锁文件');
+  gitBusy = true;
   try {
-    const res = await fetch(GIT_API + '/resolve-excel-pull', { method: 'POST' });
-    const data = await res.json();
-    const ok = !!(data && data.ok);
-    const stage = ok ? '拉取成功' : '拉取失败';
-    const detail = ok ? '配置表已重新拉取完成' : '自动处理后仍未成功，请查看失败原因';
-    renderGitPullProgress(100, stage, detail, ok ? 'done' : 'failed');
-    const output = document.getElementById('gitOutput');
-    output.style.display = 'block';
-    output.innerHTML = gitProgressHtml(100, stage, detail, ok ? 'done' : 'failed') + renderGitOutput(data);
-    renderGitPullRecords(data);
-    const failed = findExcelPullFailure(data);
-    if (failed) {
-      openGitFailModal(failed);
-    } else {
-      closeGitFailModal();
-      toast('配置表拉取成功');
-      setTimeout(() => { if (currentView === 'git') loadGitRepos(); }, 1000);
-    }
+    const data = await startGitPullJob('/resolve-excel-pull');
+    applyGitPullResult(data);
   } catch (e) {
-    document.getElementById('gitFailReason').textContent = '自动处理失败：' + e;
+    const message = '自动处理请求失败：' + (e.message || e);
+    document.getElementById('gitFailReason').textContent = message;
+    const output = document.getElementById('gitOutput');
+    if (output) {
+      output.style.display = 'block';
+      output.innerHTML = gitProgressHtml(100, '请求失败', message, 'failed', '处理失败') +
+        '<div class="git-output-title">请求失败</div><pre>' + esc(message) + '</pre>';
+    }
   } finally {
     btn.disabled = false;
     btn.textContent = '解决并重新拉取';
+    gitBusy = false;
   }
 }
 
 async function pullGit(repo) {
   if (gitBusy) return;
   gitBusy = true;
-  const output = document.getElementById('gitOutput');
   const allBtn = document.getElementById('gitPullAllBtn');
   if (allBtn) allBtn.disabled = true;
-  startGitProgress(repo);
+  renderGitPullProgress(2, '任务排队', '正在创建后台拉取任务');
+  renderGitProgress(2, '任务排队', '正在创建后台拉取任务');
   try {
-    const res = await fetch(GIT_API + '/pull', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ repo: repo })
-    });
-    const data = await res.json();
-    stopGitProgress();
-    const ok = !!(data && data.ok);
-    const stage = ok ? '拉取成功' : '拉取失败';
-    const detail = ok ? '远端提交已拉取完成，下面是本次拉取结果' : '拉取没有完成，请查看下方错误信息';
-    renderGitPullProgress(100, stage, detail, ok ? 'done' : 'failed');
-    output.innerHTML = gitProgressHtml(100, stage, detail, ok ? 'done' : 'failed') + renderGitOutput(data);
-    if (ok) toast('拉取成功');
-    gitRepoCache = (data.items || []).map(it => it.status).filter(Boolean);
-    renderGitPullRecords(data);
-    const excelFailure = findExcelPullFailure(data);
-    if (excelFailure) openGitFailModal(excelFailure);
-    gitBusy = false;
-    if (allBtn) allBtn.disabled = false;
-    if (ok) {
-      setTimeout(() => {
-        if (currentView === 'git') loadGitRepos();
-      }, 1200);
-    } else {
-      renderGitFromCache();
-    }
+    const data = await startGitPullJob('/pull', { repo: repo });
+    applyGitPullResult(data);
   } catch (e) {
-    stopGitProgress();
-    renderGitPullProgress(100, '拉取失败', '请求没有完成，请查看错误信息', 'failed');
-    output.innerHTML = gitProgressHtml(100, '拉取失败', '请求没有完成，请查看错误信息', 'failed') +
-      '<div class="git-output-title">拉取失败</div><pre>' + esc(e) + '</pre>';
+    const message = '拉取请求失败：' + (e.message || e);
+    const output = document.getElementById('gitOutput');
+    renderGitPullProgress(100, '请求失败', message, 'failed', '处理失败');
+    if (output) {
+      output.style.display = 'block';
+      output.innerHTML = gitProgressHtml(100, '请求失败', message, 'failed', '处理失败') +
+        '<div class="git-output-title">请求失败</div><pre>' + esc(message) + '</pre>';
+    }
   } finally {
     stopGitProgress();
     gitBusy = false;
