@@ -2471,7 +2471,10 @@ def ks_login_url(links):
 def ks_fetch_applications(base_url, token, project, cluster_name):
     applications = []
     seen = set()
-    for is_public in (0, 1):
+    # The GM tool targets the environments owned by the current KS user.
+    # Public applications can contain unrelated accounts and must not be
+    # offered as command targets.
+    for is_public in (0,):
         page = 1
         while page <= 20:
             data = ks_request_json(base_url, token, '/idp/apk/applications', {
