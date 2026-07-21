@@ -126,6 +126,14 @@
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
   .item-card .card-cmd code { background: none; padding: 0; }
+  .item-card .cmd-arg-input {
+    width: 100%; box-sizing: border-box; border: 1px solid var(--border);
+    border-radius: 8px; padding: 8px 10px; background: var(--input-bg);
+    color: var(--text); font-size: 13px; outline: none;
+  }
+  .item-card .cmd-arg-input:focus {
+    border-color: var(--accent); box-shadow: 0 0 0 3px rgba(99,102,241,.14);
+  }
   .item-card .card-desc {
     font-size: 13px; color: var(--text-dim); line-height: 1.5;
     overflow: hidden; text-overflow: ellipsis; display: -webkit-box;
@@ -149,6 +157,14 @@
     max-height: 320px; overflow: auto;
   }
   .detail-row .d-text { font-size: 14px; color: var(--text); line-height: 1.6; }
+  .detail-row .cmd-arg-input {
+    width: 100%; box-sizing: border-box; border: 1px solid var(--border);
+    border-radius: 10px; padding: 10px 12px; background: var(--input-bg);
+    color: var(--text); font-size: 14px; outline: none;
+  }
+  .detail-row .cmd-arg-input:focus {
+    border-color: var(--accent); box-shadow: 0 0 0 3px rgba(99,102,241,.14);
+  }
   .header-right { display: flex; align-items: center; gap: 14px; }
   .count-badge {
     font-size: 12px; color: var(--text-dim); padding: 4px 12px; border-radius: 999px;
@@ -197,94 +213,170 @@
   .cocos-toolbar .btn { margin-left: auto; padding: 7px 12px; font-size: 12px; }
   .cocos-target-panel {
     margin: 12px 28px 0;
-    padding: 16px;
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    background: rgba(255,255,255,.92);
-    box-shadow: 0 10px 28px rgba(50,65,57,.08);
+    border: 1px solid #d7dee8;
+    border-radius: 7px;
+    background: #f5f7fa;
+    color: #27364a;
+    overflow: hidden;
   }
   .cocos-target-head {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 10px;
     flex-wrap: wrap;
-    margin-bottom: 14px;
+    min-height: 52px;
+    padding: 10px 12px;
+    border-bottom: 1px solid #d7dee8;
+    background: #ffffff;
   }
-  .cocos-target-title { color: var(--text); font-size: 15px; font-weight: 800; }
+  .cocos-target-title { color: #243247; font-size: 14px; font-weight: 850; }
   .cocos-target-summary {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 7px;
     flex-wrap: wrap;
-    color: var(--text-dim);
+    color: #65758b;
     font-size: 12px;
   }
-  .cocos-target-count {
-    padding: 4px 8px;
-    border: 1px solid rgba(82,113,95,.15);
-    border-radius: 6px;
-    background: rgba(82,113,95,.07);
-    color: #40584a;
-    font-weight: 700;
+  .cocos-status { padding: 5px 9px; border: 1px solid #d9a75b; border-radius: 999px; background: #fff8ea; }
+  .cocos-status.connected { border-color: #93cfb0; background: #edf9f2; color: #237a52; }
+  .cocos-status.disconnected { color: #a76416; }
+  .cocos-target-head .btn { margin-left: auto; min-height: 32px; padding: 6px 11px; border-radius: 5px; font-size: 12px; }
+  .cocos-account-workspace { padding: 10px 12px 11px; }
+  .cocos-account-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
   }
-  .cocos-target-head .btn { margin-left: auto; padding: 7px 12px; font-size: 12px; }
-  .cocos-target-content { display: grid; grid-template-columns: minmax(210px, .7fr) minmax(320px, 1.3fr); gap: 12px; }
-  .cocos-target-group { min-width: 0; }
-  .cocos-target-label {
-    display: block;
-    margin-bottom: 7px;
-    color: var(--text-dim);
-    font-size: 11px;
-    font-weight: 800;
-  }
-  .cocos-environment-list,
-  .cocos-account-list { display: grid; gap: 7px; }
-  .cocos-environment-item,
-  .cocos-account-item {
+  .cocos-account-heading { display: flex; align-items: baseline; gap: 6px; white-space: nowrap; font-size: 13px; font-weight: 850; }
+  .cocos-account-heading span { color: #7a899c; font-size: 11px; font-weight: 600; }
+  .cocos-account-search {
+    flex: 1 1 220px;
+    min-width: 180px;
     width: 100%;
-    min-width: 0;
-    border: 1px solid var(--border);
-    border-radius: 7px;
-    background: rgba(248,250,248,.92);
-    color: var(--text);
+    min-height: 34px;
+    padding: 7px 10px;
+    border: 1px solid #cfd7e2;
+    border-radius: 5px;
+    background: #fff;
+    color: #27364a;
+    outline: none;
+    font-size: 12px;
+  }
+  .cocos-account-search:focus { border-color: #5c83bd; box-shadow: 0 0 0 2px rgba(92,131,189,.13); }
+  .cocos-filter-group,
+  .cocos-batch-actions { display: inline-flex; align-items: center; gap: 4px; }
+  .cocos-filter-btn,
+  .cocos-mini-btn {
+    min-height: 32px;
+    padding: 6px 10px;
+    border: 1px solid #cfd7e2;
+    border-radius: 5px;
+    background: #fff;
+    color: #44546a;
     cursor: pointer;
-    text-align: left;
-    transition: border-color .16s, background .16s, box-shadow .16s;
+    font-size: 11px;
+    font-weight: 750;
+    white-space: nowrap;
   }
-  .cocos-environment-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 11px; }
-  .cocos-environment-item:hover,
-  .cocos-account-item:hover { border-color: rgba(82,113,95,.42); background: #fff; }
-  .cocos-environment-item.active,
-  .cocos-account-item.active {
-    border-color: #52715f;
-    background: #f0f5f1;
-    box-shadow: inset 3px 0 0 #52715f;
+  .cocos-filter-btn.active { border-color: #82a4d3; background: #edf4ff; color: #3568a8; }
+  .cocos-mini-btn:hover,
+  .cocos-filter-btn:hover { border-color: #89a5c8; }
+  .cocos-account-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(235px, 1fr));
+    gap: 6px;
   }
-  .cocos-environment-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 750; }
-  .cocos-environment-count { flex: 0 0 auto; color: var(--text-dim); font-size: 11px; }
-  .cocos-account-list { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
-  .cocos-account-item { position: relative; padding: 10px 12px 10px 26px; }
-  .cocos-account-item::before {
-    content: '';
-    position: absolute;
-    top: 15px;
-    left: 11px;
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: #d97706;
-  }
-  .cocos-account-item.ready::before { background: #23a26d; }
-  .cocos-account-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 800; }
-  .cocos-account-meta { margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-dim); font-size: 11px; }
-  .cocos-target-empty {
-    padding: 18px;
-    border: 1px dashed var(--border);
-    border-radius: 7px;
-    color: var(--text-dim);
-    font-size: 13px;
+  .cocos-account-list-empty {
+    grid-column: 1 / -1;
+    padding: 24px 12px;
+    border: 1px dashed #cfd7e2;
+    border-radius: 6px;
+    background: rgba(255,255,255,.55);
+    color: #77869a;
+    font-size: 12px;
     text-align: center;
   }
+  .cocos-account-card {
+    position: relative;
+    display: grid;
+    grid-template-columns: 18px minmax(0, 1fr);
+    gap: 8px;
+    min-width: 0;
+    min-height: 64px;
+    padding: 9px 10px;
+    border: 1px solid #d4dce7;
+    border-radius: 6px;
+    background: #fff;
+    cursor: pointer;
+    transition: border-color .14s, background .14s, box-shadow .14s;
+  }
+  .cocos-account-card:hover { border-color: #9eb4d1; }
+  .cocos-account-card.selected { border-color: #6f95ca; background: #f2f7ff; box-shadow: inset 3px 0 0 #4f79b5; }
+  .cocos-account-card input { width: 15px; height: 15px; margin: 2px 0 0; accent-color: #4f79b5; }
+  .cocos-account-copy { min-width: 0; }
+  .cocos-account-line { display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .cocos-account-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #27364a; font-size: 12px; font-weight: 850; }
+  .cocos-account-meta { margin-top: 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #77869a; font-size: 10px; }
+  .cocos-account-badge { flex: 0 0 auto; padding: 2px 5px; border: 1px solid #9acfb2; border-radius: 999px; background: #eef9f3; color: #277a53; font-size: 9px; font-weight: 800; }
+  .cocos-account-badge.pending { border-color: #d9b779; background: #fff9ed; color: #a4691b; }
+  .cocos-account-env { margin-top: 4px; color: #526985; font-size: 10px; }
+  .cocos-account-footer { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 8px; color: #7a899c; font-size: 10px; }
+  .cocos-legend { display: inline-flex; align-items: center; gap: 4px; }
+  .cocos-legend::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: #a6b3c3; }
+  .cocos-legend.online::before { background: #32a26c; }
+  .cocos-legend.selected::before { background: #4f79b5; }
+  .cocos-target-empty {
+    margin: 12px;
+    padding: 22px;
+    border: 1px dashed #cfd7e2;
+    border-radius: 6px;
+    background: rgba(255,255,255,.55);
+    color: #77869a;
+    font-size: 12px;
+    text-align: center;
+  }
+  .cocos-environment-panel { border-top: 1px solid #d7dee8; background: #fff; }
+  .cocos-environment-panel summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 40px;
+    padding: 8px 12px;
+    color: #34465d;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 850;
+    list-style: none;
+  }
+  .cocos-environment-panel summary::-webkit-details-marker { display: none; }
+  .cocos-environment-panel summary::before { content: '›'; margin-right: 7px; color: #637894; transform: rotate(0deg); transition: transform .15s; }
+  .cocos-environment-panel[open] summary::before { transform: rotate(90deg); }
+  .cocos-environment-current { margin-left: auto; color: #7a899c; font-size: 10px; font-weight: 600; }
+  .cocos-environment-body {
+    display: grid;
+    grid-template-columns: minmax(220px, .8fr) minmax(300px, 1.2fr) minmax(150px, .45fr);
+    gap: 10px;
+    padding: 0 12px 12px;
+  }
+  .cocos-environment-field { min-width: 0; }
+  .cocos-environment-field label { display: block; margin-bottom: 5px; color: #68798e; font-size: 10px; font-weight: 750; }
+  .cocos-environment-field select,
+  .cocos-environment-value {
+    display: block;
+    width: 100%;
+    min-height: 33px;
+    padding: 7px 9px;
+    border: 1px solid #cfd7e2;
+    border-radius: 5px;
+    background: #f8fafc;
+    color: #33465d;
+    font-size: 11px;
+  }
+  .cocos-environment-value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: "Cascadia Mono", Consolas, monospace; }
+  .cocos-environment-stat { display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 33px; color: #277a53; font-size: 11px; font-weight: 800; }
   .btn {
     padding: 10px 18px; border: none; border-radius: 10px; cursor: pointer; font-size: 14px;
     font-weight: 500; transition: .18s;
@@ -4089,10 +4181,15 @@
     }
   }
   @media (max-width: 760px) {
-    .cocos-target-panel { margin: 10px 16px 0; padding: 13px; }
-    .cocos-target-content { grid-template-columns: 1fr; }
+    .cocos-target-panel { margin: 10px 16px 0; }
     .cocos-target-head .btn { margin-left: 0; }
+    .cocos-account-toolbar { display: grid; grid-template-columns: 1fr; }
+    .cocos-filter-group,
+    .cocos-batch-actions { width: 100%; }
+    .cocos-filter-btn,
+    .cocos-mini-btn { flex: 1 1 0; }
     .cocos-account-list { grid-template-columns: 1fr; }
+    .cocos-environment-body { grid-template-columns: 1fr; }
   }
 </style>
 </head>
@@ -4151,15 +4248,53 @@
           <button class="btn btn-ghost" onclick="loadCocosStatus()">刷新</button>
         </div>
         <div id="cocosTargetEmpty" class="cocos-target-empty">正在读取环境和账号</div>
-        <div id="cocosTargetContent" class="cocos-target-content" style="display:none">
-          <div class="cocos-target-group">
-            <span class="cocos-target-label">环境</span>
-            <div id="cocosEnvironmentList" class="cocos-environment-list"></div>
-          </div>
-          <div class="cocos-target-group">
-            <span class="cocos-target-label">在线账号</span>
+        <div id="cocosTargetContent" style="display:none">
+          <div class="cocos-account-workspace">
+            <div class="cocos-account-toolbar">
+              <div class="cocos-account-heading">
+                执行账号
+                <span id="cocosAccountStats">显示 0/0 · 已选 0</span>
+              </div>
+              <input id="cocosAccountSearch" class="cocos-account-search" type="search"
+                placeholder="搜索账号 / 角色 / 区服 / 环境" autocomplete="off"
+                oninput="setCocosAccountSearch(this.value)">
+              <div class="cocos-filter-group" role="group" aria-label="账号筛选">
+                <button type="button" class="cocos-filter-btn active" data-cocos-filter="all" onclick="setCocosAccountFilter('all')">全部</button>
+                <button type="button" class="cocos-filter-btn" data-cocos-filter="online" onclick="setCocosAccountFilter('online')">已登录</button>
+                <button type="button" class="cocos-filter-btn" data-cocos-filter="selected" onclick="setCocosAccountFilter('selected')">已选</button>
+              </div>
+              <div class="cocos-batch-actions">
+                <button type="button" class="cocos-mini-btn" onclick="selectConnectedCocosTargets()">选择已连接</button>
+                <button type="button" class="cocos-mini-btn" onclick="clearCocosTargetSelection()">清空选择</button>
+              </div>
+            </div>
             <div id="cocosAccountList" class="cocos-account-list"></div>
+            <div class="cocos-account-footer">
+              <span class="cocos-legend selected">蓝色边框：已选</span>
+              <span class="cocos-legend online">绿色标记：已登录</span>
+              <span id="cocosSelectionHint">选择账号后，可直接点击 GM 命令卡片中的“使用”</span>
+            </div>
           </div>
+          <details class="cocos-environment-panel">
+            <summary>
+              <span>环境与连接信息</span>
+              <span id="cocosEnvironmentCurrent" class="cocos-environment-current">全部环境</span>
+            </summary>
+            <div class="cocos-environment-body">
+              <div class="cocos-environment-field">
+                <label for="cocosEnvironmentSelect">查看范围</label>
+                <select id="cocosEnvironmentSelect" onchange="selectCocosEnvironment(this.value)"></select>
+              </div>
+              <div class="cocos-environment-field">
+                <label>环境地址</label>
+                <div id="cocosEnvironmentUrl" class="cocos-environment-value">全部环境</div>
+              </div>
+              <div class="cocos-environment-field">
+                <label>连接状态</label>
+                <div id="cocosEnvironmentStat" class="cocos-environment-stat">0 个连接在线</div>
+              </div>
+            </div>
+          </details>
         </div>
       </section>
       <div class="container">
@@ -4547,7 +4682,10 @@ let selectedCommandId = null;
 let cocosStatusTimer = null;
 let cocosEnvironments = [];
 let selectedCocosEnvironmentKey = '';
-let selectedCocosTargetId = '';
+let selectedCocosTargetIds = new Set();
+let cocosAccountFilter = 'all';
+let cocosAccountSearch = '';
+let cocosSelectionInitialized = false;
 
 function enhanceReactBitsComponents(root) {
   const scope = root && root.querySelectorAll ? root : document;
@@ -4735,12 +4873,13 @@ function renderCocosStatus(data) {
   const instanceCount = Number(data && data.instance_count) || 0;
   if (summary) {
     summary.innerHTML = connected
-      ? `<span class="cocos-target-count">${environmentCount} 个环境</span><span class="cocos-target-count">${accountCount} 个账号</span>${instanceCount !== accountCount ? `<span class="cocos-target-count">${instanceCount} 个实例</span>` : ''}`
+      ? `<span class="cocos-target-count">${environmentCount} 个环境</span><span class="cocos-target-count">${accountCount} 个账号</span><span class="cocos-target-count">${instanceCount} 个连接</span><span class="cocos-target-count">已选 ${selectedCocosTargetIds.size}</span>`
       : `<span>${esc((data && data.error) || '等待游戏实例连接')}</span>`;
   }
   if (!connected || !cocosEnvironments.length) {
     selectedCocosEnvironmentKey = '';
-    selectedCocosTargetId = '';
+    selectedCocosTargetIds.clear();
+    cocosSelectionInitialized = false;
     if (empty) {
       empty.style.display = '';
       empty.textContent = connected ? '已连接游戏，正在识别环境和账号' : '当前没有在线游戏账号';
@@ -4748,70 +4887,207 @@ function renderCocosStatus(data) {
     if (content) content.style.display = 'none';
     return;
   }
-  if (!cocosEnvironments.some(item => item.key === selectedCocosEnvironmentKey)) {
-    selectedCocosEnvironmentKey = cocosEnvironments[0].key;
+  if (selectedCocosEnvironmentKey && !cocosEnvironments.some(item => item.key === selectedCocosEnvironmentKey)) {
+    selectedCocosEnvironmentKey = '';
   }
-  const allTargets = cocosEnvironments.flatMap(item => item.accounts || []);
-  if (!allTargets.some(item => item.id === selectedCocosTargetId)) {
-    const current = cocosEnvironments.find(item => item.key === selectedCocosEnvironmentKey);
-    selectedCocosTargetId = current && current.accounts && current.accounts.length ? current.accounts[0].id : '';
+  const allTargets = getCocosTargetEntries();
+  const onlineIds = new Set(allTargets.map(item => item.id));
+  selectedCocosTargetIds = new Set([...selectedCocosTargetIds].filter(id => onlineIds.has(id)));
+  if (!cocosSelectionInitialized) {
+    if (allTargets.length === 1) selectedCocosTargetIds.add(allTargets[0].id);
+    cocosSelectionInitialized = true;
   }
   if (empty) empty.style.display = 'none';
   if (content) content.style.display = '';
-  renderCocosEnvironmentList();
+  renderCocosEnvironmentDetails();
   renderCocosAccountList();
 }
 
-function renderCocosEnvironmentList() {
-  const list = document.getElementById('cocosEnvironmentList');
-  if (!list) return;
-  list.innerHTML = cocosEnvironments.map(item => `
-    <button type="button" class="cocos-environment-item ${item.key === selectedCocosEnvironmentKey ? 'active' : ''}"
-      data-environment-key="${esc(item.key)}" onclick="selectCocosEnvironment(this.dataset.environmentKey)">
-      <span class="cocos-environment-name" title="${esc(item.url || item.name)}">${esc(item.name)}</span>
-      <span class="cocos-environment-count">${Number(item.account_count) || 0} 个账号</span>
-    </button>`).join('');
+function getCocosTargetEntries() {
+  return cocosEnvironments.flatMap(environment => (environment.accounts || []).map(account => ({
+    ...account,
+    environment_key: environment.key,
+    environment_name: environment.name || account.environment || '未识别环境',
+    environment_url: environment.url || account.environment_url || ''
+  })));
+}
+
+function getVisibleCocosTargets() {
+  const query = cocosAccountSearch.trim().toLocaleLowerCase();
+  return getCocosTargetEntries().filter(item => {
+    if (selectedCocosEnvironmentKey && item.environment_key !== selectedCocosEnvironmentKey) return false;
+    if (cocosAccountFilter === 'online' && !item.ready) return false;
+    if (cocosAccountFilter === 'selected' && !selectedCocosTargetIds.has(item.id)) return false;
+    if (!query) return true;
+    const searchable = [
+      item.account_label, item.account_id, item.account_name, item.role_id,
+      item.role_name, item.player_id, item.server_id, item.environment_name,
+      item.environment_url, item.address
+    ].filter(Boolean).join(' ').toLocaleLowerCase();
+    return searchable.includes(query);
+  });
+}
+
+function renderCocosEnvironmentDetails() {
+  const select = document.getElementById('cocosEnvironmentSelect');
+  const current = document.getElementById('cocosEnvironmentCurrent');
+  const url = document.getElementById('cocosEnvironmentUrl');
+  const stat = document.getElementById('cocosEnvironmentStat');
+  if (!select) return;
+  select.innerHTML = `<option value="">全部环境（${getCocosTargetEntries().length} 个连接）</option>` + cocosEnvironments.map(item =>
+    `<option value="${esc(item.key)}"${item.key === selectedCocosEnvironmentKey ? ' selected' : ''}>${esc(item.name)}（${Number(item.instance_count) || 0} 个连接）</option>`
+  ).join('');
+  const environment = cocosEnvironments.find(item => item.key === selectedCocosEnvironmentKey);
+  if (current) current.textContent = environment ? environment.name : `全部 ${cocosEnvironments.length} 个环境`;
+  if (url) {
+    url.textContent = environment
+      ? (environment.url || '未读取到环境地址')
+      : (cocosEnvironments.length === 1 ? (cocosEnvironments[0].url || '未读取到环境地址') : '选择环境后查看对应地址');
+    url.title = url.textContent;
+  }
+  const connectionCount = environment
+    ? Number(environment.instance_count) || 0
+    : getCocosTargetEntries().length;
+  if (stat) stat.textContent = `${connectionCount} 个连接在线`;
 }
 
 function renderCocosAccountList() {
   const list = document.getElementById('cocosAccountList');
   if (!list) return;
-  const environment = cocosEnvironments.find(item => item.key === selectedCocosEnvironmentKey);
-  const accounts = environment && Array.isArray(environment.accounts) ? environment.accounts : [];
+  const allTargets = getCocosTargetEntries();
+  const accounts = getVisibleCocosTargets();
+  const stats = document.getElementById('cocosAccountStats');
+  const hint = document.getElementById('cocosSelectionHint');
+  if (stats) stats.textContent = `显示 ${accounts.length}/${allTargets.length} · 已选 ${selectedCocosTargetIds.size}`;
+  if (hint) hint.textContent = selectedCocosTargetIds.size
+    ? `本次命令将发送给 ${selectedCocosTargetIds.size} 个账号`
+    : '选择账号后，可直接点击 GM 命令卡片中的“使用”';
+  document.querySelectorAll('[data-cocos-filter]').forEach(button => {
+    button.classList.toggle('active', button.dataset.cocosFilter === cocosAccountFilter);
+  });
+  if (!accounts.length) {
+    list.innerHTML = '<div class="cocos-account-list-empty">当前筛选条件下没有账号</div>';
+    updateCocosTargetSummarySelection();
+    return;
+  }
   list.innerHTML = accounts.map(item => {
     const ids = [];
     if (item.account_id) ids.push('账号 ' + item.account_id);
     if (item.role_id) ids.push('角色 ' + item.role_id);
     if (item.server_id) ids.push('区服 ' + item.server_id);
+    const selected = selectedCocosTargetIds.has(item.id);
     return `
-      <button type="button" class="cocos-account-item ${item.ready ? 'ready' : ''} ${item.id === selectedCocosTargetId ? 'active' : ''}"
-        data-target-id="${esc(item.id)}" onclick="selectCocosTarget(this.dataset.targetId)">
-        <div class="cocos-account-name">${esc(item.account_label || '未识别账号')}</div>
-        <div class="cocos-account-meta">${esc(ids.join(' · ') || item.address || '信息读取中')}</div>
-      </button>`;
+      <label class="cocos-account-card ${selected ? 'selected' : ''}">
+        <input type="checkbox" data-target-id="${esc(item.id)}" ${selected ? 'checked' : ''}
+          onchange="toggleCocosTarget(this.dataset.targetId, this.checked)">
+        <span class="cocos-account-copy">
+          <span class="cocos-account-line">
+            <span class="cocos-account-name" title="${esc(item.account_label || '未识别账号')}">${esc(item.account_label || '未识别账号')}</span>
+            <span class="cocos-account-badge ${item.ready ? '' : 'pending'}">${item.ready ? '已登录' : '连接中'}</span>
+          </span>
+          <span class="cocos-account-meta" title="${esc(ids.join(' · ') || item.address || '信息读取中')}">${esc(ids.join(' · ') || item.address || '信息读取中')}</span>
+          <span class="cocos-account-env" title="${esc(item.environment_url || item.environment_name)}">${esc(item.environment_name)}</span>
+        </span>
+      </label>`;
   }).join('');
+  updateCocosTargetSummarySelection();
 }
 
 function selectCocosEnvironment(key) {
   selectedCocosEnvironmentKey = key || '';
-  const environment = cocosEnvironments.find(item => item.key === selectedCocosEnvironmentKey);
-  selectedCocosTargetId = environment && environment.accounts && environment.accounts.length
-    ? environment.accounts[0].id : '';
-  renderCocosEnvironmentList();
+  renderCocosEnvironmentDetails();
   renderCocosAccountList();
 }
 
-function selectCocosTarget(targetId) {
-  selectedCocosTargetId = targetId || '';
+function setCocosAccountSearch(value) {
+  cocosAccountSearch = value || '';
   renderCocosAccountList();
 }
 
-function getSelectedCocosTarget() {
-  for (const environment of cocosEnvironments) {
-    const target = (environment.accounts || []).find(item => item.id === selectedCocosTargetId);
-    if (target) return target;
+function setCocosAccountFilter(filter) {
+  cocosAccountFilter = ['all', 'online', 'selected'].includes(filter) ? filter : 'all';
+  renderCocosAccountList();
+}
+
+function toggleCocosTarget(targetId, selected) {
+  if (selected) selectedCocosTargetIds.add(targetId);
+  else selectedCocosTargetIds.delete(targetId);
+  renderCocosAccountList();
+}
+
+function selectConnectedCocosTargets() {
+  const targets = getCocosTargetEntries().filter(item =>
+    !selectedCocosEnvironmentKey || item.environment_key === selectedCocosEnvironmentKey);
+  targets.forEach(item => selectedCocosTargetIds.add(item.id));
+  renderCocosAccountList();
+  toast(`已选择 ${targets.length} 个连接账号`);
+}
+
+function clearCocosTargetSelection() {
+  selectedCocosTargetIds.clear();
+  renderCocosAccountList();
+}
+
+function getSelectedCocosTargets() {
+  return getCocosTargetEntries().filter(item => selectedCocosTargetIds.has(item.id));
+}
+
+function commandNeedsExtraArgs(item) {
+  const params = String(item && item.params || '').trim();
+  const command = String(item && item.command || '').trim();
+  return !!params && !!command && !/\s/.test(command);
+}
+
+function commandArgInputId(id, scope) {
+  return `cmdArg_${scope || 'card'}_${String(id).replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+}
+
+function commandArgPlaceholder(item) {
+  const params = String(item && item.params || '').trim().replace(/\s+/g, ' ');
+  return params ? `输入参数：${params}` : '输入追加参数';
+}
+
+function getCommandArgValue(id, scope) {
+  const el = document.getElementById(commandArgInputId(id, scope || 'card'));
+  return el ? el.value.trim() : '';
+}
+
+function buildExecutableCommand(item, scope) {
+  const base = String(item && item.command || '').trim();
+  const extra = getCommandArgValue(item.id, scope);
+  return extra ? `${base} ${extra}` : base;
+}
+
+function handleCommandArgKeydown(event, id) {
+  event.stopPropagation();
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    useCmd(id);
   }
-  return null;
+}
+
+function focusCommandArgs(id, scope) {
+  const el = document.getElementById(commandArgInputId(id, scope || 'card'));
+  if (el) el.focus();
+}
+
+async function copyCmd(id, scope) {
+  const item = cmdCache[id];
+  if (!item) return;
+  if (commandNeedsExtraArgs(item) && !getCommandArgValue(id, scope)) {
+    focusCommandArgs(id, scope);
+    toast('请先输入参数');
+    return;
+  }
+  await copyText(buildExecutableCommand(item, scope));
+}
+
+function updateCocosTargetSummarySelection() {
+  const summary = document.getElementById('cocosTargetSummary');
+  if (!summary || !cocosEnvironments.length) return;
+  const allTargets = getCocosTargetEntries();
+  const accountKeys = new Set(allTargets.map(item => `${item.environment_key}:${item.account_key || item.id}`));
+  summary.innerHTML = `<span class="cocos-target-count">${cocosEnvironments.length} 个环境</span><span class="cocos-target-count">${accountKeys.size} 个账号</span><span class="cocos-target-count">${allTargets.length} 个连接</span><span class="cocos-target-count">已选 ${selectedCocosTargetIds.size}</span>`;
 }
 
 async function loadCocosStatus() {
@@ -4838,9 +5114,16 @@ async function useCmd(id) {
     toast('没有可执行的命令内容');
     return;
   }
-  const target = getSelectedCocosTarget();
-  if (!target && cocosEnvironments.length) {
-    toast('请先选择要执行命令的账号');
+  const scope = document.getElementById('detailMask').classList.contains('show') && selectedCommandId === id ? 'detail' : 'card';
+  if (commandNeedsExtraArgs(item) && !getCommandArgValue(id, scope)) {
+    focusCommandArgs(id, scope);
+    toast('请先输入参数');
+    return;
+  }
+  const command = buildExecutableCommand(item, scope);
+  const targets = getSelectedCocosTargets();
+  if (!targets.length && cocosEnvironments.length) {
+    toast('请至少选择一个要执行命令的账号');
     return;
   }
   selectedCommandId = id;
@@ -4848,7 +5131,7 @@ async function useCmd(id) {
     const res = await fetch('/api/cocos/execute', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ command: item.command, target_id: target ? target.id : '' })
+      body: JSON.stringify({ command, target_ids: targets.map(target => target.id) })
     });
     const data = await res.json();
     if (!res.ok || !data.ok) {
@@ -4856,8 +5139,11 @@ async function useCmd(id) {
       await loadCocosStatus();
       return;
     }
-    const targetName = data.target && data.target.account_label ? data.target.account_label : (target && target.account_label);
-    toast(`已对${targetName ? '「' + targetName + '」' : '选中账号'}生效：${item.name}`);
+    const targetCount = Number(data.target_count) || targets.length || 1;
+    const targetName = targetCount === 1 && data.target && data.target.account_label
+      ? `「${data.target.account_label}」`
+      : `${targetCount} 个账号`;
+    toast(`已对${targetName}生效：${item.name}`);
     await loadCocosStatus();
   } catch (e) {
     toast('Cocos 执行请求失败');
@@ -4924,11 +5210,12 @@ function renderTable(items) {
               ${it.permission ? `<span class="perm">${esc(it.permission)}</span>` : ''}
             </div>
             <div class="card-cmd" title="${esc(it.command)}"><code>${esc(it.command)}</code></div>
+            ${commandNeedsExtraArgs(it) ? `<input class="cmd-arg-input" id="${commandArgInputId(it.id, 'card')}" type="text" placeholder="${esc(commandArgPlaceholder(it))}" autocomplete="off" onclick="event.stopPropagation()" onkeydown='handleCommandArgKeydown(event, ${JSON.stringify(it.id)})'>` : ''}
             ${it.description ? `<div class="card-desc">${esc(it.description)}</div>` : ''}
             ${(it.tags || []).length ? `<div class="card-tags">${(it.tags || []).map(t => `<span class="tag">${esc(t)}</span>`).join('')}</div>` : ''}
             <div class="card-foot" onclick="event.stopPropagation()">
               <a class="use" onclick='useCmd(${JSON.stringify(it.id)})'>使用</a>
-              <a onclick='copyText(${JSON.stringify(it.command)})'>复制</a>
+              <a onclick='copyCmd(${JSON.stringify(it.id)}, "card")'>复制</a>
               ${admin ? `<a onclick='editCmd(${JSON.stringify(it.id)})'>编辑</a>
               <a class="del" onclick='delCmd(${JSON.stringify(it.id)})'>删除</a>` : ''}
             </div>
@@ -4947,13 +5234,14 @@ function showCmdDetail(id) {
   if (it.permission) html += `<div class="detail-row"><div class="d-label">权限</div><div class="d-text">${esc(it.permission)}</div></div>`;
   if ((it.tags || []).length) html += `<div class="detail-row"><div class="d-label">标签</div><div class="card-tags">${(it.tags || []).map(t => `<span class="tag">${esc(t)}</span>`).join('')}</div></div>`;
   if (it.params) html += `<div class="detail-row"><div class="d-label">参数说明</div><pre>${esc(it.params)}</pre></div>`;
+  if (commandNeedsExtraArgs(it)) html += `<div class="detail-row"><div class="d-label">追加参数</div><input class="cmd-arg-input" id="${commandArgInputId(it.id, 'detail')}" type="text" placeholder="${esc(commandArgPlaceholder(it))}" autocomplete="off" onkeydown='handleCommandArgKeydown(event, ${JSON.stringify(it.id)})'></div>`;
   if (it.example) html += `<div class="detail-row"><div class="d-label">使用示例</div><pre>${esc(it.example)}</pre></div>`;
   if (it.description) html += `<div class="detail-row"><div class="d-label">描述</div><div class="d-text">${esc(it.description)}</div></div>`;
   document.getElementById('detailBody').innerHTML = html;
   const useBtn = document.getElementById('detailUseBtn');
   useBtn.style.display = '';
   useBtn.onclick = () => useCmd(id);
-  document.getElementById('detailCopyBtn').onclick = () => copyText(it.command);
+  document.getElementById('detailCopyBtn').onclick = () => copyCmd(id, 'detail');
   document.getElementById('detailMask').classList.add('show');
 }
 

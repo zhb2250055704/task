@@ -1717,40 +1717,7 @@ def cocos_bridge_status():
     }
 
 
-def execute_cocos_commands(commands, target_id=''):
-    normalized = []
-    for command in commands if isinstance(commands, list) else [commands]:
-        for line in str(command or '').splitlines():
-            line = line.strip()
-            if line:
-                normalized.append(line)
-    if not normalized:
-        return {'ok': False, 'code': 'empty_command', 'msg': '命令内容不能为空'}
-
-    with _cocos_bridge_lock:
-        connections = [item for item in _cocos_connections.values() if item.alive]
-        connection = _cocos_connections.get(str(target_id or '').strip()) if target_id else None
-    if target_id and (not connection or not connection.alive):
-        return {
-            'ok': False,
-            'code': 'cocos_target_offline',
-            'msg': '选中的游戏账号已离线，请刷新后重新选择',
-        }
-    if connection is None and len(connections) == 1:
-        connection = connections[0]
-    if connection is None and len(connections) > 1:
-        return {
-            'ok': False,
-            'code': 'cocos_target_required',
-            'msg': '检测到多个在线账号，请先选择要执行命令的账号',
-        }
-    if not connection or not connection.alive:
-        return {
-            'ok': False,
-            'code': 'cocos_offline',
-            'msg': f'未连接到 Cocos 游戏，请先在游戏内开启自动测试并连接 {cocos_bridge_status()["url"]}',
-        }
-
+def _execute_cocos_connection(connection, normalized):
     results = []
     with connection.command_lock:
         for index, command in enumerate(normalized):
@@ -1761,22 +1728,107 @@ def execute_cocos_commands(commands, target_id=''):
             }, ensure_ascii=False, separators=(',', ':'))]
             result = connection.send_rpc('sendProtocol', params)
             if not result.get('ok'):
-                return {'ok': False, 'code': 'cocos_rpc_failed',
-                        'msg': result.get('error') or 'Cocos 没有返回执行结果',
-                        'results': results}
+                return {
+                    'ok': False,
+                    'code': 'cocos_rpc_failed',
+                    'msg': result.get('error') or 'Cocos 没有返回执行结果',
+                    'results': results,
+                }
             value = result.get('result')
             results.append({'command': command, 'result': value})
             if isinstance(value, str) and (value.startswith('Error') or value.startswith('Exception')):
-                return {'ok': False, 'code': 'cocos_command_failed',
-                        'msg': value, 'results': results}
+                return {
+                    'ok': False,
+                    'code': 'cocos_command_failed',
+                    'msg': value,
+                    'results': results,
+                }
             if index < len(normalized) - 1:
                 time.sleep(0.1)
-    return {
-        'ok': True,
+    return {'ok': True, 'results': results}
+
+
+def execute_cocos_commands(commands, target_id='', target_ids=None):
+    normalized = []
+    for command in commands if isinstance(commands, list) else [commands]:
+        for line in str(command or '').splitlines():
+            line = line.strip()
+            if line:
+                normalized.append(line)
+    if not normalized:
+        return {'ok': False, 'code': 'empty_command', 'msg': '命令内容不能为空'}
+
+    requested_ids = []
+    if isinstance(target_ids, list):
+        for value in target_ids:
+            value = str(value or '').strip()
+            if value and value not in requested_ids:
+                requested_ids.append(value)
+    single_target_id = str(target_id or '').strip()
+    if single_target_id and single_target_id not in requested_ids:
+        requested_ids.append(single_target_id)
+
+    with _cocos_bridge_lock:
+        connections = [item for item in _cocos_connections.values() if item.alive]
+        connection_map = {item.connection_id: item for item in connections}
+    missing_ids = [value for value in requested_ids if value not in connection_map]
+    if missing_ids:
+        return {
+            'ok': False,
+            'code': 'cocos_target_offline',
+            'msg': f'有 {len(missing_ids)} 个选中的游戏账号已离线，请刷新后重新选择',
+        }
+    selected_connections = [connection_map[value] for value in requested_ids]
+    if not selected_connections and len(connections) == 1:
+        selected_connections = [connections[0]]
+    if not selected_connections and len(connections) > 1:
+        return {
+            'ok': False,
+            'code': 'cocos_target_required',
+            'msg': '检测到多个在线账号，请至少选择一个要执行命令的账号',
+        }
+    if not selected_connections:
+        return {
+            'ok': False,
+            'code': 'cocos_offline',
+            'msg': f'未连接到 Cocos 游戏，请先在游戏内开启自动测试并连接 {cocos_bridge_status()["url"]}',
+        }
+
+    batch_results = []
+    for connection in selected_connections:
+        target = connection.target_snapshot()
+        execution = _execute_cocos_connection(connection, normalized)
+        batch_results.append({
+            'target': target,
+            'ok': execution.get('ok', False),
+            'code': execution.get('code', ''),
+            'msg': execution.get('msg', ''),
+            'results': execution.get('results', []),
+        })
+
+    failed_results = [item for item in batch_results if not item['ok']]
+    success_count = len(batch_results) - len(failed_results)
+    response = {
+        'ok': not failed_results,
         'commands': normalized,
-        'results': results,
-        'target': connection.target_snapshot(),
+        'target_count': len(selected_connections),
+        'success_count': success_count,
+        'failure_count': len(failed_results),
+        'targets': [item['target'] for item in batch_results],
+        'batch_results': batch_results,
     }
+    if failed_results:
+        response['code'] = 'cocos_batch_failed'
+        response['msg'] = (
+            f'已成功执行 {success_count} 个账号，失败 {len(failed_results)} 个账号：'
+            f'{failed_results[0].get("msg") or "游戏端没有返回执行结果"}'
+        )
+    if len(batch_results) == 1:
+        response['target'] = batch_results[0]['target']
+        response['results'] = batch_results[0]['results']
+    else:
+        response['results'] = batch_results
+    return response
 
 
 class GMHandler(SimpleHTTPRequestHandler):
@@ -2421,7 +2473,8 @@ class GMHandler(SimpleHTTPRequestHandler):
             return
         command = data.get('command', '')
         target_id = data.get('target_id', '')
-        result = execute_cocos_commands(command, target_id)
+        target_ids = data.get('target_ids', [])
+        result = execute_cocos_commands(command, target_id, target_ids)
         self._send_json(result, status=200 if result.get('ok') else 409)
 
     # ---------- Git 拉取 ----------
