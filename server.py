@@ -2418,18 +2418,28 @@ def ks_token_status(token):
     return status
 
 
-def ks_request_json(base_url, token, path, params=None):
+def ks_request_json(base_url, token, path, params=None, method='GET', payload=None, timeout=15):
     base_url = normalize_ls_base_url(base_url or KS_DEFAULT_BASE_URL)
     url = urljoin(base_url + '/', str(path or '').lstrip('/'))
     if params:
         url += ('&' if '?' in url else '?') + urlencode(params)
-    req = urllib.request.Request(url, headers={
+    headers = {
         'Accept': 'application/json, text/plain, */*',
         'Authorization': 'Bearer ' + str(token or '').strip(),
         'User-Agent': 'GMCommandTool/2.0',
-    }, method='GET')
+    }
+    body = None
+    if payload is not None:
+        headers['Content-Type'] = 'application/json; charset=utf-8'
+        body = json.dumps(payload, ensure_ascii=False, separators=(',', ':')).encode('utf-8')
+    req = urllib.request.Request(
+        url,
+        data=body,
+        headers=headers,
+        method=str(method or 'GET').upper(),
+    )
     try:
-        with urllib.request.urlopen(req, timeout=15) as response:
+        with urllib.request.urlopen(req, timeout=timeout) as response:
             raw = response.read(8 * 1024 * 1024)
     except urllib.error.HTTPError as exc:
         try:
@@ -2644,13 +2654,82 @@ def ks_parse_login_accounts(logs, environment):
     )
 
 
+def ks_parse_created_accounts(users, environment):
+    deduplicated = {}
+    environment_key = str(environment.get('key') or '')
+    for item in users if isinstance(users, list) else []:
+        if not isinstance(item, dict):
+            continue
+        account_name = _text_value(
+            item.get('account_name') or item.get('accountName') or
+            item.get('username') or item.get('user_name')
+        )
+        role_id = _text_value(item.get('role_id') or item.get('roleId'))
+        account_id = _text_value(
+            item.get('account_id') or item.get('accountId') or
+            item.get('user_id') or item.get('userId')
+        )
+        server_id = _text_value(item.get('server_id') or item.get('serverId'))
+        if not account_name or not role_id or not server_id:
+            continue
+        operation_time = _text_value(item.get('operation_time') or item.get('created_at'))
+        record = {
+            'account_name': account_name,
+            'account_label': _text_value(item.get('role_name') or item.get('roleName')) or account_name,
+            'account_id': account_id,
+            'role_id': role_id,
+            'role_name': _text_value(item.get('role_name') or item.get('roleName')),
+            'server_id': server_id,
+            'user_key': _text_value(item.get('user_key')) or f'{server_id}:{account_name}',
+            'operation_time': operation_time,
+            'last_seen': operation_time,
+            'source_case_name': _text_value(item.get('source_case_name')),
+            'source': 'ks_created_user',
+            'environment_key': environment_key,
+            'environment_name': environment.get('name', ''),
+            'environment_url': environment.get('login_url', ''),
+        }
+        cache_id = ks_account_cache_id(environment_key, record)
+        record['cache_id'] = cache_id
+        deduplicated[cache_id] = ks_merge_account_record(deduplicated.get(cache_id), record)
+    return sorted(
+        deduplicated.values(),
+        key=lambda item: (item.get('operation_time', ''), item.get('account_name', '')),
+        reverse=True,
+    )
+
+
 def ks_fetch_environment_accounts(base_url, token, environment):
-    data = ks_request_json(base_url, token, '/idp/apk/logs/', {
-        'application_name': environment.get('app_name', ''),
-        'case_name': KS_LOGIN_CASE_NAME,
-    })
-    logs = data.get('logs', []) if isinstance(data, dict) else []
-    return ks_parse_login_accounts(logs, environment)
+    try:
+        users = []
+        page = 1
+        while page <= 20:
+            data = ks_request_json(base_url, token, '/idp/api/cases/users', {
+                'application_name': environment.get('app_name', ''),
+                'page': page,
+                'page_size': 200,
+            })
+            results = data.get('results', []) if isinstance(data, dict) else []
+            if not isinstance(results, list):
+                results = []
+            users.extend(results)
+            total = int(data.get('total') or len(results)) if isinstance(data, dict) else len(results)
+            if not results or page * 200 >= total:
+                break
+            page += 1
+        return ks_parse_created_accounts(users, environment)
+    except Exception as users_error:
+        try:
+            data = ks_request_json(base_url, token, '/idp/apk/logs/', {
+                'application_name': environment.get('app_name', ''),
+                'case_name': KS_LOGIN_CASE_NAME,
+            })
+            logs = data.get('logs', []) if isinstance(data, dict) else []
+            return ks_parse_login_accounts(logs, environment)
+        except Exception as logs_error:
+            raise ValueError(
+                f'KS 已创建账号读取失败：{users_error}；登录记录回退失败：{logs_error}'
+            ) from logs_error
 
 
 def ks_merge_cached_accounts(environments, old_catalog):
@@ -2758,6 +2837,258 @@ def sync_ks_catalog(token='', base_url='', persist_config=False):
     }
 
 
+def _normalize_gm_command_lines(commands):
+    normalized = []
+    for command in commands if isinstance(commands, list) else [commands]:
+        for line in str(command or '').splitlines():
+            line = line.strip()
+            if line:
+                normalized.append(line)
+    return normalized
+
+
+def ks_resolve_execution_targets(requested_targets):
+    with _ks_cache_lock:
+        cache = _load_json_object(KS_ACCOUNT_CACHE_FILE)
+    environments = {
+        str(item.get('key') or ''): item
+        for item in (cache.get('catalog', {}).get('environments') or [])
+        if isinstance(item, dict) and not item.get('is_public')
+    }
+    resolved = []
+    seen = set()
+    for requested in requested_targets if isinstance(requested_targets, list) else []:
+        if not isinstance(requested, dict):
+            continue
+        environment_key = _text_value(requested.get('environment_key'))
+        cache_id = _text_value(requested.get('cache_id'))
+        identity = (environment_key, cache_id)
+        if not environment_key or not cache_id or identity in seen:
+            continue
+        environment = environments.get(environment_key)
+        if not environment:
+            return None, {
+                'ok': False,
+                'code': 'ks_environment_not_found',
+                'msg': '目标个人环境已变化，请同步账号后重新选择',
+            }
+        account = next((
+            item for item in (environment.get('accounts') or [])
+            if isinstance(item, dict) and _text_value(item.get('cache_id')) == cache_id
+        ), None)
+        if not account:
+            return None, {
+                'ok': False,
+                'code': 'ks_account_not_found',
+                'msg': '目标账号已变化，请同步账号后重新选择',
+            }
+        required = {
+            'application_name': _text_value(environment.get('app_name')),
+            'login_url': normalize_game_url(environment.get('login_url')),
+            'account_name': _text_value(account.get('account_name')),
+            'role_id': _text_value(account.get('role_id')),
+            'server_id': _text_value(account.get('server_id')),
+        }
+        missing = [key for key, value in required.items() if not value]
+        if missing:
+            return None, {
+                'ok': False,
+                'code': 'ks_account_identity_incomplete',
+                'msg': '目标账号信息不完整，暂时无法执行：' + ', '.join(missing),
+            }
+        resolved.append({
+            'environment': environment,
+            'account': account,
+            **required,
+        })
+        seen.add(identity)
+    if not resolved:
+        return None, {
+            'ok': False,
+            'code': 'ks_target_required',
+            'msg': '请选择至少一个已创建账号',
+        }
+    return resolved, None
+
+
+def execute_ks_commands(commands, requested_targets):
+    normalized = _normalize_gm_command_lines(commands)
+    if not normalized:
+        return {'ok': False, 'code': 'empty_command', 'msg': '命令内容不能为空'}
+    config = load_ks_config()
+    token = config.get('token', '')
+    token_state = ks_token_status(token)
+    if not token:
+        return {'ok': False, 'code': 'ks_token_missing', 'msg': '未配置 KS Token'}
+    if token_state.get('expired'):
+        return {'ok': False, 'code': 'ks_token_expired', 'msg': 'KS Token 已过期，请更新 Token'}
+    targets, error = ks_resolve_execution_targets(requested_targets)
+    if error:
+        return error
+
+    profile = token_state.get('profile', {})
+    operator = _text_value(
+        profile.get('realname') or profile.get('dispname') or
+        profile.get('username') or profile.get('email')
+    )
+    compiled_commands = [
+        {'command': command, 'continue_on_error': False}
+        for command in normalized
+    ]
+
+    def execute_target(target):
+        account = target['account']
+        user = {
+            'account_name': target['account_name'],
+            'role_id': target['role_id'],
+            'server_id': target['server_id'],
+            'user_key': _text_value(account.get('user_key')) or
+                        f'{target["server_id"]}:{target["account_name"]}',
+        }
+        payload = {
+            'operator': operator,
+            'application_name': target['application_name'],
+            'login_url': target['login_url'],
+            'server_id': target['server_id'],
+            'source_case_name': _text_value(account.get('source_case_name')) or KS_LOGIN_CASE_NAME,
+            'source_operation_time': _text_value(
+                account.get('operation_time') or account.get('last_seen')
+            ),
+            'users': [user],
+            'command_groups': [{'id': 'gm-command-tool', 'name': 'GM命令工具'}],
+            'compiled_commands': compiled_commands,
+            'runtime_vars': {
+                'account_name': target['account_name'],
+                'role_id': target['role_id'],
+                'server_id': target['server_id'],
+                'user_key': user['user_key'],
+            },
+        }
+        response = ks_request_json(
+            config.get('base_url'),
+            token,
+            '/idp/api/cases/gm-command-group/sync',
+            method='POST',
+            payload=payload,
+            timeout=45,
+        )
+        status = _text_value(response.get('status')).lower() if isinstance(response, dict) else ''
+        ok = status == 'success' or (not status and bool(response.get('ok'))) if isinstance(response, dict) else False
+        message = ''
+        if isinstance(response, dict):
+            message = _text_value(response.get('message') or response.get('msg') or response.get('error'))
+        return {
+            'target': {
+                'environment_key': target['environment'].get('key', ''),
+                'environment_name': target['environment'].get('name', ''),
+                'cache_id': account.get('cache_id', ''),
+                'account_name': target['account_name'],
+                'role_id': target['role_id'],
+                'server_id': target['server_id'],
+            },
+            'channel': 'ks',
+            'ok': ok,
+            'delivery_status': 'delivered' if ok else 'delivery_failed',
+            'status': status or ('success' if ok else 'failed'),
+            'msg': message,
+            'audit_persisted': bool(response.get('audit_persisted')) if isinstance(response, dict) else False,
+        }
+
+    batch_results = []
+    with ThreadPoolExecutor(max_workers=min(4, len(targets))) as pool:
+        futures = {pool.submit(execute_target, target): target for target in targets}
+        for future in as_completed(futures):
+            target = futures[future]
+            try:
+                batch_results.append(future.result())
+            except Exception as exc:
+                batch_results.append({
+                    'target': {
+                        'environment_key': target['environment'].get('key', ''),
+                        'environment_name': target['environment'].get('name', ''),
+                        'cache_id': target['account'].get('cache_id', ''),
+                        'account_name': target['account_name'],
+                        'role_id': target['role_id'],
+                        'server_id': target['server_id'],
+                    },
+                    'channel': 'ks',
+                    'ok': False,
+                    'delivery_status': 'delivery_failed',
+                    'status': 'failed',
+                    'msg': str(exc)[:300],
+                })
+    failed_results = [item for item in batch_results if not item.get('ok')]
+    success_count = len(batch_results) - len(failed_results)
+    result = {
+        'ok': not failed_results,
+        'delivery_status': 'delivered' if not failed_results else 'partial_failed',
+        'commands': normalized,
+        'target_count': len(batch_results),
+        'delivered_count': success_count,
+        'success_count': success_count,
+        'failure_count': len(failed_results),
+        'batch_results': batch_results,
+    }
+    if failed_results:
+        result.update({
+            'code': 'ks_batch_failed',
+            'msg': f'KS 已投递 {success_count} 个账号，失败 {len(failed_results)} 个：' +
+                   (failed_results[0].get('msg') or 'KS 未返回成功状态'),
+        })
+    else:
+        result['msg'] = f'已通过 KS 投递 {success_count} 个账号'
+    return result
+
+
+def execute_gm_commands(commands, target_id='', target_ids=None, target_specs=None, ks_targets=None):
+    client_specs = [item for item in (target_specs or []) if isinstance(item, dict)]
+    offline_specs = [item for item in (ks_targets or []) if isinstance(item, dict)]
+    if not client_specs and not offline_specs:
+        return {
+            'ok': False,
+            'code': 'gm_target_required',
+            'msg': '请选择至少一个可执行账号',
+        }
+    results = []
+    if client_specs:
+        client_result = execute_cocos_commands(
+            commands, target_id, target_ids, client_specs
+        )
+        results.append(('cocos', client_result))
+    if offline_specs:
+        results.append(('ks', execute_ks_commands(commands, offline_specs)))
+    if len(results) == 1:
+        return results[0][1]
+
+    batch_results = []
+    for channel, result in results:
+        for item in result.get('batch_results', []):
+            batch_results.append({'channel': channel, **item})
+    success_count = sum(int(result.get('delivered_count') or 0) for _, result in results)
+    target_count = sum(int(result.get('target_count') or 0) for _, result in results)
+    failure_count = max(0, target_count - success_count)
+    ok = all(result.get('ok') for _, result in results)
+    response = {
+        'ok': ok,
+        'delivery_status': 'delivered' if ok else 'partial_failed',
+        'target_count': target_count,
+        'delivered_count': success_count,
+        'success_count': success_count,
+        'failure_count': failure_count,
+        'batch_results': batch_results,
+        'channel_results': {channel: result for channel, result in results},
+    }
+    if ok:
+        response['msg'] = f'已投递 {success_count} 个账号'
+    else:
+        failed = next((result for _, result in results if not result.get('ok')), {})
+        response.update({
+            'code': 'gm_batch_failed',
+            'msg': failed.get('msg') or f'已投递 {success_count} 个账号，失败 {failure_count} 个',
+        })
+    return response
+
+
 def _ks_display_account_match(account, target):
     if normalize_game_url(account.get('environment_url')) != normalize_game_url(target.get('environment_url')):
         return -1
@@ -2782,15 +3113,27 @@ def ks_catalog_with_online(targets=None):
     environments = catalog.setdefault('environments', [])
     targets = list(targets or [])
     matched_target_ids = set()
+    token_state = ks_token_status(load_ks_config().get('token', ''))
+    ks_available = bool(token_state.get('configured')) and not token_state.get('expired')
 
     for environment in environments:
+        environment_ks_ready = bool(
+            ks_available and not environment.get('is_public') and
+            environment.get('app_name') and environment.get('login_url')
+        )
         for account in environment.get('accounts', []):
+            ks_dispatchable = bool(
+                environment_ks_ready and account.get('cache_id') and
+                account.get('account_name') and account.get('role_id') and
+                account.get('server_id')
+            )
             account.update({
                 'id': 'cache:' + str(account.get('cache_id') or uuid.uuid4().hex[:12]),
                 'connected': False,
                 'online': False,
                 'ready': False,
                 'dispatchable': False,
+                'ks_dispatchable': ks_dispatchable,
             })
             best_target = None
             best_score = -1
@@ -2845,21 +3188,29 @@ def ks_catalog_with_online(targets=None):
             'environment_name': environment.get('name', ''),
             'connected': True,
             'online': True,
+            'ks_dispatchable': False,
         })
 
     account_count = 0
     online_count = 0
+    executable_count = 0
     for environment in environments:
         accounts = environment.get('accounts', [])
         environment['account_count'] = len(accounts)
         environment['online_count'] = sum(1 for item in accounts if item.get('connected'))
+        environment['executable_count'] = sum(
+            1 for item in accounts
+            if item.get('dispatchable') or item.get('ks_dispatchable')
+        )
         account_count += environment['account_count']
         online_count += environment['online_count']
+        executable_count += environment['executable_count']
     catalog.update({
         'environment_count': len(environments),
         'account_count': account_count,
         'online_count': online_count,
-        'configured': load_ks_config().get('token', '') != '',
+        'executable_count': executable_count,
+        'configured': token_state.get('configured', False),
         'expires_at': cache.get('expires_at', 0),
         'profile': cache.get('profile', {}),
     })
@@ -3532,7 +3883,10 @@ class GMHandler(SimpleHTTPRequestHandler):
         target_id = data.get('target_id', '')
         target_ids = data.get('target_ids', [])
         target_specs = data.get('target_specs', [])
-        result = execute_cocos_commands(command, target_id, target_ids, target_specs)
+        ks_targets = data.get('ks_targets', [])
+        result = execute_gm_commands(
+            command, target_id, target_ids, target_specs, ks_targets
+        )
         self._send_json(result, status=200 if result.get('ok') else 409)
 
     # ---------- Git 拉取 ----------
