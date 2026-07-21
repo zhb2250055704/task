@@ -3,6 +3,8 @@ __pycache__/
 *.log
 server-start*.log
 gm_users.json
+gm_ks_config.json
+gm_account_cache.json
 .env
 runtime/
 public-url.txt

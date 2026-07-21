@@ -21,9 +21,13 @@ import zipfile
 import re
 import shutil
 import subprocess
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import xml.etree.ElementTree as ET
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import urlparse, parse_qs, urljoin, urlencode
+import urllib.error
+import urllib.request
+import ssl
 
 if os.name == 'nt':
     try:
@@ -49,6 +53,8 @@ SCRIPT_FILE = os.path.join(TOOL_DIR, 'gm_scripts.json')
 FORMULA_FILE = os.path.join(TOOL_DIR, 'gm_formulas.json')
 USER_FILE = os.path.join(TOOL_DIR, 'gm_users.json')
 ITEM_FILE = os.path.join(TOOL_DIR, 'gm_items.json')
+KS_CONFIG_FILE = os.path.join(TOOL_DIR, 'gm_ks_config.json')
+KS_ACCOUNT_CACHE_FILE = os.path.join(TOOL_DIR, 'gm_account_cache.json')
 
 GIT_REPOS = {
     'client': {
@@ -102,6 +108,7 @@ COCOS_RPC_TIMEOUT = 15
 _cocos_bridge_lock = threading.Lock()
 _cocos_connections = {}
 _cocos_bridge_error = ''
+_ks_cache_lock = threading.Lock()
 
 
 def load_data():
@@ -1516,7 +1523,7 @@ class CocosBridgeConnection:
         info = result['result']
         allowed = {
             'environment', 'environmentUrl', 'accountId', 'accountName',
-            'roleId', 'roleName', 'playerId', 'serverId', 'ready',
+            'roleId', 'roleName', 'playerId', 'serverId', 'clientId', 'ready',
         }
         normalized = {key: info.get(key) for key in allowed if key in info}
         with self.info_lock:
@@ -1528,7 +1535,7 @@ class CocosBridgeConnection:
         with self.info_lock:
             info = dict(self.target_info)
             updated_at = self.target_info_updated_at
-        environment_url = str(info.get('environmentUrl') or '').strip()
+        environment_url = normalize_game_url(info.get('environmentUrl'))
         environment = str(info.get('environment') or '').strip()
         if not environment:
             environment = _cocos_environment_name(environment_url)
@@ -1538,7 +1545,10 @@ class CocosBridgeConnection:
         account_name = str(info.get('accountName') or '').strip()
         role_name = str(info.get('roleName') or '').strip()
         server_id = str(info.get('serverId') or '').strip()
+        client_id = str(info.get('clientId') or '').strip()
+        port = str(self.address[1])
         ready = bool(info.get('ready')) and bool(account_id or role_id or player_id)
+        dispatchable = all((client_id, port, account_id, role_id, server_id, environment_url))
         if role_name:
             label = role_name
         elif account_name and account_name not in ('TUGuest', 'Guest'):
@@ -1564,7 +1574,11 @@ class CocosBridgeConnection:
             'role_name': role_name,
             'player_id': player_id,
             'server_id': server_id,
+            'client_id': client_id,
+            'port': port,
             'ready': ready,
+            'dispatchable': dispatchable,
+            'connected': True,
             'address': f'{self.address[0]}:{self.address[1]}',
             'updated_at': int(updated_at) if updated_at else 0,
         }
@@ -1613,6 +1627,54 @@ def _cocos_environment_name(environment_url):
             name = name[len(prefix):]
             break
     return name or host
+
+
+def normalize_game_url(value):
+    value = str(value or '').strip()
+    if not value:
+        return ''
+    if not re.match(r'^https?://', value, re.I):
+        value = 'https://' + value
+    try:
+        parsed = urlparse(value)
+        host = (parsed.hostname or '').lower()
+        if not host:
+            return value.rstrip('/').lower()
+        port = f':{parsed.port}' if parsed.port else ''
+        path = re.sub(r'/+', '/', parsed.path or '').rstrip('/')
+        return f'{parsed.scheme.lower()}://{host}{port}{path}'
+    except ValueError:
+        return value.rstrip('/').lower()
+
+
+COCOS_IDENTITY_FIELDS = (
+    'port', 'client_id', 'account_id', 'role_id', 'server_id', 'environment_url',
+)
+
+
+def cocos_identity_spec(target):
+    return {
+        'connection_id': str(target.get('id') or target.get('connection_id') or '').strip(),
+        'port': str(target.get('port') or '').strip(),
+        'client_id': str(target.get('client_id') or '').strip(),
+        'account_id': str(target.get('account_id') or '').strip(),
+        'role_id': str(target.get('role_id') or '').strip(),
+        'server_id': str(target.get('server_id') or '').strip(),
+        'environment_url': normalize_game_url(target.get('environment_url')),
+    }
+
+
+def cocos_identity_mismatches(expected, current):
+    expected = cocos_identity_spec(expected)
+    current = cocos_identity_spec(current)
+    missing = [field for field in COCOS_IDENTITY_FIELDS if not expected.get(field)]
+    if missing:
+        return missing, []
+    mismatched = [
+        field for field in COCOS_IDENTITY_FIELDS
+        if expected.get(field) != current.get(field)
+    ]
+    return [], mismatched
 
 
 def _cocos_target_refresh_loop(connection):
@@ -1704,6 +1766,7 @@ def cocos_bridge_status():
         group['instance_count'] = len(group['accounts'])
         environments.append(group)
     environments.sort(key=lambda item: (item['name'] == '未识别环境', item['name']))
+    catalog = ks_catalog_with_online(targets)
     return {
         'connected': bool(targets),
         'address': targets[0]['address'] if len(targets) == 1 else '',
@@ -1714,6 +1777,7 @@ def cocos_bridge_status():
         'account_count': len(unique_accounts),
         'instance_count': len(targets),
         'environments': environments,
+        'ks_catalog': catalog,
     }
 
 
@@ -1748,7 +1812,7 @@ def _execute_cocos_connection(connection, normalized):
     return {'ok': True, 'results': results}
 
 
-def execute_cocos_commands(commands, target_id='', target_ids=None):
+def execute_cocos_commands(commands, target_id='', target_ids=None, target_specs=None):
     normalized = []
     for command in commands if isinstance(commands, list) else [commands]:
         for line in str(command or '').splitlines():
@@ -1758,35 +1822,55 @@ def execute_cocos_commands(commands, target_id='', target_ids=None):
     if not normalized:
         return {'ok': False, 'code': 'empty_command', 'msg': '命令内容不能为空'}
 
-    requested_ids = []
-    if isinstance(target_ids, list):
-        for value in target_ids:
-            value = str(value or '').strip()
-            if value and value not in requested_ids:
-                requested_ids.append(value)
-    single_target_id = str(target_id or '').strip()
-    if single_target_id and single_target_id not in requested_ids:
-        requested_ids.append(single_target_id)
+    requested_specs = [item for item in (target_specs or []) if isinstance(item, dict)]
+    if not requested_specs:
+        return {
+            'ok': False,
+            'code': 'cocos_identity_required',
+            'msg': '缺少目标客户端身份快照，本次命令未发送，请刷新账号状态后重新选择',
+        }
 
     with _cocos_bridge_lock:
         connections = [item for item in _cocos_connections.values() if item.alive]
         connection_map = {item.connection_id: item for item in connections}
-    missing_ids = [value for value in requested_ids if value not in connection_map]
-    if missing_ids:
-        return {
-            'ok': False,
-            'code': 'cocos_target_offline',
-            'msg': f'有 {len(missing_ids)} 个选中的游戏账号已离线，请刷新后重新选择',
-        }
-    selected_connections = [connection_map[value] for value in requested_ids]
-    if not selected_connections and len(connections) == 1:
-        selected_connections = [connections[0]]
-    if not selected_connections and len(connections) > 1:
-        return {
-            'ok': False,
-            'code': 'cocos_target_required',
-            'msg': '检测到多个在线账号，请至少选择一个要执行命令的账号',
-        }
+
+    verified_targets = {}
+    selected_connections = []
+    seen_connections = set()
+    for expected in requested_specs:
+        connection_id = str(expected.get('connection_id') or expected.get('id') or '').strip()
+        connection = connection_map.get(connection_id)
+        if not connection or not connection.alive:
+            return {
+                'ok': False,
+                'code': 'cocos_target_offline',
+                'msg': '选中的游戏客户端已离线，请刷新账号状态后重新选择',
+            }
+        if connection_id in seen_connections:
+            continue
+        if not connection.refresh_target_info():
+            return {
+                'ok': False,
+                'code': 'cocos_identity_refresh_failed',
+                'msg': '无法重新确认目标客户端身份，本次命令未发送',
+            }
+        current = connection.target_snapshot()
+        missing, mismatched = cocos_identity_mismatches(expected, current)
+        if missing:
+            return {
+                'ok': False,
+                'code': 'cocos_identity_incomplete',
+                'msg': '目标身份信息不完整，本次命令未发送：' + ', '.join(missing),
+            }
+        if mismatched:
+            return {
+                'ok': False,
+                'code': 'cocos_identity_changed',
+                'msg': '目标客户端状态已变化，本次命令未发送：' + ', '.join(mismatched),
+            }
+        selected_connections.append(connection)
+        seen_connections.add(connection_id)
+        verified_targets[connection_id] = current
     if not selected_connections:
         return {
             'ok': False,
@@ -1796,11 +1880,12 @@ def execute_cocos_commands(commands, target_id='', target_ids=None):
 
     batch_results = []
     for connection in selected_connections:
-        target = connection.target_snapshot()
+        target = verified_targets.get(connection.connection_id) or connection.target_snapshot()
         execution = _execute_cocos_connection(connection, normalized)
         batch_results.append({
             'target': target,
             'ok': execution.get('ok', False),
+            'delivery_status': 'delivered' if execution.get('ok') else 'delivery_failed',
             'code': execution.get('code', ''),
             'msg': execution.get('msg', ''),
             'results': execution.get('results', []),
@@ -1810,8 +1895,10 @@ def execute_cocos_commands(commands, target_id='', target_ids=None):
     success_count = len(batch_results) - len(failed_results)
     response = {
         'ok': not failed_results,
+        'delivery_status': 'delivered' if not failed_results else 'partial_failed',
         'commands': normalized,
         'target_count': len(selected_connections),
+        'delivered_count': success_count,
         'success_count': success_count,
         'failure_count': len(failed_results),
         'targets': [item['target'] for item in batch_results],
@@ -1820,15 +1907,976 @@ def execute_cocos_commands(commands, target_id='', target_ids=None):
     if failed_results:
         response['code'] = 'cocos_batch_failed'
         response['msg'] = (
-            f'已成功执行 {success_count} 个账号，失败 {len(failed_results)} 个账号：'
-            f'{failed_results[0].get("msg") or "游戏端没有返回执行结果"}'
+            f'已投递 {success_count} 个游戏客户端，失败 {len(failed_results)} 个：'
+            f'{failed_results[0].get("msg") or "游戏客户端没有返回投递结果"}'
         )
+    else:
+        response['msg'] = f'已投递到 {success_count} 个游戏客户端；游戏服务器是否执行成功请以游戏内结果为准'
     if len(batch_results) == 1:
         response['target'] = batch_results[0]['target']
         response['results'] = batch_results[0]['results']
     else:
         response['results'] = batch_results
     return response
+
+
+LS_DEFAULT_BASE_URLS = [
+    'https://zxty.tuyoo.com',
+    'https://ks.tuyoo.com',
+    'https://ks.ops.tuyoo.com',
+    'https://ks.ops.tuyoops.com',
+    'https://keystone.tuyoo.com',
+    'https://keystone.ops.tuyoo.com',
+    'https://keystone.ops.tuyoops.com',
+    'https://ls.tuyoo.com',
+    'https://ls.ops.tuyoo.com',
+    'https://ls.ops.tuyoops.com',
+    'http://ks.tuyoo.com',
+    'http://ks.ops.tuyoo.com',
+    'http://ks.ops.tuyoops.com',
+    'http://keystone.tuyoo.com',
+    'http://keystone.ops.tuyoo.com',
+    'http://keystone.ops.tuyoops.com',
+    'http://ls.tuyoo.com',
+    'http://ls.ops.tuyoo.com',
+    'http://ls.ops.tuyoops.com',
+]
+
+LS_ENDPOINT_PATHS = [
+    '',
+    '/idp/tcm/api/v1/tcm/app/list?page=1&page_size=200',
+    '/idp/tcm/api/v1/tcm/app/list?page=1&pageSize=200',
+    '/idp/tcm/api/v1/tcm/app/list?page=1&limit=200',
+    '/idp/tcm/api/v1/tcm/app/list',
+    '/idp/api/applications?page=1&page_size=200',
+    '/idp/api/applications?page=1&pageSize=200',
+    '/idp/api/applications?page=1&limit=200',
+    '/idp/api/applications',
+    '/keystone/idp/tcm/api/v1/tcm/app/list?page=1&page_size=200',
+    '/keystone/idp/api/applications?page=1&page_size=200',
+    '/applications',
+    '/applications?page=1&pageSize=200',
+    '/apps',
+    '/apps?page=1&pageSize=200',
+    '/api/apps',
+    '/api/apps?page=1&pageSize=200',
+    '/api/app/list',
+    '/api/app/list?page=1&pageSize=200',
+    '/api/app/page?page=1&pageSize=200',
+    '/api/apps/list?page=1&pageSize=200',
+    '/api/my/apps?page=1&pageSize=200',
+    '/api/applications',
+    '/api/applications?page=1&pageSize=200',
+    '/api/application/list',
+    '/api/application/list?page=1&pageSize=200',
+    '/api/application/page?page=1&pageSize=200',
+    '/api/v1/apps',
+    '/api/v1/apps?page=1&pageSize=200',
+    '/api/v1/apps/list?page=1&pageSize=200',
+    '/api/v1/my/apps?page=1&pageSize=200',
+    '/api/v1/applications',
+    '/api/v1/applications?page=1&pageSize=200',
+    '/api/ls/apps',
+    '/api/ls/apps?page=1&pageSize=200',
+    '/api/ls/apps/list?page=1&pageSize=200',
+    '/api/ls/applications',
+    '/api/ls/applications?page=1&pageSize=200',
+    '/prod-api/apps?page=1&pageSize=200',
+    '/prod-api/app/list?page=1&pageSize=200',
+]
+
+LS_LIST_KEYS = {
+    'items', 'list', 'records', 'rows', 'data', 'apps', 'applications',
+    'appList', 'envs', 'environments', 'result', 'results', 'client_instances',
+}
+
+LS_ENV_KEYS = {
+    'env', 'envName', 'environment', 'environmentName', 'cluster', 'clusterName',
+    'namespace', 'appName', 'applicationName', 'name', 'chartName', 'gitBranch',
+    'branch', 'status', 'phase', 'repo', 'repoUrl', 'helmRepo', 'cluster_name',
+    'project_id', 'project_name', 'biz_name', 'is_public',
+}
+
+
+def decode_jwt_payload(token):
+    parts = str(token or '').strip().split('.')
+    if len(parts) < 2:
+        raise ValueError('Token 不是标准 JWT 格式')
+    payload = parts[1]
+    payload += '=' * (-len(payload) % 4)
+    try:
+        raw = base64.urlsafe_b64decode(payload.encode('ascii'))
+        data = json.loads(raw.decode('utf-8'))
+    except Exception as exc:
+        raise ValueError('Token payload 解析失败') from exc
+    if not isinstance(data, dict):
+        raise ValueError('Token payload 不是对象')
+    return data
+
+
+def token_profile(payload):
+    fields = [
+        'username', 'realname', 'dispname', 'email', 'phone',
+        'tenant_id', 'app_id', 'current_org_name', 'groups', 'roles',
+        'iat', 'nbf', 'exp', 'iss', 'aud',
+    ]
+    return {key: payload.get(key) for key in fields if key in payload}
+
+
+def normalize_ls_base_url(value):
+    value = str(value or '').strip()
+    if not value:
+        return ''
+    if not re.match(r'^https?://', value, re.I):
+        value = 'https://' + value
+    return value.rstrip('/')
+
+
+def make_ls_urls(base_url):
+    base = normalize_ls_base_url(base_url)
+    if not base:
+        return []
+    parsed = urlparse(base)
+    origin = f'{parsed.scheme}://{parsed.netloc}'
+    urls = [base]
+    for path in LS_ENDPOINT_PATHS:
+        url = origin if not path else urljoin(origin, path)
+        if url not in urls:
+            urls.append(url)
+    return urls
+
+
+def parse_ls_credential_headers(text):
+    text = str(text or '').strip()
+    headers = {}
+    token = ''
+    if not text:
+        return headers, token
+
+    try:
+        parsed = json.loads(text)
+        if isinstance(parsed, dict):
+            source = parsed.get('headers', parsed)
+            if isinstance(source, dict):
+                for key, value in source.items():
+                    key = str(key or '').strip()
+                    value = str(value or '').strip()
+                    if key and value:
+                        headers[key] = value
+    except Exception:
+        pass
+
+    if not headers:
+        for raw_line in text.replace('\r\n', '\n').split('\n'):
+            line = raw_line.strip()
+            if not line:
+                continue
+            pseudo = re.match(r'^(:[A-Za-z0-9_-]+)\s*:\s*(.+)$', line)
+            if pseudo:
+                headers[pseudo.group(1).strip()] = pseudo.group(2).strip()
+                continue
+            if ':' in line:
+                key, value = line.split(':', 1)
+                key = key.strip()
+                value = value.strip()
+                if key and value:
+                    headers[key] = value
+
+    auth_value = next((value for key, value in headers.items() if key.lower() == 'authorization'), '')
+    if auth_value:
+        match = re.search(r'Bearer\s+([A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)', auth_value, re.I)
+        if match:
+            token = match.group(1)
+        elif auth_value.count('.') >= 2:
+            token = auth_value.strip()
+    if not token:
+        match = re.search(r'Bearer\s+([A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)', text, re.I)
+        if match:
+            token = match.group(1)
+    if not token:
+        match = re.search(r'([A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)', text)
+        if match:
+            token = match.group(1)
+    return headers, token
+
+
+def extract_ls_request_urls(text):
+    text = str(text or '').strip()
+    urls = []
+    if not text:
+        return urls
+
+    def add(url):
+        url = str(url or '').strip().strip('"\'')
+        if not url:
+            return
+        if url.startswith('//'):
+            url = 'https:' + url
+        if re.match(r'^https?://', url, re.I) and url not in urls:
+            urls.append(url)
+
+    for match in re.finditer(r'\bhttps?://[^\s\'"<>]+', text):
+        add(match.group(0).rstrip('),;'))
+
+    for raw_line in text.replace('\r\n', '\n').split('\n'):
+        line = raw_line.strip()
+        if not line:
+            continue
+        match = re.match(r'^(?:Request URL|请求 URL|请求网址)\s*:\s*(.+)$', line, re.I)
+        if match:
+            add(match.group(1))
+            continue
+        match = re.match(r'^(GET|POST)\s+(\S+)', line, re.I)
+        if match:
+            add(match.group(2))
+
+    headers, _ = parse_ls_credential_headers(text)
+    header_map = {str(k).lower(): str(v) for k, v in headers.items()}
+    authority = header_map.get(':authority') or header_map.get('host')
+    path = header_map.get(':path')
+    scheme = header_map.get(':scheme') or 'https'
+    if authority and path:
+        add(f'{scheme}://{authority}{path}')
+    referer = header_map.get('referer') or header_map.get('referrer')
+    if referer:
+        add(referer)
+
+    return urls
+
+
+def build_ls_request_headers(token='', credential_text=''):
+    pasted_headers, pasted_token = parse_ls_credential_headers(credential_text)
+    token = str(token or '').strip()
+    if token and token.count('.') < 2:
+        _, extracted = parse_ls_credential_headers(token)
+        token = extracted
+    if not token:
+        token = pasted_token
+    headers = {
+        'Accept': 'application/json, text/plain, */*',
+        'User-Agent': 'GMCommandTool/1.0',
+    }
+    for key, value in pasted_headers.items():
+        lower = key.lower()
+        if lower in ('authorization', 'cookie', 'x-access-token', 'x-token', 'x-requested-with', 'referer', 'origin'):
+            headers[key] = value
+    if token:
+        headers['Authorization'] = headers.get('Authorization') or ('Bearer ' + token)
+        headers['X-Access-Token'] = headers.get('X-Access-Token') or token
+        headers['X-Token'] = headers.get('X-Token') or token
+    return headers, token
+
+
+def ls_request_json(url, headers):
+    headers = {
+        key: value for key, value in (headers or {}).items()
+        if key and value
+    }
+    req = urllib.request.Request(url, headers=headers, method='GET')
+    context = ssl._create_unverified_context()
+    with urllib.request.urlopen(req, timeout=8, context=context) as resp:
+        raw = resp.read(2 * 1024 * 1024)
+        text = raw.decode(resp.headers.get_content_charset() or 'utf-8', errors='replace')
+        ctype = resp.headers.get('Content-Type', '')
+        if 'json' not in ctype.lower() and not text.lstrip().startswith(('{', '[')):
+            raise ValueError('返回内容不是 JSON')
+        return json.loads(text)
+
+
+def ls_list_score(items, key_hint=''):
+    if not isinstance(items, list) or not items:
+        return 0
+    dict_items = [item for item in items if isinstance(item, dict)]
+    if not dict_items:
+        return 0
+    sample = dict_items[:10]
+    key_score = 0
+    for item in sample:
+        keys = set(item.keys())
+        key_score += len(keys & LS_ENV_KEYS)
+    hint_score = 6 if key_hint in LS_LIST_KEYS else 0
+    return hint_score + key_score + min(len(dict_items), 20)
+
+
+def find_ls_lists(value, key_hint='', path=''):
+    found = []
+    if isinstance(value, list):
+        score = ls_list_score(value, key_hint)
+        if score:
+            found.append({'path': path or key_hint or '$', 'score': score, 'items': value})
+        for idx, item in enumerate(value[:20]):
+            found.extend(find_ls_lists(item, '', f'{path}[{idx}]'))
+    elif isinstance(value, dict):
+        for key, child in value.items():
+            child_path = f'{path}.{key}' if path else str(key)
+            found.extend(find_ls_lists(child, key, child_path))
+    return found
+
+
+def pick_ls_environment_list(data):
+    candidates = find_ls_lists(data)
+    if not candidates:
+        return [], ''
+    candidates.sort(key=lambda item: (item['score'], len(item['items'])), reverse=True)
+    best = candidates[0]
+    return [item for item in best['items'] if isinstance(item, dict)], best['path']
+
+
+def compact_ls_env(item):
+    def first(*keys):
+        for key in keys:
+            value = item.get(key)
+            if value not in (None, ''):
+                return value
+        return ''
+    return {
+        'id': first('id', 'appId', 'applicationId', 'uuid'),
+        'name': first('name', 'appName', 'applicationName', 'envName', 'environmentName'),
+        'env': first('env', 'envName', 'environment', 'environmentName'),
+        'cluster': first('cluster', 'clusterName', 'cluster_name'),
+        'namespace': first('namespace', 'ns'),
+        'status': first('status', 'phase', 'state'),
+        'branch': first('gitBranch', 'branch', 'git_branch'),
+        'chart': first('chartName', 'chart', 'helmChart'),
+        'repo': first('repo', 'repoUrl', 'helmRepo'),
+    }
+
+
+def build_ks_catalog(items):
+    environments = []
+    categories = {}
+
+    def first(item, *keys):
+        for key in keys:
+            value = item.get(key)
+            if value not in (None, ''):
+                return value
+        return ''
+
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        raw_links = item.get('links') or item.get('urls') or item.get('link_urls') or []
+        if isinstance(raw_links, str):
+            links = [raw_links]
+        elif isinstance(raw_links, list):
+            links = []
+            for link in raw_links:
+                if isinstance(link, dict):
+                    value = first(link, 'url', 'href', 'link', 'address')
+                    if value:
+                        links.append(str(value))
+                elif link:
+                    links.append(str(link))
+        else:
+            links = []
+        app_name = first(item, 'name', 'app_name', 'appName', 'application_name', 'applicationName')
+        cluster = first(item, 'cluster_name', 'clusterName', 'cluster', 'current_cluster_name', 'currentCluster')
+        namespace = first(item, 'namespace', 'ns')
+        env_name = first(item, 'env', 'env_name', 'envName', 'environment', 'environment_name', 'environmentName')
+        if not env_name:
+            env_name = cluster or namespace or app_name
+        category = first(item, 'project_name', 'projectName', 'project', 'biz_name', 'bizName', 'biz', 'category', 'group')
+        if not category:
+            is_public = item.get('is_public')
+            category = '公共应用' if is_public is True or is_public == 1 else '我的应用'
+        url_parts = [str(cluster or ''), str(namespace or ''), str(app_name or ''), str(env_name or '')]
+        key = '|'.join(part.lower().strip() for part in url_parts if part)
+        if not key:
+            key = str(first(item, 'id', 'app_id', 'appId', 'uuid') or len(environments))
+        env = {
+            'key': key,
+            'category': str(category),
+            'name': str(env_name or app_name or cluster or '未命名环境'),
+            'app_name': str(app_name or ''),
+            'cluster': str(cluster or ''),
+            'namespace': str(namespace or ''),
+            'status': str(first(item, 'status', 'phase', 'state', 'health_status', 'sync_status') or ''),
+            'branch': str(first(item, 'git_branch', 'gitBranch', 'branch') or ''),
+            'links': links[:20],
+            'raw_id': str(first(item, 'id', 'app_id', 'appId', 'uuid') or ''),
+        }
+        environments.append(env)
+        categories.setdefault(env['category'], 0)
+        categories[env['category']] += 1
+
+    environments.sort(key=lambda env: (env['category'], env['name'], env['app_name']))
+    return {
+        'categories': [{'name': name, 'count': count} for name, count in sorted(categories.items())],
+        'environments': environments[:500],
+    }
+
+
+def inspect_ls_token(token, base_url='', credential_text=''):
+    request_headers, token = build_ls_request_headers(token, credential_text)
+    if not token and not any(key.lower() in ('authorization', 'cookie') for key in request_headers):
+        return {'ok': False, 'msg': '请粘贴 Token、Authorization、Cookie 或完整 Request Headers'}
+    payload = {}
+    profile_error = ''
+    if token:
+        try:
+            payload = decode_jwt_payload(token)
+        except ValueError as exc:
+            profile_error = str(exc)
+
+    bases = []
+    custom = normalize_ls_base_url(base_url)
+    if custom:
+        bases.append(custom)
+    for url in extract_ls_request_urls(credential_text):
+        if url not in bases:
+            bases.append(url)
+    bases.extend([url for url in LS_DEFAULT_BASE_URLS if url not in bases])
+
+    attempts = []
+    best_items = []
+    best_path = ''
+    best_url = ''
+    for base in bases:
+        for url in make_ls_urls(base):
+            try:
+                data = ls_request_json(url, request_headers)
+                items, path = pick_ls_environment_list(data)
+                attempts.append({'url': url, 'ok': True, 'count': len(items), 'path': path})
+                if len(items) > len(best_items):
+                    best_items, best_path, best_url = items, path, url
+                if items:
+                    break
+            except urllib.error.HTTPError as exc:
+                attempts.append({'url': url, 'ok': False, 'status': exc.code, 'error': exc.reason})
+            except Exception as exc:
+                attempts.append({'url': url, 'ok': False, 'error': str(exc)[:160]})
+        if best_items:
+            break
+
+    return {
+        'ok': True,
+        'profile': token_profile(payload),
+        'profile_error': profile_error,
+        'env_count': len(best_items),
+        'env_path': best_path,
+        'source_url': best_url,
+        'environments': [compact_ls_env(item) for item in best_items[:100]],
+        'catalog': build_ks_catalog(best_items),
+        'attempts': attempts[:80],
+        'remote_ok': bool(best_items),
+        'msg': '' if best_items else 'Token 已解析，但没有从默认 LS 接口识别到环境列表；请填写实际 LS 页面或 API 地址后重试。',
+    }
+
+
+KS_DEFAULT_BASE_URL = 'https://zxty.tuyoo.com'
+KS_LOGIN_CASE_NAME = 'TestLoginGvg'
+
+
+def _load_json_object(path, default=None):
+    try:
+        with open(path, 'r', encoding='utf-8') as handle:
+            value = json.load(handle)
+            return value if isinstance(value, dict) else (default or {})
+    except (OSError, json.JSONDecodeError):
+        return default or {}
+
+
+def _save_json_object(path, value):
+    tmp = path + '.tmp'
+    with open(tmp, 'w', encoding='utf-8') as handle:
+        json.dump(value, handle, ensure_ascii=False, indent=2)
+    os.replace(tmp, path)
+
+
+def load_ks_config():
+    config = _load_json_object(KS_CONFIG_FILE)
+    env_token = str(os.environ.get('GM_KS_TOKEN') or '').strip()
+    env_base = str(os.environ.get('GM_KS_BASE_URL') or '').strip()
+    return {
+        'base_url': normalize_ls_base_url(env_base or config.get('base_url') or KS_DEFAULT_BASE_URL),
+        'token': env_token or str(config.get('token') or '').strip(),
+    }
+
+
+def save_ks_config(base_url, token):
+    _save_json_object(KS_CONFIG_FILE, {
+        'base_url': normalize_ls_base_url(base_url or KS_DEFAULT_BASE_URL),
+        'token': str(token or '').strip(),
+    })
+
+
+def ks_token_status(token):
+    status = {'configured': bool(token), 'expired': False, 'expires_at': 0, 'profile': {}}
+    if not token:
+        return status
+    try:
+        payload = decode_jwt_payload(token)
+        expires_at = int(payload.get('exp') or 0)
+        status.update({
+            'expired': bool(expires_at and expires_at <= int(time.time())),
+            'expires_at': expires_at,
+            'profile': token_profile(payload),
+        })
+    except ValueError as exc:
+        status['error'] = str(exc)
+    return status
+
+
+def ks_request_json(base_url, token, path, params=None):
+    base_url = normalize_ls_base_url(base_url or KS_DEFAULT_BASE_URL)
+    url = urljoin(base_url + '/', str(path or '').lstrip('/'))
+    if params:
+        url += ('&' if '?' in url else '?') + urlencode(params)
+    req = urllib.request.Request(url, headers={
+        'Accept': 'application/json, text/plain, */*',
+        'Authorization': 'Bearer ' + str(token or '').strip(),
+        'User-Agent': 'GMCommandTool/2.0',
+    }, method='GET')
+    try:
+        with urllib.request.urlopen(req, timeout=15) as response:
+            raw = response.read(8 * 1024 * 1024)
+    except urllib.error.HTTPError as exc:
+        try:
+            detail = exc.read(4096).decode('utf-8', errors='replace')
+        except OSError:
+            detail = ''
+        if exc.code == 401:
+            raise ValueError('KS Token 已失效或无访问权限') from exc
+        raise ValueError(f'KS 接口请求失败（HTTP {exc.code}）：{detail[:240]}') from exc
+    except urllib.error.URLError as exc:
+        raise ValueError(f'无法连接 KS：{exc.reason}') from exc
+    try:
+        data = json.loads(raw.decode('utf-8'))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError('KS 接口返回内容不是有效 JSON') from exc
+    if not isinstance(data, (dict, list)):
+        raise ValueError('KS 接口返回的数据格式不受支持')
+    return data
+
+
+def ks_login_url(links):
+    normalized = []
+    for link in links if isinstance(links, list) else []:
+        if not isinstance(link, dict):
+            continue
+        url = normalize_game_url(link.get('url'))
+        if url:
+            normalized.append((str(link.get('comment') or '').strip(), url))
+    for comment, url in normalized:
+        if comment == '游戏登录地址':
+            return url
+    for _, url in normalized:
+        host = (urlparse(url).hostname or '').lower()
+        if host.startswith('login-') or '-login-' in host:
+            return url
+    return ''
+
+
+def ks_fetch_applications(base_url, token, project, cluster_name):
+    applications = []
+    seen = set()
+    for is_public in (0, 1):
+        page = 1
+        while page <= 20:
+            data = ks_request_json(base_url, token, '/idp/apk/applications', {
+                'page': page,
+                'page_size': 200,
+                'project_id': project.get('id', ''),
+                'cluster_name': cluster_name,
+                'is_deleted': 'false',
+                'in_recycle_bin': 'false',
+                'is_public': is_public,
+            })
+            results = data.get('results', []) if isinstance(data, dict) else []
+            if not isinstance(results, list):
+                results = []
+            for app in results:
+                if not isinstance(app, dict):
+                    continue
+                app_id = str(app.get('id') or '').strip()
+                if not app_id or app_id in seen:
+                    continue
+                login_url = ks_login_url(app.get('links'))
+                if not login_url:
+                    continue
+                seen.add(app_id)
+                applications.append({
+                    'key': app_id,
+                    'raw_id': app_id,
+                    'app_id': app_id,
+                    'name': str(app.get('name') or app_id),
+                    'app_name': str(app.get('name') or app_id),
+                    'category': str(project.get('name') or project.get('code') or '未命名项目'),
+                    'project_id': str(project.get('id') or ''),
+                    'project_name': str(project.get('name') or ''),
+                    'project_code': str(project.get('code') or ''),
+                    'cluster': str(cluster_name or ''),
+                    'namespace': str(app.get('namespace') or ''),
+                    'status': str(app.get('status') or ''),
+                    'is_public': bool(is_public),
+                    'login_url': login_url,
+                    'environment_url': login_url,
+                    'links': [
+                        normalize_game_url(item.get('url'))
+                        for item in (app.get('links') or []) if isinstance(item, dict) and item.get('url')
+                    ],
+                    'accounts': [],
+                })
+            total = int(data.get('total') or len(results)) if isinstance(data, dict) else len(results)
+            if not results or page * 200 >= total:
+                break
+            page += 1
+    return applications
+
+
+def _text_value(value):
+    return '' if value in (None, '') else str(value).strip()
+
+
+def ks_account_cache_id(environment_key, account):
+    role_id = _text_value(account.get('role_id'))
+    account_id = _text_value(account.get('account_id'))
+    account_name = _text_value(account.get('account_name'))
+    if role_id:
+        principal = 'role:' + role_id
+    elif account_id:
+        principal = 'account:' + account_id
+    else:
+        principal = 'name:' + account_name
+    identity = '|'.join((
+        _text_value(environment_key),
+        _text_value(account.get('server_id')),
+        principal,
+    ))
+    return hashlib.sha256(identity.encode('utf-8')).hexdigest()[:20]
+
+
+def ks_merge_account_record(previous, current):
+    previous = dict(previous or {})
+    current = dict(current or {})
+    previous_time = _text_value(previous.get('operation_time') or previous.get('last_seen'))
+    current_time = _text_value(current.get('operation_time') or current.get('last_seen'))
+    older, newer = (previous, current) if current_time >= previous_time else (current, previous)
+    merged = dict(older)
+    for key, value in newer.items():
+        if value not in (None, '') or key not in merged:
+            merged[key] = value
+    latest_time = max(previous_time, current_time)
+    if latest_time:
+        merged['last_seen'] = latest_time
+    return merged
+
+
+def ks_parse_login_accounts(logs, environment):
+    records = []
+
+    def visit(value, server_id='', operation_time=''):
+        if isinstance(value, dict):
+            current_server = _text_value(
+                value.get('server_id') if value.get('server_id') not in (None, '') else
+                value.get('serverId') if value.get('serverId') not in (None, '') else
+                server_id
+            )
+            account_name = _text_value(
+                value.get('account_name') or value.get('accountName') or
+                value.get('username') or value.get('user_name')
+            )
+            role_id = _text_value(value.get('role_id') or value.get('roleId'))
+            account_id = _text_value(
+                value.get('account_id') or value.get('accountId') or
+                value.get('user_id') or value.get('userId')
+            )
+            role_name = _text_value(value.get('role_name') or value.get('roleName'))
+            if account_name and (role_id or account_id):
+                records.append({
+                    'account_name': account_name,
+                    'account_label': role_name or account_name,
+                    'account_id': account_id,
+                    'role_id': role_id,
+                    'role_name': role_name,
+                    'server_id': current_server,
+                    'operation_time': operation_time,
+                    'source': 'ks_login_record',
+                })
+            for key, child in value.items():
+                child_server = current_server
+                if key.isdigit() and isinstance(child, (dict, list)):
+                    child_server = key
+                visit(child, child_server, operation_time)
+        elif isinstance(value, list):
+            for child in value:
+                visit(child, server_id, operation_time)
+
+    for log in logs if isinstance(logs, list) else []:
+        if not isinstance(log, dict):
+            continue
+        operation_time = _text_value(log.get('operation_time'))
+        visit(log.get('result_report'), '', operation_time)
+        params = log.get('params') if isinstance(log.get('params'), dict) else {}
+        visit(params.get('selected_users'), _text_value(params.get('server_id')), operation_time)
+        for event in log.get('log_content') if isinstance(log.get('log_content'), list) else []:
+            text = json.dumps(event, ensure_ascii=False) if isinstance(event, dict) else str(event or '')
+            for match in re.finditer(r'([0-9]+\.A\.account\.[0-9]+).*?role_id[=:]([0-9]+)', text):
+                records.append({
+                    'account_name': match.group(1),
+                    'account_label': match.group(1),
+                    'account_id': '',
+                    'role_id': match.group(2),
+                    'role_name': '',
+                    'server_id': _text_value(params.get('server_id')),
+                    'operation_time': operation_time,
+                    'source': 'ks_login_log',
+                })
+
+    deduplicated = {}
+    environment_key = str(environment.get('key') or '')
+    for record in records:
+        cache_id = ks_account_cache_id(environment_key, record)
+        record['cache_id'] = cache_id
+        record['environment_key'] = environment_key
+        record['environment_name'] = environment.get('name', '')
+        record['environment_url'] = environment.get('login_url', '')
+        previous = deduplicated.get(cache_id)
+        deduplicated[cache_id] = ks_merge_account_record(previous, record)
+    return sorted(
+        deduplicated.values(),
+        key=lambda item: (item.get('operation_time', ''), item.get('account_name', '')),
+        reverse=True,
+    )
+
+
+def ks_fetch_environment_accounts(base_url, token, environment):
+    data = ks_request_json(base_url, token, '/idp/apk/logs/', {
+        'application_name': environment.get('app_name', ''),
+        'case_name': KS_LOGIN_CASE_NAME,
+    })
+    logs = data.get('logs', []) if isinstance(data, dict) else []
+    return ks_parse_login_accounts(logs, environment)
+
+
+def ks_merge_cached_accounts(environments, old_catalog):
+    old_environments = {
+        str(item.get('key') or ''): item
+        for item in (old_catalog.get('environments') or []) if isinstance(item, dict)
+    }
+    total_accounts = 0
+    for environment in environments:
+        old_accounts = {}
+        for item in old_environments.get(environment['key'], {}).get('accounts') or []:
+            if not isinstance(item, dict):
+                continue
+            cache_id = ks_account_cache_id(environment['key'], item)
+            normalized = {**item, 'cache_id': cache_id}
+            old_accounts[cache_id] = ks_merge_account_record(old_accounts.get(cache_id), normalized)
+        merged = dict(old_accounts)
+        for account in environment.get('accounts', []):
+            previous = old_accounts.get(account.get('cache_id'), {})
+            merged[account['cache_id']] = ks_merge_account_record(previous, account)
+        environment['accounts'] = sorted(
+            merged.values(),
+            key=lambda item: (item.get('last_seen', ''), item.get('account_name', '')),
+            reverse=True,
+        )[:500]
+        environment['account_count'] = len(environment['accounts'])
+        total_accounts += environment['account_count']
+    return total_accounts
+
+
+def sync_ks_catalog(token='', base_url='', persist_config=False):
+    config = load_ks_config()
+    _, parsed_token = parse_ls_credential_headers(token)
+    token = parsed_token or str(token or '').strip() or config.get('token', '')
+    base_url = normalize_ls_base_url(base_url or config.get('base_url') or KS_DEFAULT_BASE_URL)
+    token_state = ks_token_status(token)
+    if not token:
+        return {'ok': False, 'code': 'ks_token_missing', 'msg': '未配置 KS Token'}
+    if token_state.get('expired'):
+        return {'ok': False, 'code': 'ks_token_expired', 'msg': 'KS Token 已过期，请更新 Token'}
+    if persist_config:
+        save_ks_config(base_url, token)
+
+    projects_data = ks_request_json(base_url, token, '/idp/apk/projects/all')
+    projects = projects_data.get('results', []) if isinstance(projects_data, dict) else []
+    environments = []
+    for project in projects if isinstance(projects, list) else []:
+        if not isinstance(project, dict) or not project.get('id'):
+            continue
+        detail = ks_request_json(base_url, token, f'/idp/apk/project/{project["id"]}')
+        cluster_names = []
+        for cluster in detail.get('kube_cluster_configs', []) if isinstance(detail, dict) else []:
+            name = _text_value(cluster.get('name')) if isinstance(cluster, dict) else ''
+            if name and name not in cluster_names:
+                cluster_names.append(name)
+        for cluster_name in cluster_names:
+            environments.extend(ks_fetch_applications(base_url, token, project, cluster_name))
+
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        futures = {
+            pool.submit(ks_fetch_environment_accounts, base_url, token, environment): environment
+            for environment in environments
+        }
+        for future in as_completed(futures):
+            environment = futures[future]
+            try:
+                environment['accounts'] = future.result()
+            except Exception as exc:
+                environment['accounts'] = []
+                environment['account_error'] = str(exc)[:240]
+
+    old_cache = _load_json_object(KS_ACCOUNT_CACHE_FILE)
+    old_catalog = old_cache.get('catalog', {}) if isinstance(old_cache, dict) else {}
+    account_count = ks_merge_cached_accounts(environments, old_catalog)
+    environments.sort(key=lambda item: (
+        item.get('category', ''), item.get('cluster', ''), item.get('name', ''),
+    ))
+    categories = {}
+    for environment in environments:
+        categories[environment['category']] = categories.get(environment['category'], 0) + 1
+    catalog = {
+        'categories': [{'name': name, 'count': count} for name, count in sorted(categories.items())],
+        'environments': environments,
+        'environment_count': len(environments),
+        'account_count': account_count,
+        'updated_at': now_str(),
+        'source_url': base_url,
+    }
+    with _ks_cache_lock:
+        _save_json_object(KS_ACCOUNT_CACHE_FILE, {
+            'catalog': catalog,
+            'profile': token_state.get('profile', {}),
+            'expires_at': token_state.get('expires_at', 0),
+        })
+    return {
+        'ok': True,
+        'catalog': catalog,
+        'env_count': len(environments),
+        'account_count': account_count,
+        'profile': token_state.get('profile', {}),
+        'expires_at': token_state.get('expires_at', 0),
+        'source_url': base_url,
+        'remote_ok': True,
+        'msg': f'已同步 {len(environments)} 个环境、{account_count} 个历史账号',
+    }
+
+
+def _ks_display_account_match(account, target):
+    if normalize_game_url(account.get('environment_url')) != normalize_game_url(target.get('environment_url')):
+        return -1
+    score = 0
+    comparisons = (
+        ('role_id', 5), ('account_id', 4), ('account_name', 3), ('server_id', 2),
+    )
+    for field, weight in comparisons:
+        left = _text_value(account.get(field))
+        right = _text_value(target.get(field))
+        if left and right:
+            if left != right:
+                return -1
+            score += weight
+    return score if score > 0 else -1
+
+
+def ks_catalog_with_online(targets=None):
+    with _ks_cache_lock:
+        cache = _load_json_object(KS_ACCOUNT_CACHE_FILE)
+    catalog = json.loads(json.dumps(cache.get('catalog', {'categories': [], 'environments': []}), ensure_ascii=False))
+    environments = catalog.setdefault('environments', [])
+    targets = list(targets or [])
+    matched_target_ids = set()
+
+    for environment in environments:
+        for account in environment.get('accounts', []):
+            account.update({
+                'id': 'cache:' + str(account.get('cache_id') or uuid.uuid4().hex[:12]),
+                'connected': False,
+                'online': False,
+                'ready': False,
+                'dispatchable': False,
+            })
+            best_target = None
+            best_score = -1
+            for target in targets:
+                if target.get('id') in matched_target_ids:
+                    continue
+                score = _ks_display_account_match(account, target)
+                if score > best_score:
+                    best_target, best_score = target, score
+            if best_target is not None:
+                matched_target_ids.add(best_target.get('id'))
+                preserved_cache_id = account.get('cache_id')
+                account.update(best_target)
+                account.update({
+                    'cache_id': preserved_cache_id,
+                    'environment_key': environment.get('key', ''),
+                    'environment_name': environment.get('name', ''),
+                    'environment_url': environment.get('login_url', '') or best_target.get('environment_url', ''),
+                    'connected': True,
+                    'online': True,
+                })
+
+    for target in targets:
+        if target.get('id') in matched_target_ids:
+            continue
+        target_url = normalize_game_url(target.get('environment_url'))
+        environment = next((
+            item for item in environments
+            if normalize_game_url(item.get('login_url') or item.get('environment_url')) == target_url
+        ), None)
+        if environment is None:
+            key = 'online:' + hashlib.sha256(target_url.encode('utf-8')).hexdigest()[:16]
+            environment = {
+                'key': key,
+                'raw_id': '',
+                'name': target.get('environment') or _cocos_environment_name(target_url),
+                'app_name': '',
+                'category': '未纳入 KS 目录',
+                'cluster': '',
+                'namespace': '',
+                'status': '',
+                'login_url': target_url,
+                'environment_url': target_url,
+                'links': [target_url] if target_url else [],
+                'accounts': [],
+            }
+            environments.append(environment)
+        environment.setdefault('accounts', []).append({
+            **target,
+            'cache_id': '',
+            'environment_key': environment.get('key', ''),
+            'environment_name': environment.get('name', ''),
+            'connected': True,
+            'online': True,
+        })
+
+    account_count = 0
+    online_count = 0
+    for environment in environments:
+        accounts = environment.get('accounts', [])
+        environment['account_count'] = len(accounts)
+        environment['online_count'] = sum(1 for item in accounts if item.get('connected'))
+        account_count += environment['account_count']
+        online_count += environment['online_count']
+    catalog.update({
+        'environment_count': len(environments),
+        'account_count': account_count,
+        'online_count': online_count,
+        'configured': load_ks_config().get('token', '') != '',
+        'expires_at': cache.get('expires_at', 0),
+        'profile': cache.get('profile', {}),
+    })
+    return catalog
+
+
+def ks_catalog_status():
+    config = load_ks_config()
+    token_state = ks_token_status(config.get('token', ''))
+    with _cocos_bridge_lock:
+        connections = [item for item in _cocos_connections.values() if item.alive]
+    catalog = ks_catalog_with_online([item.target_snapshot() for item in connections])
+    return {
+        'ok': True,
+        'catalog': catalog,
+        'configured': token_state.get('configured', False),
+        'expired': token_state.get('expired', False),
+        'expires_at': token_state.get('expires_at', 0),
+        'profile': token_state.get('profile', {}),
+    }
 
 
 class GMHandler(SimpleHTTPRequestHandler):
@@ -1900,6 +2948,8 @@ class GMHandler(SimpleHTTPRequestHandler):
                 self._refresh_items()
             elif path == '/api/cocos/status':
                 self._cocos_status()
+            elif path == '/api/ks/catalog':
+                self._send_json(ks_catalog_status())
             elif path == '/api/git/repos':
                 if self._require_admin() is None:
                     return
@@ -1945,10 +2995,14 @@ class GMHandler(SimpleHTTPRequestHandler):
             self._create_category()
         elif path == '/api/cocos/execute':
             self._cocos_execute()
+        elif path == '/api/ks/sync':
+            self._ks_sync()
         elif path == '/api/git/pull':
             self._git_pull()
         elif path == '/api/git/resolve-excel-pull':
             self._git_resolve_excel_pull()
+        elif path == '/api/ls/token-envs':
+            self._ls_token_envs()
         else:
             self.send_error(404)
 
@@ -2474,7 +3528,8 @@ class GMHandler(SimpleHTTPRequestHandler):
         command = data.get('command', '')
         target_id = data.get('target_id', '')
         target_ids = data.get('target_ids', [])
-        result = execute_cocos_commands(command, target_id, target_ids)
+        target_specs = data.get('target_specs', [])
+        result = execute_cocos_commands(command, target_id, target_ids, target_specs)
         self._send_json(result, status=200 if result.get('ok') else 409)
 
     # ---------- Git 拉取 ----------
@@ -2523,6 +3578,31 @@ class GMHandler(SimpleHTTPRequestHandler):
     def _git_resolve_excel_pull(self):
         job_id = start_git_pull_job(['excel'], resolve_excel=True)
         self._send_json({'ok': True, 'job_id': job_id, 'state': 'queued'}, status=202)
+
+    def _ls_token_envs(self):
+        data = self._read_json()
+        if data is None:
+            return
+        token = data.get('token', '')
+        base_url = data.get('base_url', '')
+        credential_text = data.get('credential_text', '')
+        result = sync_ks_catalog(token or credential_text, base_url, persist_config=True)
+        self._send_json(result, status=200 if result.get('ok') else 400)
+
+    def _ks_sync(self):
+        data = self._read_json()
+        if data is None:
+            return
+        token = data.get('token', '') or data.get('credential_text', '')
+        base_url = data.get('base_url', '')
+        try:
+            result = sync_ks_catalog(token, base_url, persist_config=bool(token or base_url))
+        except ValueError as exc:
+            result = {'ok': False, 'code': 'ks_sync_failed', 'msg': str(exc)}
+        except Exception as exc:
+            print(f'[KS] sync failed: {exc}')
+            result = {'ok': False, 'code': 'ks_sync_failed', 'msg': 'KS 环境同步失败'}
+        self._send_json(result, status=200 if result.get('ok') else 400)
 
     def _read_json(self):
         length = int(self.headers.get('Content-Length', 0))
