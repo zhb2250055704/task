@@ -4384,6 +4384,53 @@
         <button class="btn btn-ghost" onclick="clearScriptSearch()">清空</button>
         <button class="btn btn-primary admin-only" onclick="openScriptModal()" style="display:none">新增脚本</button>
       </div>
+      <section class="cocos-target-panel" aria-label="脚本执行账号">
+        <div class="cocos-target-head">
+          <span class="cocos-target-title">脚本执行账号</span>
+          <span id="scriptCocosConnectionStatus" class="cocos-status">检测中</span>
+          <div id="scriptTargetSummary" class="cocos-target-summary"></div>
+          <button class="btn btn-ghost" onclick="loadCocosStatus()">刷新状态</button>
+        </div>
+        <div class="ks-catalog-toolbar">
+          <div class="ks-catalog-field">
+            <label for="scriptKsCategorySelect">KS 分类</label>
+            <select id="scriptKsCategorySelect" onchange="selectScriptKsCategory(this.value)"></select>
+          </div>
+          <div class="ks-catalog-field">
+            <label for="scriptKsEnvironmentSelect">个人环境</label>
+            <select id="scriptKsEnvironmentSelect" onchange="selectScriptKsEnvironment(this.value)"></select>
+          </div>
+          <div class="ks-catalog-actions">
+            <span class="ks-catalog-hint" id="scriptCatalogHint">正在读取个人环境与账号</span>
+          </div>
+        </div>
+        <div class="cocos-account-workspace">
+          <div class="cocos-account-toolbar">
+            <div class="cocos-account-heading">
+              执行账号
+              <span id="scriptAccountStats">显示 0/0 · 已选 0</span>
+            </div>
+            <input id="scriptAccountSearch" class="cocos-account-search" type="search"
+              placeholder="搜索账号 / 角色 / 区服 / 环境" autocomplete="off"
+              oninput="setScriptAccountSearch(this.value)">
+            <div class="cocos-filter-group" role="group" aria-label="脚本账号筛选">
+              <button type="button" class="cocos-filter-btn active" data-script-account-filter="all" onclick="setScriptAccountFilter('all')">全部</button>
+              <button type="button" class="cocos-filter-btn" data-script-account-filter="online" onclick="setScriptAccountFilter('online')">客户端在线</button>
+              <button type="button" class="cocos-filter-btn" data-script-account-filter="selected" onclick="setScriptAccountFilter('selected')">已选</button>
+            </div>
+            <div class="cocos-batch-actions">
+              <button type="button" class="cocos-mini-btn" onclick="selectScriptExecutableTargets()">选择可执行</button>
+              <button type="button" class="cocos-mini-btn" onclick="clearCocosTargetSelection()">清空选择</button>
+            </div>
+          </div>
+          <div id="scriptAccountList" class="cocos-account-list"></div>
+          <div class="cocos-account-footer">
+            <span class="cocos-legend selected">蓝色边框：已选</span>
+            <span class="cocos-legend online">绿色：客户端在线 · 橙色：KS 可执行</span>
+            <span id="scriptSelectionHint">选择账号后，可直接点击脚本卡片中的“使用”</span>
+          </div>
+        </div>
+      </section>
       <div class="container">
         <div id="scriptGroups"></div>
         <div id="scriptEmpty" class="empty" style="display:none">暂无脚本，点击「新增脚本」开始</div>
@@ -4786,6 +4833,10 @@ let selectedCocosTargetIds = new Set();
 let cocosAccountFilter = 'all';
 let cocosAccountSearch = '';
 let cocosSelectionInitialized = false;
+let scriptTargetCategory = '';
+let scriptTargetEnvironmentKey = '';
+let scriptAccountFilter = 'all';
+let scriptAccountSearch = '';
 let ksCatalog = { categories: [], environments: [] };
 let selectedKsCategory = '';
 let selectedKsEnvironmentKey = '';
@@ -4908,7 +4959,11 @@ function switchView(view) {
     renderKsCatalogFilters();
     loadList();
   }
-  else if (view === 'scripts') loadScripts();
+  else if (view === 'scripts') {
+    renderScriptTargetPanel();
+    loadCocosStatus();
+    loadScripts();
+  }
   else if (view === 'formulas') loadFormulas();
   else if (view === 'items') loadItems();
   else if (view === 'git') loadGitRepos();
@@ -4994,22 +5049,28 @@ function saveKsCatalog(catalog, options) {
   if (settings.persist !== false) {
     localStorage.setItem('gm_ks_catalog', JSON.stringify(ksCatalog));
   }
-  if (settings.render !== false && currentView === 'commands') {
-    renderKsCatalogFilters();
-    renderCocosAccountList();
+  if (settings.render !== false) {
+    if (currentView === 'commands') {
+      renderKsCatalogFilters();
+      renderCocosAccountList();
+    } else if (currentView === 'scripts') {
+      cocosEnvironments = ksCatalog.environments;
+      renderScriptTargetPanel();
+    }
   }
 }
 
 function cocosCatalogSignature(catalog) {
-  const onlineIdentities = (catalog.environments || []).flatMap(environment =>
-    (environment.accounts || []).filter(account => account.connected).map(account => [
-      account.id, account.port, account.client_id, account.account_id,
-      account.role_id, account.server_id, account.environment_url, account.dispatchable
+  const executionIdentities = (catalog.environments || []).flatMap(environment =>
+    (environment.accounts || []).map(account => [
+      account.id, account.cache_id, account.port, account.client_id,
+      account.account_id, account.role_id, account.server_id,
+      account.environment_url, account.dispatchable, account.ks_dispatchable
     ])
   );
   return JSON.stringify([
     catalog.updated_at || '', catalog.environment_count || 0,
-    catalog.account_count || 0, onlineIdentities
+    catalog.account_count || 0, executionIdentities
   ]);
 }
 
@@ -5177,6 +5238,7 @@ function renderCocosStatus(data) {
       empty.textContent = ksCatalogLoading || ksSyncInFlight ? '正在读取环境和账号' : '尚未同步到 KS 环境和账号';
     }
     if (content) content.style.display = 'none';
+    renderScriptTargetPanel();
     return;
   }
   if (selectedCocosEnvironmentKey && !cocosEnvironments.some(item => item.key === selectedCocosEnvironmentKey)) {
@@ -5197,6 +5259,7 @@ function renderCocosStatus(data) {
   } else {
     updateCocosTargetSummarySelection();
   }
+  renderScriptTargetPanel();
 }
 
 function getCocosTargetEntries() {
@@ -5254,6 +5317,39 @@ function renderCocosEnvironmentDetails() {
   if (stat) stat.textContent = `${connectionCount} 个连接在线`;
 }
 
+function renderCocosAccountCard(item) {
+  const ids = [];
+  if (item.account_id) ids.push('账号 ' + item.account_id);
+  if (item.role_id) ids.push('角色 ' + item.role_id);
+  if (item.server_id) ids.push('区服 ' + item.server_id);
+  const clientDispatchable = !!item.dispatchable;
+  const ksDispatchable = !!item.ks_dispatchable;
+  const executable = clientDispatchable || ksDispatchable;
+  const selected = executable && selectedCocosTargetIds.has(item.id);
+  const badgeClass = clientDispatchable ? '' : (ksDispatchable || item.connected ? 'pending' : 'history');
+  const badgeText = clientDispatchable ? '客户端在线' : (ksDispatchable ? 'KS 可执行' : (item.connected ? '身份不完整' : '信息不完整'));
+  const identityText = clientDispatchable
+    ? `端口 ${item.port} · 客户端 ${String(item.client_id || '').slice(0, 8)}`
+    : (ksDispatchable
+      ? `已创建账号 · ${item.last_seen || item.operation_time || '记录有效'}`
+      : (item.last_seen || item.operation_time ? `最近记录 ${item.last_seen || item.operation_time}` : '账号身份信息不完整'));
+  return `
+    <label class="cocos-account-card ${selected ? 'selected' : ''} ${executable ? '' : 'offline'}" title="${clientDispatchable ? '通过当前游戏客户端投递 GM 命令' : (ksDispatchable ? '通过 KS 向已创建账号投递 GM 命令' : '账号信息不完整，暂时无法执行')}">
+      <input type="checkbox" data-target-id="${esc(item.id)}" ${selected ? 'checked' : ''}
+        ${executable ? '' : 'disabled'}
+        onchange="toggleCocosTarget(this.dataset.targetId, this.checked)">
+      <span class="cocos-account-copy">
+        <span class="cocos-account-line">
+          <span class="cocos-account-name" title="${esc(item.account_label || '未识别账号')}">${esc(item.account_label || '未识别账号')}</span>
+          <span class="cocos-account-badge ${badgeClass}">${badgeText}</span>
+        </span>
+        <span class="cocos-account-meta" title="${esc(ids.join(' · ') || item.address || '信息读取中')}">${esc(ids.join(' · ') || item.address || '信息读取中')}</span>
+        <span class="cocos-account-env" title="${esc(item.environment_url || item.environment_name)}">${esc(item.environment_name)}</span>
+        <span class="cocos-account-identity">${esc(identityText)}</span>
+      </span>
+    </label>`;
+}
+
 function renderCocosAccountList() {
   const list = document.getElementById('cocosAccountList');
   if (!list) return;
@@ -5273,39 +5369,99 @@ function renderCocosAccountList() {
     updateCocosTargetSummarySelection();
     return;
   }
-  list.innerHTML = accounts.map(item => {
-    const ids = [];
-    if (item.account_id) ids.push('账号 ' + item.account_id);
-    if (item.role_id) ids.push('角色 ' + item.role_id);
-    if (item.server_id) ids.push('区服 ' + item.server_id);
-    const clientDispatchable = !!item.dispatchable;
-    const ksDispatchable = !!item.ks_dispatchable;
-    const executable = clientDispatchable || ksDispatchable;
-    const selected = executable && selectedCocosTargetIds.has(item.id);
-    const badgeClass = clientDispatchable ? '' : (ksDispatchable || item.connected ? 'pending' : 'history');
-    const badgeText = clientDispatchable ? '客户端在线' : (ksDispatchable ? 'KS 可执行' : (item.connected ? '身份不完整' : '信息不完整'));
-    const identityText = clientDispatchable
-      ? `端口 ${item.port} · 客户端 ${String(item.client_id || '').slice(0, 8)}`
-      : (ksDispatchable
-        ? `已创建账号 · ${item.last_seen || item.operation_time || '记录有效'}`
-        : (item.last_seen || item.operation_time ? `最近记录 ${item.last_seen || item.operation_time}` : '账号身份信息不完整'));
-    return `
-      <label class="cocos-account-card ${selected ? 'selected' : ''} ${executable ? '' : 'offline'}" title="${clientDispatchable ? '通过当前游戏客户端投递 GM 命令' : (ksDispatchable ? '通过 KS 向已创建账号投递 GM 命令' : '账号信息不完整，暂时无法执行')}">
-        <input type="checkbox" data-target-id="${esc(item.id)}" ${selected ? 'checked' : ''}
-          ${executable ? '' : 'disabled'}
-          onchange="toggleCocosTarget(this.dataset.targetId, this.checked)">
-        <span class="cocos-account-copy">
-          <span class="cocos-account-line">
-            <span class="cocos-account-name" title="${esc(item.account_label || '未识别账号')}">${esc(item.account_label || '未识别账号')}</span>
-            <span class="cocos-account-badge ${badgeClass}">${badgeText}</span>
-          </span>
-          <span class="cocos-account-meta" title="${esc(ids.join(' · ') || item.address || '信息读取中')}">${esc(ids.join(' · ') || item.address || '信息读取中')}</span>
-          <span class="cocos-account-env" title="${esc(item.environment_url || item.environment_name)}">${esc(item.environment_name)}</span>
-          <span class="cocos-account-identity">${esc(identityText)}</span>
-        </span>
-      </label>`;
-  }).join('');
+  list.innerHTML = accounts.map(renderCocosAccountCard).join('');
   updateCocosTargetSummarySelection();
+}
+
+function getVisibleScriptTargets() {
+  const query = scriptAccountSearch.trim().toLocaleLowerCase();
+  return getCocosTargetEntries().filter(item => {
+    if (scriptTargetCategory && item.environment_category !== scriptTargetCategory) return false;
+    if (scriptTargetEnvironmentKey && item.environment_key !== scriptTargetEnvironmentKey) return false;
+    if (scriptAccountFilter === 'online' && !item.dispatchable) return false;
+    if (scriptAccountFilter === 'selected' && !selectedCocosTargetIds.has(item.id)) return false;
+    if (!query) return true;
+    return [
+      item.account_label, item.account_id, item.account_name, item.role_id,
+      item.role_name, item.player_id, item.server_id, item.environment_name,
+      item.environment_url, item.address
+    ].filter(Boolean).join(' ').toLocaleLowerCase().includes(query);
+  });
+}
+
+function renderScriptTargetPanel() {
+  const list = document.getElementById('scriptAccountList');
+  if (!list) return;
+  const allTargets = getCocosTargetEntries();
+  const categories = [...new Set(cocosEnvironments.map(item => item.category || '').filter(Boolean))];
+  if (scriptTargetCategory && !categories.includes(scriptTargetCategory)) scriptTargetCategory = '';
+  const categorySelect = document.getElementById('scriptKsCategorySelect');
+  categorySelect.innerHTML = `<option value="">全部分类（${cocosEnvironments.length}）</option>` + categories.map(name => {
+    const count = cocosEnvironments.filter(item => (item.category || '') === name).length;
+    return `<option value="${esc(name)}"${name === scriptTargetCategory ? ' selected' : ''}>${esc(name)}（${count}）</option>`;
+  }).join('');
+
+  const filteredEnvironments = scriptTargetCategory
+    ? cocosEnvironments.filter(item => (item.category || '') === scriptTargetCategory)
+    : cocosEnvironments;
+  if (scriptTargetEnvironmentKey && !filteredEnvironments.some(item => item.key === scriptTargetEnvironmentKey)) {
+    scriptTargetEnvironmentKey = '';
+  }
+  const environmentSelect = document.getElementById('scriptKsEnvironmentSelect');
+  environmentSelect.innerHTML = `<option value="">全部个人环境（${filteredEnvironments.length}）</option>` + filteredEnvironments.map(item =>
+    `<option value="${esc(item.key)}"${item.key === scriptTargetEnvironmentKey ? ' selected' : ''}>${esc(item.name)}（${Number(item.account_count) || 0} 个账号）</option>`
+  ).join('');
+
+  const accounts = getVisibleScriptTargets();
+  const executableCount = allTargets.filter(isCocosTargetExecutable).length;
+  const onlineCount = allTargets.filter(item => item.connected).length;
+  const summary = document.getElementById('scriptTargetSummary');
+  summary.innerHTML = `<span class="cocos-target-count">${cocosEnvironments.length} 个环境</span><span class="cocos-target-count">${allTargets.length} 个账号</span><span class="cocos-target-count">${executableCount} 个可执行</span><span class="cocos-target-count">${onlineCount} 个客户端在线</span><span class="cocos-target-count">已选 ${selectedCocosTargetIds.size}</span>`;
+  document.getElementById('scriptAccountStats').textContent = `显示 ${accounts.length}/${allTargets.length} · 已选 ${selectedCocosTargetIds.size}`;
+  document.getElementById('scriptCatalogHint').textContent = ksSyncInFlight
+    ? '正在同步个人环境与已创建账号'
+    : `${cocosEnvironments.length} 个个人环境 · ${allTargets.length} 个已创建账号`;
+  document.getElementById('scriptSelectionHint').textContent = selectedCocosTargetIds.size
+    ? `本次脚本将发送给 ${selectedCocosTargetIds.size} 个账号`
+    : '选择账号后，可直接点击脚本卡片中的“使用”';
+  const status = document.getElementById('scriptCocosConnectionStatus');
+  status.textContent = onlineCount ? '客户端已连接' : (executableCount ? 'KS 已就绪' : '不可执行');
+  status.className = 'cocos-status ' + (onlineCount || executableCount ? 'connected' : 'disconnected');
+  document.querySelectorAll('[data-script-account-filter]').forEach(button => {
+    button.classList.toggle('active', button.dataset.scriptAccountFilter === scriptAccountFilter);
+  });
+  list.innerHTML = accounts.length
+    ? accounts.map(renderCocosAccountCard).join('')
+    : '<div class="cocos-account-list-empty">当前筛选条件下没有账号</div>';
+}
+
+function selectScriptKsCategory(value) {
+  scriptTargetCategory = value || '';
+  scriptTargetEnvironmentKey = '';
+  renderScriptTargetPanel();
+}
+
+function selectScriptKsEnvironment(value) {
+  scriptTargetEnvironmentKey = value || '';
+  renderScriptTargetPanel();
+}
+
+function setScriptAccountSearch(value) {
+  scriptAccountSearch = value || '';
+  renderScriptTargetPanel();
+}
+
+function setScriptAccountFilter(filter) {
+  scriptAccountFilter = ['all', 'online', 'selected'].includes(filter) ? filter : 'all';
+  renderScriptTargetPanel();
+}
+
+function selectScriptExecutableTargets() {
+  const targets = getVisibleScriptTargets().filter(isCocosTargetExecutable);
+  targets.forEach(item => selectedCocosTargetIds.add(item.id));
+  renderCocosAccountList();
+  renderScriptTargetPanel();
+  toast(`已选择 ${targets.length} 个可执行账号`);
 }
 
 function selectCocosEnvironment(key) {
@@ -5342,18 +5498,21 @@ function toggleCocosTarget(targetId, selected) {
   if (selected && isCocosTargetExecutable(target)) selectedCocosTargetIds.add(targetId);
   else selectedCocosTargetIds.delete(targetId);
   renderCocosAccountList();
+  renderScriptTargetPanel();
 }
 
 function selectConnectedCocosTargets() {
   const targets = getVisibleCocosTargets().filter(isCocosTargetExecutable);
   targets.forEach(item => selectedCocosTargetIds.add(item.id));
   renderCocosAccountList();
+  renderScriptTargetPanel();
   toast(`已选择 ${targets.length} 个可执行账号`);
 }
 
 function clearCocosTargetSelection() {
   selectedCocosTargetIds.clear();
   renderCocosAccountList();
+  renderScriptTargetPanel();
 }
 
 function getSelectedCocosTargets() {
@@ -5452,8 +5611,43 @@ function startCocosStatusPolling() {
   if (cocosStatusTimer) clearInterval(cocosStatusTimer);
   loadCocosStatus();
   cocosStatusTimer = setInterval(() => {
-    if (currentView === 'commands') loadCocosStatus();
+    if (currentView === 'commands' || currentView === 'scripts') loadCocosStatus();
   }, 5000);
+}
+
+async function dispatchGmContent(command, label) {
+  const targets = getSelectedCocosTargets();
+  if (!targets.length) {
+    toast('请选择至少一个可执行账号');
+    return false;
+  }
+  const clientTargets = targets.filter(item => item.dispatchable);
+  const ksTargets = targets.filter(item => !item.dispatchable && item.ks_dispatchable);
+  try {
+    const res = await fetch('/api/cocos/execute', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        command,
+        target_specs: clientTargets.map(getCocosTargetSpec),
+        ks_targets: ksTargets.map(getKsTargetSpec)
+      })
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) {
+      toast(data.msg || '投递失败');
+      await loadCocosStatus();
+      return false;
+    }
+    const targetCount = Number(data.delivered_count) || Number(data.target_count) || targets.length;
+    toast(`已投递：${label}（${targetCount} 个账号）`);
+    await loadCocosStatus();
+    return true;
+  } catch (e) {
+    toast('投递请求失败');
+    await loadCocosStatus();
+    return false;
+  }
 }
 
 async function useCmd(id) {
@@ -5469,37 +5663,8 @@ async function useCmd(id) {
     return;
   }
   const command = buildExecutableCommand(item, scope);
-  const targets = getSelectedCocosTargets();
-  if (!targets.length) {
-    toast('请选择至少一个可执行账号');
-    return;
-  }
-  const clientTargets = targets.filter(item => item.dispatchable);
-  const ksTargets = targets.filter(item => !item.dispatchable && item.ks_dispatchable);
   selectedCommandId = id;
-  try {
-    const res = await fetch('/api/cocos/execute', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        command,
-        target_specs: clientTargets.map(getCocosTargetSpec),
-        ks_targets: ksTargets.map(getKsTargetSpec)
-      })
-    });
-    const data = await res.json();
-    if (!res.ok || !data.ok) {
-      toast(data.msg || '命令投递失败');
-      await loadCocosStatus();
-      return;
-    }
-    const targetCount = Number(data.delivered_count) || Number(data.target_count) || targets.length;
-    toast(`已投递：${item.name}（${targetCount} 个账号）`);
-    await loadCocosStatus();
-  } catch (e) {
-    toast('命令投递请求失败');
-    await loadCocosStatus();
-  }
+  await dispatchGmContent(command, item.name);
 }
 
 /* ============ 命令管理 ============ */
@@ -5715,6 +5880,7 @@ function renderScriptTable(items) {
             ${it.description ? `<div class="card-desc">${esc(it.description)}</div>` : ''}
             ${(it.tags || []).length ? `<div class="card-tags">${(it.tags || []).map(t => `<span class="tag">${esc(t)}</span>`).join('')}</div>` : ''}
             <div class="card-foot" onclick="event.stopPropagation()">
+              <a class="use" onclick='useScript(${JSON.stringify(it.id)})'>使用</a>
               <a onclick='copyScript(${JSON.stringify(it.id)})'>复制</a>
               ${admin ? `<a onclick='editScript(${JSON.stringify(it.id)})'>编辑</a>
               <a class="del" onclick='delScript(${JSON.stringify(it.id)})'>删除</a>` : ''}
@@ -5728,13 +5894,16 @@ function renderScriptTable(items) {
 function showScriptDetail(id) {
   const it = scriptCache[id];
   if (!it) return;
-  document.getElementById('detailUseBtn').style.display = 'none';
+  selectedCommandId = null;
   document.getElementById('detailTitle').textContent = it.name;
   let html = `<div class="detail-row"><div class="d-label">脚本内容</div><pre>${esc(it.content)}</pre></div>`;
   if (it.category) html += `<div class="detail-row"><div class="d-label">分类</div><div class="d-text">${esc(it.category)}</div></div>`;
   if ((it.tags || []).length) html += `<div class="detail-row"><div class="d-label">标签</div><div class="card-tags">${(it.tags || []).map(t => `<span class="tag">${esc(t)}</span>`).join('')}</div></div>`;
   if (it.description) html += `<div class="detail-row"><div class="d-label">描述</div><div class="d-text">${esc(it.description)}</div></div>`;
   document.getElementById('detailBody').innerHTML = html;
+  const useBtn = document.getElementById('detailUseBtn');
+  useBtn.style.display = '';
+  useBtn.onclick = () => useScript(id);
   document.getElementById('detailCopyBtn').onclick = () => { copyText(it.content); };
   document.getElementById('detailMask').classList.add('show');
 }
@@ -5779,6 +5948,15 @@ async function copyScript(id) {
   } catch (e) {
     toast('复制失败，请手动选择');
   }
+}
+
+async function useScript(id) {
+  const item = scriptCache[id];
+  if (!item || !String(item.content || '').trim()) {
+    toast('没有可执行的脚本内容');
+    return;
+  }
+  await dispatchGmContent(item.content, item.name);
 }
 
 async function submitScriptForm() {
