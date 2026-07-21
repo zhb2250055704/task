@@ -10,9 +10,11 @@ import io
 import json
 import time
 import uuid
+import base64
 import hashlib
 import secrets
 import socket
+import struct
 import threading
 import webbrowser
 import zipfile
@@ -94,6 +96,12 @@ _sessions = {}
 _git_job_lock = threading.Lock()
 _git_jobs = {}
 GIT_JOB_TTL = 30 * 60
+
+COCOS_WS_PORT = int(os.environ.get('GM_COCOS_WS_PORT', '5101'))
+COCOS_RPC_TIMEOUT = 15
+_cocos_bridge_lock = threading.Lock()
+_cocos_connection = None
+_cocos_bridge_error = ''
 
 
 def load_data():
@@ -1332,6 +1340,307 @@ def start_git_pull_job(repo_ids, resolve_excel=False):
     return job_id
 
 
+def _socket_read_exact(sock, length):
+    chunks = []
+    remaining = length
+    while remaining > 0:
+        chunk = sock.recv(remaining)
+        if not chunk:
+            raise ConnectionError('Cocos 连接已关闭')
+        chunks.append(chunk)
+        remaining -= len(chunk)
+    return b''.join(chunks)
+
+
+def _websocket_read_frame(sock):
+    header = _socket_read_exact(sock, 2)
+    first, second = header
+    opcode = first & 0x0f
+    length = second & 0x7f
+    if length == 126:
+        length = struct.unpack('!H', _socket_read_exact(sock, 2))[0]
+    elif length == 127:
+        length = struct.unpack('!Q', _socket_read_exact(sock, 8))[0]
+    if length > 16 * 1024 * 1024:
+        raise ValueError('Cocos 消息过大')
+    masked = bool(second & 0x80)
+    mask = _socket_read_exact(sock, 4) if masked else b''
+    payload = _socket_read_exact(sock, length) if length else b''
+    if masked:
+        payload = bytes(value ^ mask[index % 4] for index, value in enumerate(payload))
+    return opcode, payload
+
+
+def _websocket_frame(payload, opcode=1):
+    if isinstance(payload, str):
+        payload = payload.encode('utf-8')
+    length = len(payload)
+    first = 0x80 | (opcode & 0x0f)
+    if length < 126:
+        header = bytes([first, length])
+    elif length <= 0xffff:
+        header = bytes([first, 126]) + struct.pack('!H', length)
+    else:
+        header = bytes([first, 127]) + struct.pack('!Q', length)
+    return header + payload
+
+
+def _cocos_handshake(sock):
+    sock.settimeout(10)
+    raw = b''
+    while b'\r\n\r\n' not in raw:
+        chunk = sock.recv(4096)
+        if not chunk:
+            raise ConnectionError('Cocos 握手连接已关闭')
+        raw += chunk
+        if len(raw) > 64 * 1024:
+            raise ValueError('Cocos 握手请求过大')
+    header_text = raw.decode('iso-8859-1')
+    headers = {}
+    for line in header_text.split('\r\n')[1:]:
+        if ':' in line:
+            key, value = line.split(':', 1)
+            headers[key.strip().lower()] = value.strip()
+    websocket_key = headers.get('sec-websocket-key')
+    if not websocket_key:
+        raise ValueError('缺少 Sec-WebSocket-Key')
+    accept = base64.b64encode(hashlib.sha1(
+        (websocket_key + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11').encode('ascii')
+    ).digest()).decode('ascii')
+    response = (
+        'HTTP/1.1 101 Switching Protocols\r\n'
+        'Upgrade: websocket\r\n'
+        'Connection: Upgrade\r\n'
+        f'Sec-WebSocket-Accept: {accept}\r\n\r\n'
+    ).encode('ascii')
+    sock.sendall(response)
+    sock.settimeout(None)
+
+
+class CocosBridgeConnection:
+    def __init__(self, sock, address):
+        self.sock = sock
+        self.address = address
+        self.alive = True
+        self.send_lock = threading.Lock()
+        self.command_lock = threading.Lock()
+        self.pending_lock = threading.Lock()
+        self.pending = {}
+        self.next_id = 1
+
+    def send_frame(self, payload, opcode=1):
+        with self.send_lock:
+            if not self.alive:
+                raise ConnectionError('Cocos 未连接')
+            self.sock.sendall(_websocket_frame(payload, opcode))
+
+    def send_rpc(self, method, params):
+        with self.pending_lock:
+            request_id = self.next_id
+            self.next_id += 1
+            event = threading.Event()
+            box = {}
+            self.pending[request_id] = (event, box)
+        message = json.dumps({
+            'jsonrpc': '2.0',
+            'id': request_id,
+            'method': method,
+            'params': params,
+        }, ensure_ascii=False, separators=(',', ':'))
+        try:
+            self.send_frame(message)
+        except Exception as exc:
+            with self.pending_lock:
+                self.pending.pop(request_id, None)
+            return {'ok': False, 'error': str(exc)}
+        if not event.wait(COCOS_RPC_TIMEOUT):
+            with self.pending_lock:
+                self.pending.pop(request_id, None)
+            return {'ok': False, 'error': 'Cocos 执行响应超时'}
+        if box.get('error'):
+            return {'ok': False, 'error': box['error']}
+        return {'ok': True, 'result': box.get('result')}
+
+    def read_loop(self):
+        fragments = []
+        try:
+            while self.alive:
+                opcode, payload = _websocket_read_frame(self.sock)
+                if opcode == 0x8:
+                    break
+                if opcode == 0x9:
+                    self.send_frame(payload, opcode=0xA)
+                    continue
+                if opcode == 0xA:
+                    continue
+                if opcode == 0x0:
+                    fragments.append(payload)
+                    continue
+                if opcode == 0x1:
+                    fragments = [payload]
+                    if not (payload and self._is_final_frame(payload)):
+                        continue
+                if opcode != 0x1:
+                    continue
+                try:
+                    data = json.loads(b''.join(fragments).decode('utf-8'))
+                except (ValueError, UnicodeDecodeError):
+                    fragments = []
+                    continue
+                fragments = []
+                request_id = data.get('id')
+                if request_id is None:
+                    continue
+                with self.pending_lock:
+                    pending = self.pending.pop(request_id, None)
+                if pending:
+                    event, box = pending
+                    if 'error' in data:
+                        box['error'] = data.get('error')
+                    else:
+                        box['result'] = data.get('result')
+                    event.set()
+        except (ConnectionError, OSError, ValueError):
+            pass
+        finally:
+            self.close()
+
+    def _is_final_frame(self, payload):
+        # Cocos 的 RPC 响应均为单帧文本；保留此方法让读取逻辑对普通文本帧保持清晰。
+        return True
+
+    def close(self):
+        was_alive = self.alive
+        self.alive = False
+        try:
+            self.sock.shutdown(socket.SHUT_RDWR)
+        except OSError:
+            pass
+        try:
+            self.sock.close()
+        except OSError:
+            pass
+        with self.pending_lock:
+            pending = list(self.pending.values())
+            self.pending.clear()
+        for event, box in pending:
+            box['error'] = 'Cocos 连接已断开'
+            event.set()
+        if was_alive:
+            with _cocos_bridge_lock:
+                global _cocos_connection
+                if _cocos_connection is self:
+                    _cocos_connection = None
+
+
+def _cocos_client_thread(sock, address):
+    try:
+        _cocos_handshake(sock)
+        connection = CocosBridgeConnection(sock, address)
+        with _cocos_bridge_lock:
+            global _cocos_connection
+            previous = _cocos_connection
+            _cocos_connection = connection
+        if previous:
+            previous.close()
+        print(f'[COCOS] connected: {address[0]}:{address[1]}')
+        connection.read_loop()
+    except (ConnectionError, OSError, ValueError) as exc:
+        print(f'[COCOS] connection failed: {exc}')
+        try:
+            sock.close()
+        except OSError:
+            pass
+
+
+def start_cocos_bridge():
+    global _cocos_bridge_error
+    if COCOS_WS_PORT <= 0:
+        _cocos_bridge_error = 'Cocos 桥接端口未启用'
+        return
+    try:
+        listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        listener.bind(('', COCOS_WS_PORT))
+        listener.listen(8)
+    except OSError as exc:
+        _cocos_bridge_error = f'无法监听 Cocos 端口 {COCOS_WS_PORT}：{exc}'
+        print('[COCOS] ' + _cocos_bridge_error)
+        return
+
+    def accept_loop():
+        while True:
+            try:
+                sock, address = listener.accept()
+            except OSError:
+                return
+            threading.Thread(
+                target=_cocos_client_thread,
+                args=(sock, address),
+                name='cocos-bridge-client',
+                daemon=True,
+            ).start()
+
+    threading.Thread(target=accept_loop, name='cocos-bridge', daemon=True).start()
+    print(f'[COCOS] bridge listening: ws://127.0.0.1:{COCOS_WS_PORT}')
+
+
+def cocos_bridge_status():
+    with _cocos_bridge_lock:
+        connection = _cocos_connection
+        connected = bool(connection and connection.alive)
+        address = connection.address if connected else None
+    return {
+        'connected': connected,
+        'address': f'{address[0]}:{address[1]}' if address else '',
+        'url': f'ws://127.0.0.1:{COCOS_WS_PORT}',
+        'port': COCOS_WS_PORT,
+        'error': _cocos_bridge_error,
+    }
+
+
+def execute_cocos_commands(commands):
+    normalized = []
+    for command in commands if isinstance(commands, list) else [commands]:
+        for line in str(command or '').splitlines():
+            line = line.strip()
+            if line:
+                normalized.append(line)
+    if not normalized:
+        return {'ok': False, 'code': 'empty_command', 'msg': '命令内容不能为空'}
+
+    with _cocos_bridge_lock:
+        connection = _cocos_connection
+    if not connection or not connection.alive:
+        return {
+            'ok': False,
+            'code': 'cocos_offline',
+            'msg': f'未连接到 Cocos 游戏，请先在游戏内开启自动测试并连接 {cocos_bridge_status()["url"]}',
+        }
+
+    results = []
+    with connection.command_lock:
+        for index, command in enumerate(normalized):
+            params = ['CgChatRoomSendMessage', json.dumps({
+                'roomId': 'GM',
+                'message': command,
+                'token': '',
+            }, ensure_ascii=False, separators=(',', ':'))]
+            result = connection.send_rpc('sendProtocol', params)
+            if not result.get('ok'):
+                return {'ok': False, 'code': 'cocos_rpc_failed',
+                        'msg': result.get('error') or 'Cocos 没有返回执行结果',
+                        'results': results}
+            value = result.get('result')
+            results.append({'command': command, 'result': value})
+            if isinstance(value, str) and (value.startswith('Error') or value.startswith('Exception')):
+                return {'ok': False, 'code': 'cocos_command_failed',
+                        'msg': value, 'results': results}
+            if index < len(normalized) - 1:
+                time.sleep(0.1)
+    return {'ok': True, 'commands': normalized, 'results': results}
+
+
 class GMHandler(SimpleHTTPRequestHandler):
 
     def translate_path(self, path):
@@ -1399,6 +1708,8 @@ class GMHandler(SimpleHTTPRequestHandler):
                 if self._require_admin() is None:
                     return
                 self._refresh_items()
+            elif path == '/api/cocos/status':
+                self._cocos_status()
             elif path == '/api/git/repos':
                 if self._require_admin() is None:
                     return
@@ -1442,6 +1753,8 @@ class GMHandler(SimpleHTTPRequestHandler):
             self._create_formula()
         elif path == '/api/categories':
             self._create_category()
+        elif path == '/api/cocos/execute':
+            self._cocos_execute()
         elif path == '/api/git/pull':
             self._git_pull()
         elif path == '/api/git/resolve-excel-pull':
@@ -1960,6 +2273,18 @@ class GMHandler(SimpleHTTPRequestHandler):
 
     # ---------- 工具方法 ----------
 
+    # ---------- Cocos GM 桥接 ----------
+    def _cocos_status(self):
+        self._send_json({'ok': True, **cocos_bridge_status()})
+
+    def _cocos_execute(self):
+        data = self._read_json()
+        if data is None:
+            return
+        command = data.get('command', '')
+        result = execute_cocos_commands(command)
+        self._send_json(result, status=200 if result.get('ok') else 409)
+
     # ---------- Git 拉取 ----------
     def _list_git_repos(self):
         self._send_json({'ok': True,
@@ -2064,6 +2389,7 @@ if __name__ == '__main__':
     lan_ip = get_lan_ip()
     if lan_ip:
         print(f'  局域网访问(发给同事): http://{lan_ip}:{port}')
+    start_cocos_bridge()
     print('  Ctrl+C 停止')
     print()
 

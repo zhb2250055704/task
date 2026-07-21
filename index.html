@@ -138,6 +138,7 @@
   }
   .item-card .card-foot a { color: var(--accent); cursor: pointer; font-size: 13px; font-weight: 500; transition: .15s; }
   .item-card .card-foot a:hover { opacity: .7; }
+  .item-card .card-foot a.use { color: #16805b; font-weight: 800; }
   .item-card .card-foot a.del { color: #ef4444; }
   /* 详情弹窗内容 */
   .detail-row { margin-bottom: 16px; }
@@ -180,6 +181,20 @@
     outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft);
   }
   .toolbar input[type=text] { width: 280px; }
+  .cocos-toolbar {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    margin: 8px 28px 0; padding: 10px 12px;
+    border: 1px solid var(--border); border-radius: 10px;
+    background: var(--panel); color: var(--text-dim); font-size: 12px;
+  }
+  .cocos-toolbar strong { color: var(--text); font-size: 13px; }
+  .cocos-status { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; }
+  .cocos-status::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: #94a3b8; }
+  .cocos-status.connected { color: #16805b; }
+  .cocos-status.connected::before { background: #23a26d; box-shadow: 0 0 0 3px rgba(35,162,109,.14); }
+  .cocos-status.disconnected { color: #b45309; }
+  .cocos-status.disconnected::before { background: #d97706; }
+  .cocos-toolbar .btn { margin-left: auto; padding: 7px 12px; font-size: 12px; }
   .btn {
     padding: 10px 18px; border: none; border-radius: 10px; cursor: pointer; font-size: 14px;
     font-weight: 500; transition: .18s;
@@ -4032,6 +4047,12 @@
         <button class="btn btn-primary admin-only" onclick="openModal()" style="display:none">新增命令</button>
         <button class="btn btn-ghost admin-only" onclick="openCategoryModal()" style="display:none">管理分类</button>
       </div>
+      <div class="cocos-toolbar">
+        <strong>Cocos 游戏连接</strong>
+        <span id="cocosConnectionStatus" class="cocos-status">检测中</span>
+        <span id="cocosConnectionUrl">ws://127.0.0.1:5101</span>
+        <button class="btn btn-ghost" onclick="loadCocosStatus()">刷新连接</button>
+      </div>
       <div class="container">
         <div id="cmdGroups"></div>
         <div id="empty" class="empty" style="display:none">暂无数据，点击「新增命令」开始</div>
@@ -4310,6 +4331,7 @@
     <div id="detailBody"></div>
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeDetail()">关闭</button>
+      <button class="btn btn-primary" id="detailUseBtn" style="display:none">使用</button>
       <button class="btn btn-primary" id="detailCopyBtn">复制内容</button>
     </div>
   </div>
@@ -4412,6 +4434,8 @@ let gitStatusProgressValue = 0;
 let lastExcelPullFailure = null;
 let commandSearchUserEdited = false;
 let commandSearchAutofillGuard = null;
+let selectedCommandId = null;
+let cocosStatusTimer = null;
 
 function enhanceReactBitsComponents(root) {
   const scope = root && root.querySelectorAll ? root : document;
@@ -4541,6 +4565,7 @@ async function checkAuth() {
     applyPermissions();
     clearLoginAutofillFromSearch();
     startLoginAutofillGuard();
+    startCocosStatusPolling();
     return true;
   } catch (e) {
     location.href = 'login.html';
@@ -4580,6 +4605,62 @@ function toast(msg) {
 function esc(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, c =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function renderCocosStatus(data) {
+  const status = document.getElementById('cocosConnectionStatus');
+  const url = document.getElementById('cocosConnectionUrl');
+  if (!status) return;
+  const connected = !!(data && data.connected);
+  status.textContent = connected ? '已连接' : '未连接';
+  status.className = 'cocos-status ' + (connected ? 'connected' : 'disconnected');
+  if (url && data && data.url) url.textContent = data.url;
+  status.title = connected ? ('游戏端地址：' + (data.address || '本机')) : ((data && data.error) || '等待 Cocos 游戏连接');
+}
+
+async function loadCocosStatus() {
+  try {
+    const res = await fetch('/api/cocos/status', { cache: 'no-store' });
+    const data = await res.json();
+    renderCocosStatus(data);
+  } catch (e) {
+    renderCocosStatus({ connected: false, error: '连接状态获取失败' });
+  }
+}
+
+function startCocosStatusPolling() {
+  if (cocosStatusTimer) clearInterval(cocosStatusTimer);
+  loadCocosStatus();
+  cocosStatusTimer = setInterval(() => {
+    if (currentView === 'commands') loadCocosStatus();
+  }, 5000);
+}
+
+async function useCmd(id) {
+  const item = cmdCache[id];
+  if (!item || !item.command) {
+    toast('没有可执行的命令内容');
+    return;
+  }
+  selectedCommandId = id;
+  try {
+    const res = await fetch('/api/cocos/execute', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ command: item.command })
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) {
+      toast(data.msg || 'Cocos 执行失败');
+      renderCocosStatus({ connected: false, url: data.url });
+      return;
+    }
+    toast('已在 Cocos 游戏中生效：' + item.name);
+    renderCocosStatus({ connected: true, url: data.url || 'ws://127.0.0.1:5101' });
+  } catch (e) {
+    toast('Cocos 执行请求失败');
+    renderCocosStatus({ connected: false });
+  }
 }
 
 /* ============ 命令管理 ============ */
@@ -4644,6 +4725,7 @@ function renderTable(items) {
             ${it.description ? `<div class="card-desc">${esc(it.description)}</div>` : ''}
             ${(it.tags || []).length ? `<div class="card-tags">${(it.tags || []).map(t => `<span class="tag">${esc(t)}</span>`).join('')}</div>` : ''}
             <div class="card-foot" onclick="event.stopPropagation()">
+              <a class="use" onclick='useCmd(${JSON.stringify(it.id)})'>使用</a>
               <a onclick='copyText(${JSON.stringify(it.command)})'>复制</a>
               ${admin ? `<a onclick='editCmd(${JSON.stringify(it.id)})'>编辑</a>
               <a class="del" onclick='delCmd(${JSON.stringify(it.id)})'>删除</a>` : ''}
@@ -4656,6 +4738,7 @@ function renderTable(items) {
 function showCmdDetail(id) {
   const it = cmdCache[id];
   if (!it) return;
+  selectedCommandId = id;
   document.getElementById('detailTitle').textContent = it.name;
   let html = `<div class="detail-row"><div class="d-label">命令内容</div><pre>${esc(it.command)}</pre></div>`;
   if (it.category) html += `<div class="detail-row"><div class="d-label">分类</div><div class="d-text">${esc(it.category)}</div></div>`;
@@ -4665,12 +4748,16 @@ function showCmdDetail(id) {
   if (it.example) html += `<div class="detail-row"><div class="d-label">使用示例</div><pre>${esc(it.example)}</pre></div>`;
   if (it.description) html += `<div class="detail-row"><div class="d-label">描述</div><div class="d-text">${esc(it.description)}</div></div>`;
   document.getElementById('detailBody').innerHTML = html;
+  const useBtn = document.getElementById('detailUseBtn');
+  useBtn.style.display = '';
+  useBtn.onclick = () => useCmd(id);
   document.getElementById('detailCopyBtn').onclick = () => copyText(it.command);
   document.getElementById('detailMask').classList.add('show');
 }
 
 function closeDetail() {
   document.getElementById('detailMask').classList.remove('show', 'git-detail-modal');
+  document.getElementById('detailUseBtn').style.display = 'none';
 }
 
 async function copyText(text) {
@@ -4800,6 +4887,7 @@ function renderScriptTable(items) {
 function showScriptDetail(id) {
   const it = scriptCache[id];
   if (!it) return;
+  document.getElementById('detailUseBtn').style.display = 'none';
   document.getElementById('detailTitle').textContent = it.name;
   let html = `<div class="detail-row"><div class="d-label">脚本内容</div><pre>${esc(it.content)}</pre></div>`;
   if (it.category) html += `<div class="detail-row"><div class="d-label">分类</div><div class="d-text">${esc(it.category)}</div></div>`;
@@ -4943,6 +5031,7 @@ function renderItemTable(items) {
 function showItemDetail(key) {
   const it = itemCache[key];
   if (!it) return;
+  document.getElementById('detailUseBtn').style.display = 'none';
   document.getElementById('detailTitle').textContent =
     (it.nameComment || it.name || it.id || '道具详情');
   const fields = itemFields.length ? itemFields : Object.keys(it);
@@ -5732,6 +5821,7 @@ async function openGitDetail(payloadText) {
   let payload;
   try { payload = JSON.parse(payloadText || '{}'); } catch (e) { return; }
   const mask = document.getElementById('detailMask');
+  document.getElementById('detailUseBtn').style.display = 'none';
   document.getElementById('detailTitle').textContent = payload.title || '提交详情';
   document.getElementById('detailBody').innerHTML = '<div class="git-detail-shell"><div class="git-detail-hero"><div class="git-detail-kicker">变更审阅台</div><div class="git-detail-subject">正在加载变更详情...</div></div></div>';
   document.getElementById('detailCopyBtn').onclick = () => {};
