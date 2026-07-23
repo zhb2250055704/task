@@ -3,7 +3,11 @@ $ErrorActionPreference = 'Stop'
 $ToolDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $Port = 9092
 $ServerFile = Join-Path $ToolDir 'server.py'
-$ExpectedBuild = (Get-FileHash -LiteralPath $ServerFile -Algorithm SHA256).Hash.Substring(0, 12).ToLowerInvariant()
+$BuildFiles = @($ServerFile, (Join-Path $ToolDir 'qa_local_engine.py')) | Where-Object { Test-Path -LiteralPath $_ }
+$BuildBytes = [byte[]]($BuildFiles | ForEach-Object { [IO.File]::ReadAllBytes($_) })
+$ExpectedBuild = ([BitConverter]::ToString(
+    [Security.Cryptography.SHA256]::Create().ComputeHash($BuildBytes)
+)).Replace('-', '').Substring(0, 12).ToLowerInvariant()
 
 $existing = @(Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue)
 if ($existing) {
@@ -14,13 +18,21 @@ if ($existing) {
         }
     } catch {}
 
-    foreach ($conn in $existing) {
-        $proc = Get-CimInstance Win32_Process -Filter "ProcessId=$($conn.OwningProcess)" -ErrorAction SilentlyContinue
+    $serverPids = @($existing | Select-Object -ExpandProperty OwningProcess -Unique)
+    foreach ($serverPid in $serverPids) {
+        $proc = Get-CimInstance Win32_Process -Filter "ProcessId=$serverPid" -ErrorAction SilentlyContinue
         if ($proc -and $proc.CommandLine -like '*server.py*') {
-            Stop-Process -Id $conn.OwningProcess -Force -ErrorAction SilentlyContinue
+            Stop-Process -Id $serverPid -Force -ErrorAction Stop
+            Wait-Process -Id $serverPid -Timeout 5 -ErrorAction SilentlyContinue
         }
     }
-    Start-Sleep -Milliseconds 500
+
+    for ($attempt = 0; $attempt -lt 20; $attempt++) {
+        if (-not (Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue)) {
+            break
+        }
+        Start-Sleep -Milliseconds 250
+    }
 
     if (Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue) {
         throw "Port $Port is occupied by another application."

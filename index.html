@@ -4244,6 +4244,39 @@
   }
   /* ============ QA 测试设计 ============ */
   #view-qa .container { max-width: none; padding-top: 16px; }
+  .qa-provider-tabs {
+    display: flex;
+    align-items: stretch;
+    gap: 4px;
+    margin-bottom: 14px;
+    padding: 4px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--input-bg);
+  }
+  .qa-provider-tab {
+    min-width: 190px;
+    min-height: 46px;
+    padding: 7px 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-dim);
+    cursor: pointer;
+    text-align: left;
+  }
+  .qa-provider-tab:hover { background: rgba(91, 130, 181, .07); color: var(--text); }
+  .qa-provider-tab.active {
+    background: var(--panel-solid);
+    color: var(--text);
+    box-shadow: 0 1px 5px rgba(15, 23, 42, .12);
+  }
+  .qa-provider-name { font-size: 13px; font-weight: 850; }
+  .qa-provider-meta { color: var(--text-dim); font-size: 10px; font-weight: 700; white-space: nowrap; }
   .qa-engine-badge {
     display: inline-flex;
     align-items: center;
@@ -4265,10 +4298,11 @@
     background: #94a3b8;
   }
   .qa-engine-badge.ready::before { background: #2f8f62; }
+  .qa-engine-badge.fallback::before { background: #c39435; }
   .qa-engine-badge.unavailable::before { background: #c46a33; }
   .qa-workspace {
     display: grid;
-    grid-template-columns: minmax(340px, .86fr) minmax(520px, 1.34fr);
+    grid-template-columns: minmax(320px, .9fr) minmax(0, 1.1fr);
     gap: 16px;
     align-items: stretch;
   }
@@ -4287,6 +4321,7 @@
     align-items: center;
     justify-content: space-between;
     gap: 12px;
+    flex-wrap: wrap;
     border-bottom: 1px solid var(--border);
   }
   .qa-pane-title { color: var(--text); font-size: 14px; font-weight: 850; }
@@ -4442,7 +4477,7 @@
     from { transform: translateX(-100%); }
     to { transform: translateX(300%); }
   }
-  .qa-output-tools { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .qa-output-tools { min-width: 0; max-width: 100%; display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
   .qa-segmented {
     display: inline-flex;
     padding: 3px;
@@ -4538,6 +4573,7 @@
     color: var(--text);
     font: 12px/1.7 Consolas, monospace;
   }
+  .qa-json { color: #315f55; }
   @media (max-width: 1180px) {
     .qa-workspace { grid-template-columns: 1fr; }
     .qa-requirement { min-height: 180px; }
@@ -4545,6 +4581,9 @@
   }
   @media (max-width: 760px) {
     #view-qa .container { padding: 12px; }
+    .qa-provider-tabs { display: grid; grid-template-columns: 1fr 1fr; }
+    .qa-provider-tab { min-width: 0; padding-inline: 10px; }
+    .qa-provider-meta { display: none; }
     .qa-config-grid { grid-template-columns: 1fr; }
     .qa-field-wide { grid-column: auto; }
     .qa-pane-head { align-items: flex-start; flex-direction: column; }
@@ -4758,6 +4797,18 @@
         </div>
       </header>
       <div class="container">
+        <div class="qa-provider-tabs" role="tablist" aria-label="测试设计引擎">
+          <button id="qaProviderCodex" class="qa-provider-tab active" type="button" role="tab" aria-selected="true"
+            onclick="switchQaProvider('codex')">
+            <span class="qa-provider-name">Codex 设计</span>
+            <span id="qaProviderCodexMeta" class="qa-provider-meta">qa-test-design</span>
+          </button>
+          <button id="qaProviderOllama" class="qa-provider-tab" type="button" role="tab" aria-selected="false"
+            onclick="switchQaProvider('ollama')">
+            <span class="qa-provider-name">本地 Qwen3</span>
+            <span id="qaProviderOllamaMeta" class="qa-provider-meta">检测本地引擎</span>
+          </button>
+        </div>
         <div class="qa-workspace">
           <section class="qa-pane" aria-label="测试需求输入">
             <div class="qa-pane-head">
@@ -4838,6 +4889,7 @@
                 <div class="qa-segmented" role="group" aria-label="结果显示模式">
                   <button id="qaPreviewTab" class="active" type="button" onclick="setQaOutputMode('preview')">预览</button>
                   <button id="qaRawTab" type="button" onclick="setQaOutputMode('raw')">Markdown</button>
+                  <button id="qaJsonTab" type="button" onclick="setQaOutputMode('json')" disabled>JSON</button>
                 </div>
                 <button id="qaCopyBtn" class="qa-tool-btn" type="button" onclick="copyQaResult()" disabled>复制</button>
                 <button id="qaDownloadBtn" class="qa-tool-btn" type="button" onclick="downloadQaResult()" disabled>下载</button>
@@ -4847,6 +4899,7 @@
               <div id="qaOutputEmpty" class="qa-output-empty">暂无测试设计结果</div>
               <div id="qaOutputPreview" class="qa-markdown" style="display:none"></div>
               <pre id="qaOutputRaw" class="qa-raw" style="display:none"></pre>
+              <pre id="qaOutputJson" class="qa-raw qa-json" style="display:none"></pre>
             </div>
           </section>
         </div>
@@ -5263,6 +5316,14 @@ let ksCatalogLoading = false;
 let ksSyncInFlight = false;
 let lastCocosCatalogSignature = '';
 let qaResultMarkdown = '';
+let qaResultStructured = null;
+let qaOutputMode = 'preview';
+let qaProvider = 'codex';
+let qaProviderStatuses = {};
+let qaProviderResults = {
+  codex: { markdown: '', structured: null },
+  ollama: { markdown: '', structured: null },
+};
 let qaRunning = false;
 let qaTimer = null;
 let qaStartedAt = 0;
@@ -7783,7 +7844,8 @@ function startQaTimer() {
   stopQaTimer();
   qaStartedAt = Date.now();
   const update = () => {
-    setQaRunState('running', `Codex 正在生成 · ${formatQaElapsed(Date.now() - qaStartedAt)}`);
+    const engine = qaProvider === 'ollama' ? '本地测试引擎' : 'Codex';
+    setQaRunState('running', `${engine} 正在生成 · ${formatQaElapsed(Date.now() - qaStartedAt)}`);
   };
   update();
   qaTimer = setInterval(update, 1000);
@@ -7799,6 +7861,62 @@ function formatQaFileSize(bytes) {
   if (size < 1024) return `${size} B`;
   if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
   return `${(size / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function qaGenerateButtonLabel() {
+  return qaProvider === 'ollama' ? '使用本地引擎生成' : '使用 Codex 生成';
+}
+
+function currentQaProviderStatus() {
+  return qaProviderStatuses[qaProvider] || null;
+}
+
+function applyQaProviderStatus() {
+  const badge = document.getElementById('qaEngineBadge');
+  const status = currentQaProviderStatus();
+  badge.classList.remove('ready', 'fallback', 'unavailable');
+  if (!status) {
+    qaServiceAvailable = false;
+    badge.textContent = '检测服务';
+  } else {
+    qaServiceAvailable = !!status.available;
+    const fallback = qaProvider === 'ollama' && status.mode === 'rules';
+    badge.classList.add(qaServiceAvailable ? (fallback ? 'fallback' : 'ready') : 'unavailable');
+    badge.textContent = status.msg || (qaServiceAvailable ? status.engine : '服务不可用');
+  }
+  const localMeta = document.getElementById('qaProviderOllamaMeta');
+  if (localMeta && qaProviderStatuses.ollama) {
+    localMeta.textContent = qaProviderStatuses.ollama.model_ready ? 'Qwen3 14B 已连接' : 'QA 规则模式';
+  }
+  const codexMeta = document.getElementById('qaProviderCodexMeta');
+  if (codexMeta && qaProviderStatuses.codex) {
+    codexMeta.textContent = qaProviderStatuses.codex.available ? 'qa-test-design 已就绪' : '服务未就绪';
+  }
+  const button = document.getElementById('qaGenerateBtn');
+  if (button && !qaRunning) button.textContent = qaGenerateButtonLabel();
+  updateQaGenerateAvailability();
+  if (!qaRunning && !qaResultMarkdown) {
+    setQaRunState(
+      status && !status.available ? 'error' : '',
+      status ? (status.msg || '等待提交') : '正在检测服务'
+    );
+  }
+}
+
+function switchQaProvider(provider) {
+  if (!['codex', 'ollama'].includes(provider) || provider === qaProvider) return;
+  if (qaRunning || qaUploading) { toast('当前任务结束后再切换测试引擎'); return; }
+  qaProvider = provider;
+  ['codex', 'ollama'].forEach(name => {
+    const button = document.getElementById(name === 'codex' ? 'qaProviderCodex' : 'qaProviderOllama');
+    const active = name === qaProvider;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-selected', active ? 'true' : 'false');
+  });
+  const saved = qaProviderResults[qaProvider] || { markdown: '', structured: null };
+  renderQaResult(saved.markdown, saved.structured, false);
+  applyQaProviderStatus();
+  if (!currentQaProviderStatus()) loadQaTestDesignStatus();
 }
 
 function updateQaGenerateAvailability() {
@@ -7896,20 +8014,26 @@ async function readQaJsonResponse(res, fallbackMessage) {
 
 async function loadQaTestDesignStatus() {
   const badge = document.getElementById('qaEngineBadge');
-  const button = document.getElementById('qaGenerateBtn');
-  badge.classList.remove('ready', 'unavailable');
+  badge.classList.remove('ready', 'fallback', 'unavailable');
   badge.textContent = '检测服务';
   try {
     const res = await fetch(`${QA_TEST_DESIGN_API}/status`, { cache: 'no-store' });
     if (res.status === 401) { location.href = 'login.html'; return; }
     const data = await readQaJsonResponse(res, 'QA 服务状态读取失败，请重启工具服务');
-    qaServiceAvailable = !!data.available;
-    badge.classList.add(qaServiceAvailable ? 'ready' : 'unavailable');
-    badge.textContent = qaServiceAvailable ? `${data.engine} · ${data.skill}` : (data.msg || '服务不可用');
-    updateQaGenerateAvailability();
-    if (!qaServiceAvailable) setQaRunState('error', data.msg || 'QA 测试设计服务不可用');
-    else if (!qaRunning && !qaResultMarkdown) setQaRunState('', '等待提交');
+    qaProviderStatuses = data.providers || {
+      codex: data,
+      ollama: {
+        available: true,
+        engine: 'QA 规则引擎',
+        skill: '结构化 JSON',
+        mode: 'rules',
+        model_ready: false,
+        msg: 'QA 规则引擎已就绪',
+      },
+    };
+    applyQaProviderStatus();
   } catch (error) {
+    qaProviderStatuses = {};
     qaServiceAvailable = false;
     badge.classList.add('unavailable');
     badge.textContent = '服务不可用';
@@ -8040,21 +8164,35 @@ function renderQaMarkdown(markdown) {
 }
 
 function setQaOutputMode(mode) {
-  const preview = mode !== 'raw';
-  document.getElementById('qaPreviewTab').classList.toggle('active', preview);
-  document.getElementById('qaRawTab').classList.toggle('active', !preview);
-  document.getElementById('qaOutputPreview').style.display = preview && qaResultMarkdown ? 'block' : 'none';
-  document.getElementById('qaOutputRaw').style.display = !preview && qaResultMarkdown ? 'block' : 'none';
+  if (mode === 'json' && !qaResultStructured) mode = 'preview';
+  qaOutputMode = mode;
+  document.getElementById('qaPreviewTab').classList.toggle('active', mode === 'preview');
+  document.getElementById('qaRawTab').classList.toggle('active', mode === 'raw');
+  document.getElementById('qaJsonTab').classList.toggle('active', mode === 'json');
+  document.getElementById('qaOutputPreview').style.display = mode === 'preview' && qaResultMarkdown ? 'block' : 'none';
+  document.getElementById('qaOutputRaw').style.display = mode === 'raw' && qaResultMarkdown ? 'block' : 'none';
+  document.getElementById('qaOutputJson').style.display = mode === 'json' && qaResultStructured ? 'block' : 'none';
 }
 
-function renderQaResult(markdown) {
+function renderQaResult(markdown, structured = null, store = true) {
   qaResultMarkdown = String(markdown || '').trim();
+  qaResultStructured = structured && typeof structured === 'object' ? structured : null;
+  if (store) {
+    qaProviderResults[qaProvider] = {
+      markdown: qaResultMarkdown,
+      structured: qaResultStructured,
+    };
+  }
   document.getElementById('qaOutputEmpty').style.display = qaResultMarkdown ? 'none' : 'grid';
   document.getElementById('qaOutputPreview').innerHTML = renderQaMarkdown(qaResultMarkdown);
   document.getElementById('qaOutputRaw').textContent = qaResultMarkdown;
+  document.getElementById('qaOutputJson').textContent = qaResultStructured
+    ? JSON.stringify(qaResultStructured, null, 2)
+    : '';
+  document.getElementById('qaJsonTab').disabled = !qaResultStructured;
   document.getElementById('qaCopyBtn').disabled = !qaResultMarkdown;
   document.getElementById('qaDownloadBtn').disabled = !qaResultMarkdown;
-  setQaOutputMode('preview');
+  setQaOutputMode(qaResultStructured && qaOutputMode === 'json' ? 'json' : 'preview');
 }
 
 async function generateQaTestDesign() {
@@ -8076,6 +8214,7 @@ async function generateQaTestDesign() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        engine: qaProvider,
         title: document.getElementById('qaTitle').value.trim(),
         requirement,
         file_ids: qaUploadedFiles.map(file => file.id),
@@ -8087,7 +8226,7 @@ async function generateQaTestDesign() {
     if (res.status === 401) { location.href = 'login.html'; return; }
     const data = await readQaJsonResponse(res, '测试设计接口返回异常，请重启工具服务');
     if (!res.ok || !data.ok) throw new Error(data.msg || '测试设计生成失败');
-    renderQaResult(data.content || '');
+    renderQaResult(data.content || '', data.structured || null);
     const elapsed = data.duration_ms || (Date.now() - qaStartedAt);
     setQaRunState('success', `生成完成 · ${formatQaElapsed(elapsed)} · ${data.engine} / ${data.skill}`);
     toast('测试设计已生成');
@@ -8098,7 +8237,7 @@ async function generateQaTestDesign() {
     stopQaTimer();
     qaRunning = false;
     updateQaGenerateAvailability();
-    button.textContent = '生成测试设计';
+    button.textContent = qaGenerateButtonLabel();
   }
 }
 
@@ -8111,14 +8250,21 @@ async function clearQaWorkspace() {
   document.getElementById('qaMode').value = 'full';
   document.getElementById('qaDomain').value = 'auto';
   document.getElementById('qaDepth').value = 'standard';
-  renderQaResult('');
+  qaProviderResults = {
+    codex: { markdown: '', structured: null },
+    ollama: { markdown: '', structured: null },
+  };
+  renderQaResult('', null);
   updateQaCharCount();
   setQaRunState('', '等待提交');
 }
 
 async function copyQaResult() {
   if (!qaResultMarkdown) return;
-  await copyText(qaResultMarkdown);
+  const content = qaOutputMode === 'json' && qaResultStructured
+    ? JSON.stringify(qaResultStructured, null, 2)
+    : qaResultMarkdown;
+  await copyText(content);
 }
 
 function downloadQaResult() {
@@ -8126,10 +8272,14 @@ function downloadQaResult() {
   const title = document.getElementById('qaTitle').value.trim() || 'qa-test-design';
   const safeTitle = title.replace(/[\\/:*?"<>|]+/g, '-').slice(0, 60);
   const date = new Date().toISOString().slice(0, 10);
-  const blob = new Blob([qaResultMarkdown], { type: 'text/markdown;charset=utf-8' });
+  const downloadJson = qaOutputMode === 'json' && qaResultStructured;
+  const content = downloadJson ? JSON.stringify(qaResultStructured, null, 2) : qaResultMarkdown;
+  const blob = new Blob([content], {
+    type: downloadJson ? 'application/json;charset=utf-8' : 'text/markdown;charset=utf-8',
+  });
   const link = document.createElement('a');
   link.href = URL.createObjectURL(blob);
-  link.download = `${safeTitle}-${date}.md`;
+  link.download = `${safeTitle}-${date}.${downloadJson ? 'json' : 'md'}`;
   document.body.appendChild(link);
   link.click();
   link.remove();

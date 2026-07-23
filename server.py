@@ -31,6 +31,8 @@ import ssl
 from email.parser import BytesParser
 from email.policy import default as email_policy_default
 
+from qa_local_engine import get_local_qa_status, run_local_qa_test_design
+
 if os.name == 'nt':
     try:
         import ctypes
@@ -50,8 +52,14 @@ elif sys.stderr.encoding != 'utf-8':
 
 TOOL_DIR = os.path.dirname(os.path.abspath(__file__))
 try:
-    with open(os.path.abspath(__file__), 'rb') as source_file:
-        SERVER_BUILD = hashlib.sha256(source_file.read()).hexdigest()[:12]
+    build_hash = hashlib.sha256()
+    for build_file in (
+        os.path.abspath(__file__),
+        os.path.join(TOOL_DIR, 'qa_local_engine.py'),
+    ):
+        with open(build_file, 'rb') as source_file:
+            build_hash.update(source_file.read())
+    SERVER_BUILD = build_hash.hexdigest()[:12]
 except OSError:
     SERVER_BUILD = ''
 DATA_FILE = os.path.join(TOOL_DIR, 'gm_commands.json')
@@ -3281,7 +3289,7 @@ def find_codex_cli():
     return ''
 
 
-def qa_test_design_status():
+def qa_codex_test_design_status():
     cli_path = find_codex_cli()
     skill_file = os.path.join(QA_SKILL_DIR, 'SKILL.md')
     if not cli_path:
@@ -3310,6 +3318,26 @@ def qa_test_design_status():
             'extensions': sorted(QA_ALLOWED_EXTENSIONS),
             'max_files': QA_UPLOAD_MAX_FILES,
             'max_file_size': QA_UPLOAD_MAX_FILE_SIZE,
+        },
+    }
+
+
+def qa_test_design_status():
+    upload = {
+        'extensions': sorted(QA_ALLOWED_EXTENSIONS),
+        'max_files': QA_UPLOAD_MAX_FILES,
+        'max_file_size': QA_UPLOAD_MAX_FILE_SIZE,
+    }
+    codex = qa_codex_test_design_status()
+    codex.setdefault('upload', upload)
+    local = get_local_qa_status()
+    local.update({'ok': True, 'upload': upload})
+    return {
+        **codex,
+        'upload': upload,
+        'providers': {
+            'codex': codex,
+            'ollama': local,
         },
     }
 
@@ -3584,7 +3612,7 @@ def run_qa_test_design(
     if len(requirement) > QA_REQUIREMENT_MAX_LENGTH:
         raise ValueError(f'需求内容不能超过 {QA_REQUIREMENT_MAX_LENGTH} 个字符')
 
-    status = qa_test_design_status()
+    status = qa_codex_test_design_status()
     if not status.get('available'):
         raise RuntimeError(status.get('msg') or 'QA 测试设计服务不可用')
     cli_path = find_codex_cli()
@@ -4462,7 +4490,12 @@ class GMHandler(SimpleHTTPRequestHandler):
             return
         try:
             attachments = resolve_qa_uploads(sess.get('id'), data.get('file_ids') or [])
-            result = run_qa_test_design(
+            runner = (
+                run_local_qa_test_design
+                if str(data.get('engine') or '').strip().lower() in ('ollama', 'local')
+                else run_qa_test_design
+            )
+            result = runner(
                 data.get('requirement'),
                 data.get('mode'),
                 data.get('domain'),
