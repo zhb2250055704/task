@@ -49,6 +49,11 @@ elif sys.stderr.encoding != 'utf-8':
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
 TOOL_DIR = os.path.dirname(os.path.abspath(__file__))
+try:
+    with open(os.path.abspath(__file__), 'rb') as source_file:
+        SERVER_BUILD = hashlib.sha256(source_file.read()).hexdigest()[:12]
+except OSError:
+    SERVER_BUILD = ''
 DATA_FILE = os.path.join(TOOL_DIR, 'gm_commands.json')
 CATEGORY_FILE = os.path.join(TOOL_DIR, 'gm_categories.json')
 SCRIPT_FILE = os.path.join(TOOL_DIR, 'gm_scripts.json')
@@ -3670,6 +3675,13 @@ class GMHandler(SimpleHTTPRequestHandler):
     def do_GET(self):
         parsed = urlparse(self.path)
         path = parsed.path
+        if path == '/api/health':
+            self._send_json({
+                'ok': True,
+                'app': 'gm-command-tool',
+                'build': SERVER_BUILD,
+            })
+            return
         if path == '/api/auth/me':
             self._auth_me()
             return

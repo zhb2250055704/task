@@ -7806,6 +7806,13 @@ function updateQaGenerateAvailability() {
   if (button) button.disabled = !qaServiceAvailable || qaRunning || qaUploading;
 }
 
+function qaRequestErrorMessage(error, action) {
+  if (error instanceof TypeError || /failed to fetch|networkerror|load failed/i.test(String(error && error.message || error))) {
+    return `${action}失败：后台服务未启动或版本过旧，请重新启动 GM 工具后重试`;
+  }
+  return (error && error.message) || `${action}失败`;
+}
+
 function renderQaUploadList() {
   const list = document.getElementById('qaUploadList');
   list.innerHTML = qaUploadedFiles.map(file => `
@@ -7844,8 +7851,9 @@ async function uploadQaFiles(fileList) {
     setQaRunState('success', `已导入 ${qaUploadedFiles.length} 个需求文件`);
     toast('文件已导入');
   } catch (error) {
-    setQaRunState('error', error.message || '文件导入失败');
-    toast(error.message || '文件导入失败');
+    const message = qaRequestErrorMessage(error, '文件导入');
+    setQaRunState('error', message);
+    toast(message);
   } finally {
     qaUploading = false;
     updateQaGenerateAvailability();
