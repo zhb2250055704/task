@@ -129,9 +129,12 @@ QA_RUNTIME_DIR = os.path.join(TOOL_DIR, 'runtime', QA_SKILL_NAME)
 QA_UPLOAD_DIR = os.path.join(QA_RUNTIME_DIR, 'uploads')
 QA_UPLOAD_TTL = 60 * 60
 QA_UPLOAD_MAX_FILES = 8
-QA_UPLOAD_MAX_FILE_SIZE = 20 * 1024 * 1024
-QA_UPLOAD_MAX_REQUEST_SIZE = 50 * 1024 * 1024
-QA_UPLOAD_MAX_UNCOMPRESSED_SIZE = 120 * 1024 * 1024
+QA_UPLOAD_MAX_FILE_SIZE_MB = 100
+QA_UPLOAD_MAX_REQUEST_SIZE_MB = 200
+QA_UPLOAD_MAX_UNCOMPRESSED_SIZE_MB = 500
+QA_UPLOAD_MAX_FILE_SIZE = QA_UPLOAD_MAX_FILE_SIZE_MB * 1024 * 1024
+QA_UPLOAD_MAX_REQUEST_SIZE = QA_UPLOAD_MAX_REQUEST_SIZE_MB * 1024 * 1024
+QA_UPLOAD_MAX_UNCOMPRESSED_SIZE = QA_UPLOAD_MAX_UNCOMPRESSED_SIZE_MB * 1024 * 1024
 QA_ALLOWED_EXTENSIONS = {
     '.pdf', '.docx', '.txt', '.md', '.xlsx', '.csv', '.pptx'
 }
@@ -3341,7 +3344,7 @@ def _qa_validate_upload(filename, payload):
     if size <= 0:
         raise ValueError(f'{safe_name} 是空文件')
     if size > QA_UPLOAD_MAX_FILE_SIZE:
-        raise ValueError(f'{safe_name} 超过 20 MB 限制')
+        raise ValueError(f'{safe_name} 超过 {QA_UPLOAD_MAX_FILE_SIZE_MB} MB 限制')
     if extension == '.pdf' and not payload.startswith(b'%PDF-'):
         raise ValueError(f'{safe_name} 不是有效的 PDF 文件')
     if extension in ('.docx', '.xlsx', '.pptx'):
@@ -3407,7 +3410,7 @@ def save_qa_uploads(owner_id, files):
         raise ValueError(f'一次最多上传 {QA_UPLOAD_MAX_FILES} 个文件')
     total_size = sum(len(item.get('content') or b'') for item in files)
     if total_size > QA_UPLOAD_MAX_REQUEST_SIZE:
-        raise ValueError('本次上传文件总大小不能超过 50 MB')
+        raise ValueError(f'本次上传文件总大小不能超过 {QA_UPLOAD_MAX_REQUEST_SIZE_MB} MB')
 
     validated = []
     for item in files:
@@ -4402,7 +4405,10 @@ class GMHandler(SimpleHTTPRequestHandler):
             self._send_json({'ok': False, 'msg': '上传内容为空'}, status=400)
             return None
         if length > QA_UPLOAD_MAX_REQUEST_SIZE + 1024 * 1024:
-            self._send_json({'ok': False, 'msg': '本次上传文件总大小不能超过 50 MB'}, status=413)
+            self._send_json({
+                'ok': False,
+                'msg': f'本次上传文件总大小不能超过 {QA_UPLOAD_MAX_REQUEST_SIZE_MB} MB',
+            }, status=413)
             return None
         raw = self.rfile.read(length)
         envelope = (
