@@ -4315,9 +4315,83 @@
   }
   .qa-field input,
   .qa-field select { min-height: 38px; }
+  .qa-upload-zone {
+    min-height: 112px;
+    padding: 16px;
+    display: grid;
+    place-items: center;
+    border: 1px dashed #8da2ba;
+    border-radius: 8px;
+    background: rgba(91, 130, 181, .055);
+    color: var(--text);
+    cursor: pointer;
+    transition: border-color .16s ease, background .16s ease, box-shadow .16s ease;
+  }
+  .qa-upload-zone:hover,
+  .qa-upload-zone.dragover {
+    border-color: #4f78aa;
+    background: rgba(91, 130, 181, .11);
+    box-shadow: inset 0 0 0 1px rgba(79, 120, 170, .12);
+  }
+  .qa-upload-zone:focus-visible { outline: 2px solid rgba(61, 111, 177, .28); outline-offset: 2px; }
+  .qa-upload-content { display: flex; align-items: center; justify-content: center; gap: 12px; text-align: left; }
+  .qa-upload-symbol {
+    width: 38px;
+    height: 38px;
+    display: grid;
+    place-items: center;
+    flex: 0 0 auto;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: var(--panel-solid);
+    color: #4f78aa;
+    font-size: 22px;
+    font-weight: 700;
+  }
+  .qa-upload-title { color: var(--text); font-size: 13px; font-weight: 820; }
+  .qa-upload-hint { margin-top: 4px; color: var(--text-dim); font-size: 10px; line-height: 1.5; }
+  .qa-upload-list { display: grid; gap: 7px; }
+  .qa-upload-item {
+    min-width: 0;
+    min-height: 46px;
+    padding: 7px 8px 7px 10px;
+    display: grid;
+    grid-template-columns: 32px minmax(0, 1fr) 30px;
+    align-items: center;
+    gap: 9px;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: var(--input-bg);
+  }
+  .qa-upload-type {
+    height: 28px;
+    display: grid;
+    place-items: center;
+    border-radius: 5px;
+    background: rgba(79, 120, 170, .12);
+    color: #4f78aa;
+    font-size: 9px;
+    font-weight: 850;
+    text-transform: uppercase;
+  }
+  .qa-upload-name { overflow: hidden; color: var(--text); font-size: 12px; font-weight: 760; text-overflow: ellipsis; white-space: nowrap; }
+  .qa-upload-meta { margin-top: 2px; color: var(--text-dim); font-size: 10px; }
+  .qa-upload-remove {
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-dim);
+    cursor: pointer;
+    font-size: 18px;
+    line-height: 1;
+  }
+  .qa-upload-remove:hover { background: rgba(196, 106, 51, .1); color: #b45f2f; }
   .qa-requirement {
-    min-height: 360px;
-    max-height: 58vh;
+    min-height: 180px;
+    max-height: 42vh;
     resize: vertical;
     padding: 12px 13px;
     font: 13px/1.7 "Microsoft YaHei", "PingFang SC", sans-serif;
@@ -4466,7 +4540,7 @@
   }
   @media (max-width: 1180px) {
     .qa-workspace { grid-template-columns: 1fr; }
-    .qa-requirement { min-height: 260px; }
+    .qa-requirement { min-height: 180px; }
     .qa-output-body { max-height: none; }
   }
   @media (max-width: 760px) {
@@ -4475,6 +4549,7 @@
     .qa-field-wide { grid-column: auto; }
     .qa-pane-head { align-items: flex-start; flex-direction: column; }
     .qa-output-tools { width: 100%; }
+    .qa-upload-content { align-items: flex-start; }
     .qa-output-body { min-height: 430px; padding: 16px 14px 24px; }
     .qa-output-empty { min-height: 380px; }
   }
@@ -4725,8 +4800,25 @@
                 </div>
               </div>
               <div class="qa-field">
-                <label for="qaRequirement">需求内容</label>
-                <textarea id="qaRequirement" class="qa-requirement" maxlength="12000" placeholder="粘贴 PRD、功能需求、缺陷描述或代码变更说明"></textarea>
+                <label for="qaFileInput">需求文件</label>
+                <div id="qaUploadZone" class="qa-upload-zone" role="button" tabindex="0" aria-label="选择需求文件"
+                  onclick="document.getElementById('qaFileInput').click()">
+                  <input id="qaFileInput" type="file" hidden multiple
+                    accept=".pdf,.docx,.txt,.md,.xlsx,.csv,.pptx"
+                    onchange="uploadQaFiles(this.files)">
+                  <div class="qa-upload-content">
+                    <span class="qa-upload-symbol" aria-hidden="true">↑</span>
+                    <div>
+                      <div class="qa-upload-title">选择文件或拖放到这里</div>
+                      <div class="qa-upload-hint">PDF · Word (.docx) · Excel · CSV · PPTX · TXT · Markdown，单个不超过 20 MB</div>
+                    </div>
+                  </div>
+                </div>
+                <div id="qaUploadList" class="qa-upload-list"></div>
+              </div>
+              <div class="qa-field">
+                <label for="qaRequirement">补充说明（可选）</label>
+                <textarea id="qaRequirement" class="qa-requirement" maxlength="12000" placeholder="补充业务背景、测试范围或文档中没有说明的规则"></textarea>
               </div>
               <div class="qa-actions">
                 <button id="qaGenerateBtn" class="btn btn-primary" type="button" onclick="generateQaTestDesign()">生成测试设计</button>
@@ -5175,6 +5267,8 @@ let qaRunning = false;
 let qaTimer = null;
 let qaStartedAt = 0;
 let qaServiceAvailable = false;
+let qaUploadedFiles = [];
+let qaUploading = false;
 
 function enhanceReactBitsComponents(root) {
   const scope = root && root.querySelectorAll ? root : document;
@@ -7700,6 +7794,89 @@ function stopQaTimer() {
   qaTimer = null;
 }
 
+function formatQaFileSize(bytes) {
+  const size = Number(bytes || 0);
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+  return `${(size / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function updateQaGenerateAvailability() {
+  const button = document.getElementById('qaGenerateBtn');
+  if (button) button.disabled = !qaServiceAvailable || qaRunning || qaUploading;
+}
+
+function renderQaUploadList() {
+  const list = document.getElementById('qaUploadList');
+  list.innerHTML = qaUploadedFiles.map(file => `
+    <div class="qa-upload-item">
+      <span class="qa-upload-type">${esc(String(file.extension || '').replace('.', '') || 'FILE')}</span>
+      <div style="min-width:0">
+        <div class="qa-upload-name" title="${esc(file.name)}">${esc(file.name)}</div>
+        <div class="qa-upload-meta">${esc(formatQaFileSize(file.size))}</div>
+      </div>
+      <button class="qa-upload-remove" type="button" title="移除文件" aria-label="移除 ${esc(file.name)}"
+        onclick='removeQaFile(${JSON.stringify(file.id)})'>×</button>
+    </div>`).join('');
+}
+
+async function uploadQaFiles(fileList) {
+  const files = Array.from(fileList || []);
+  const input = document.getElementById('qaFileInput');
+  if (input) input.value = '';
+  if (!files.length || qaUploading) return;
+  if (qaUploadedFiles.length + files.length > 8) {
+    toast('一次最多导入 8 个文件');
+    return;
+  }
+  qaUploading = true;
+  updateQaGenerateAvailability();
+  setQaRunState('running', `正在导入 ${files.length} 个文件`);
+  try {
+    const form = new FormData();
+    files.forEach(file => form.append('files', file, file.name));
+    const res = await fetch(`${QA_TEST_DESIGN_API}/upload`, { method: 'POST', body: form });
+    if (res.status === 401) { location.href = 'login.html'; return; }
+    const data = await readQaJsonResponse(res, '文件导入接口返回异常，请重启工具服务');
+    if (!res.ok || !data.ok) throw new Error(data.msg || '文件导入失败');
+    qaUploadedFiles.push(...(data.items || []));
+    renderQaUploadList();
+    setQaRunState('success', `已导入 ${qaUploadedFiles.length} 个需求文件`);
+    toast('文件已导入');
+  } catch (error) {
+    setQaRunState('error', error.message || '文件导入失败');
+    toast(error.message || '文件导入失败');
+  } finally {
+    qaUploading = false;
+    updateQaGenerateAvailability();
+  }
+}
+
+async function removeQaFile(fileId) {
+  const target = qaUploadedFiles.find(file => file.id === fileId);
+  if (!target) return;
+  try {
+    const res = await fetch(`${QA_TEST_DESIGN_API}/upload?id=${encodeURIComponent(fileId)}`, { method: 'DELETE' });
+    const data = await readQaJsonResponse(res, '文件移除接口返回异常');
+    if (!res.ok || !data.ok) throw new Error(data.msg || '文件移除失败');
+    qaUploadedFiles = qaUploadedFiles.filter(file => file.id !== fileId);
+    renderQaUploadList();
+    setQaRunState('', qaUploadedFiles.length ? `已导入 ${qaUploadedFiles.length} 个需求文件` : '等待提交');
+  } catch (error) {
+    toast(error.message || '文件移除失败');
+  }
+}
+
+async function clearQaFiles() {
+  const files = qaUploadedFiles.slice();
+  qaUploadedFiles = [];
+  renderQaUploadList();
+  await Promise.all(files.map(file => fetch(
+    `${QA_TEST_DESIGN_API}/upload?id=${encodeURIComponent(file.id)}`,
+    { method: 'DELETE' }
+  ).catch(() => null)));
+}
+
 async function readQaJsonResponse(res, fallbackMessage) {
   const text = await res.text();
   try {
@@ -7721,14 +7898,14 @@ async function loadQaTestDesignStatus() {
     qaServiceAvailable = !!data.available;
     badge.classList.add(qaServiceAvailable ? 'ready' : 'unavailable');
     badge.textContent = qaServiceAvailable ? `${data.engine} · ${data.skill}` : (data.msg || '服务不可用');
-    button.disabled = !qaServiceAvailable || qaRunning;
+    updateQaGenerateAvailability();
     if (!qaServiceAvailable) setQaRunState('error', data.msg || 'QA 测试设计服务不可用');
     else if (!qaRunning && !qaResultMarkdown) setQaRunState('', '等待提交');
   } catch (error) {
     qaServiceAvailable = false;
     badge.classList.add('unavailable');
     badge.textContent = '服务不可用';
-    button.disabled = true;
+    updateQaGenerateAvailability();
     setQaRunState('error', error.message || 'QA 服务状态读取失败');
   }
 }
@@ -7875,7 +8052,7 @@ function renderQaResult(markdown) {
 async function generateQaTestDesign() {
   if (qaRunning) return;
   const requirement = document.getElementById('qaRequirement').value.trim();
-  if (!requirement) { toast('请输入需求内容'); return; }
+  if (!requirement && !qaUploadedFiles.length) { toast('请导入需求文件或填写补充说明'); return; }
   if (!qaServiceAvailable) {
     await loadQaTestDesignStatus();
     if (!qaServiceAvailable) return;
@@ -7893,6 +8070,7 @@ async function generateQaTestDesign() {
       body: JSON.stringify({
         title: document.getElementById('qaTitle').value.trim(),
         requirement,
+        file_ids: qaUploadedFiles.map(file => file.id),
         mode: document.getElementById('qaMode').value,
         domain: document.getElementById('qaDomain').value,
         depth: document.getElementById('qaDepth').value,
@@ -7911,14 +8089,15 @@ async function generateQaTestDesign() {
   } finally {
     stopQaTimer();
     qaRunning = false;
-    button.disabled = !qaServiceAvailable;
+    updateQaGenerateAvailability();
     button.textContent = '生成测试设计';
   }
 }
 
-function clearQaWorkspace() {
-  const hasContent = document.getElementById('qaRequirement').value.trim() || qaResultMarkdown;
+async function clearQaWorkspace() {
+  const hasContent = document.getElementById('qaRequirement').value.trim() || qaResultMarkdown || qaUploadedFiles.length;
   if (hasContent && !confirm('确定清空当前需求和测试设计结果吗？')) return;
+  await clearQaFiles();
   document.getElementById('qaTitle').value = '';
   document.getElementById('qaRequirement').value = '';
   document.getElementById('qaMode').value = 'full';
@@ -8083,6 +8262,22 @@ document.getElementById('formulaSearch').addEventListener('input', debouncedLoad
 document.getElementById('itemSearch').addEventListener('keydown', e => { if (e.key === 'Enter') loadItems(); });
 document.getElementById('itemSearch').addEventListener('input', debouncedLoadItems);
 document.getElementById('qaRequirement').addEventListener('input', updateQaCharCount);
+const qaUploadZone = document.getElementById('qaUploadZone');
+['dragenter', 'dragover'].forEach(type => qaUploadZone.addEventListener(type, event => {
+  event.preventDefault();
+  qaUploadZone.classList.add('dragover');
+}));
+['dragleave', 'drop'].forEach(type => qaUploadZone.addEventListener(type, event => {
+  event.preventDefault();
+  qaUploadZone.classList.remove('dragover');
+}));
+qaUploadZone.addEventListener('drop', event => uploadQaFiles(event.dataTransfer.files));
+qaUploadZone.addEventListener('keydown', event => {
+  if (event.key === 'Enter' || event.key === ' ') {
+    event.preventDefault();
+    document.getElementById('qaFileInput').click();
+  }
+});
 document.getElementById('mask').addEventListener('click', e => { if (e.target.id === 'mask') closeModal(); });
 document.getElementById('scriptMask').addEventListener('click', e => { if (e.target.id === 'scriptMask') closeScriptModal(); });
 document.getElementById('catMask').addEventListener('click', e => { if (e.target.id === 'catMask') closeCategoryModal(); });
