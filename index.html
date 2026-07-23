@@ -4242,6 +4242,242 @@
     .cocos-account-list { grid-template-columns: 1fr; }
     .cocos-environment-body { grid-template-columns: 1fr; }
   }
+  /* ============ QA 测试设计 ============ */
+  #view-qa .container { max-width: none; padding-top: 16px; }
+  .qa-engine-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    min-height: 28px;
+    padding: 4px 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--panel);
+    color: var(--text-dim);
+    font-size: 12px;
+    font-weight: 750;
+  }
+  .qa-engine-badge::before {
+    content: '';
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #94a3b8;
+  }
+  .qa-engine-badge.ready::before { background: #2f8f62; }
+  .qa-engine-badge.unavailable::before { background: #c46a33; }
+  .qa-workspace {
+    display: grid;
+    grid-template-columns: minmax(340px, .86fr) minmax(520px, 1.34fr);
+    gap: 16px;
+    align-items: stretch;
+  }
+  .qa-pane {
+    min-width: 0;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--panel);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+  .qa-pane-head {
+    min-height: 54px;
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .qa-pane-title { color: var(--text); font-size: 14px; font-weight: 850; }
+  .qa-pane-meta { color: var(--text-dim); font-size: 11px; white-space: nowrap; }
+  .qa-input-body { display: grid; gap: 14px; padding: 16px; }
+  .qa-config-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .qa-field { display: grid; gap: 6px; min-width: 0; }
+  .qa-field-wide { grid-column: 1 / -1; }
+  .qa-field label {
+    color: var(--text-dim);
+    font-size: 11px;
+    font-weight: 800;
+  }
+  .qa-field input,
+  .qa-field select,
+  .qa-field textarea {
+    width: 100%;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: var(--input-bg);
+    color: var(--text);
+  }
+  .qa-field input,
+  .qa-field select { min-height: 38px; }
+  .qa-requirement {
+    min-height: 360px;
+    max-height: 58vh;
+    resize: vertical;
+    padding: 12px 13px;
+    font: 13px/1.7 "Microsoft YaHei", "PingFang SC", sans-serif;
+  }
+  .qa-requirement:focus,
+  .qa-field input:focus,
+  .qa-field select:focus {
+    outline: 2px solid rgba(61, 111, 177, .18);
+    border-color: #5b82b5;
+  }
+  .qa-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .qa-actions .btn-primary { min-width: 132px; }
+  .qa-run-state {
+    position: relative;
+    min-height: 44px;
+    padding: 10px 12px 12px;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: var(--input-bg);
+    color: var(--text-dim);
+    font-size: 12px;
+    line-height: 1.55;
+    overflow: hidden;
+  }
+  .qa-run-state.running { color: var(--text); }
+  .qa-run-state.success { border-color: rgba(47, 143, 98, .42); color: #2f8f62; }
+  .qa-run-state.error { border-color: rgba(196, 106, 51, .45); color: #b45f2f; }
+  .qa-run-progress {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 3px;
+    background: rgba(148, 163, 184, .16);
+    overflow: hidden;
+    opacity: 0;
+  }
+  .qa-run-state.running .qa-run-progress { opacity: 1; }
+  .qa-run-progress::after {
+    content: '';
+    display: block;
+    width: 34%;
+    height: 100%;
+    background: #4f78aa;
+    animation: qaProgress 1.35s ease-in-out infinite;
+  }
+  @keyframes qaProgress {
+    from { transform: translateX(-100%); }
+    to { transform: translateX(300%); }
+  }
+  .qa-output-tools { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .qa-segmented {
+    display: inline-flex;
+    padding: 3px;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: var(--input-bg);
+  }
+  .qa-segmented button {
+    min-height: 28px;
+    padding: 4px 9px;
+    border: 0;
+    border-radius: 5px;
+    background: transparent;
+    color: var(--text-dim);
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 750;
+  }
+  .qa-segmented button.active { background: var(--panel-solid); color: var(--text); box-shadow: 0 1px 4px rgba(15, 23, 42, .12); }
+  .qa-tool-btn {
+    min-height: 32px;
+    padding: 5px 10px;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: var(--input-bg);
+    color: var(--text);
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 750;
+  }
+  .qa-tool-btn:disabled { opacity: .45; cursor: default; }
+  .qa-output-body {
+    min-height: 550px;
+    max-height: calc(100vh - 220px);
+    overflow: auto;
+    padding: 22px 24px 32px;
+    background: var(--input-bg);
+  }
+  .qa-output-empty {
+    min-height: 500px;
+    display: grid;
+    place-items: center;
+    color: var(--text-dim);
+    font-size: 13px;
+  }
+  .qa-markdown { color: var(--text); font-size: 13px; line-height: 1.72; }
+  .qa-markdown h1,
+  .qa-markdown h2,
+  .qa-markdown h3,
+  .qa-markdown h4 { margin: 22px 0 10px; color: var(--text); letter-spacing: 0; }
+  .qa-markdown h1 { margin-top: 0; font-size: 22px; }
+  .qa-markdown h2 { padding-bottom: 7px; border-bottom: 1px solid var(--border); font-size: 17px; }
+  .qa-markdown h3 { font-size: 15px; }
+  .qa-markdown h4 { font-size: 13px; }
+  .qa-markdown p { margin: 8px 0; }
+  .qa-markdown ul,
+  .qa-markdown ol { margin: 8px 0; padding-left: 24px; }
+  .qa-markdown li { margin: 4px 0; }
+  .qa-markdown blockquote {
+    margin: 12px 0;
+    padding: 8px 12px;
+    border-left: 3px solid #5b82b5;
+    background: rgba(91, 130, 181, .08);
+    color: var(--text-dim);
+  }
+  .qa-markdown code {
+    padding: 2px 5px;
+    border-radius: 4px;
+    background: var(--code-bg);
+    font: 12px/1.5 Consolas, monospace;
+  }
+  .qa-markdown pre {
+    margin: 12px 0;
+    padding: 13px;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: var(--code-bg);
+    overflow: auto;
+  }
+  .qa-markdown pre code { padding: 0; background: transparent; }
+  .qa-table-wrap { width: 100%; margin: 12px 0 18px; overflow-x: auto; border: 1px solid var(--border); border-radius: 7px; }
+  .qa-markdown table { width: max-content; min-width: 100%; margin: 0; border: 0; border-radius: 0; box-shadow: none; background: var(--panel-solid); }
+  .qa-markdown th,
+  .qa-markdown td { min-width: 110px; max-width: 340px; padding: 9px 11px; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); vertical-align: top; white-space: normal; word-break: break-word; }
+  .qa-markdown th { position: static; background: var(--th-bg); color: var(--text); font-size: 11px; }
+  .qa-markdown tr:last-child td { border-bottom: 0; }
+  .qa-markdown th:last-child,
+  .qa-markdown td:last-child { border-right: 0; }
+  .qa-raw {
+    margin: 0;
+    white-space: pre-wrap;
+    word-break: break-word;
+    color: var(--text);
+    font: 12px/1.7 Consolas, monospace;
+  }
+  @media (max-width: 1180px) {
+    .qa-workspace { grid-template-columns: 1fr; }
+    .qa-requirement { min-height: 260px; }
+    .qa-output-body { max-height: none; }
+  }
+  @media (max-width: 760px) {
+    #view-qa .container { padding: 12px; }
+    .qa-config-grid { grid-template-columns: 1fr; }
+    .qa-field-wide { grid-column: auto; }
+    .qa-pane-head { align-items: flex-start; flex-direction: column; }
+    .qa-output-tools { width: 100%; }
+    .qa-output-body { min-height: 430px; padding: 16px 14px 24px; }
+    .qa-output-empty { min-height: 380px; }
+  }
 </style>
 </head>
 <body>
@@ -4251,6 +4487,7 @@
     <div class="topnav">
       <div class="nav-item active" data-view="commands" onclick="switchView('commands')" data-mark="CMD">命令管理</div>
       <div class="nav-item" data-view="scripts" onclick="switchView('scripts')" data-mark="SCR">脚本管理</div>
+      <div class="nav-item" data-view="qa" onclick="switchView('qa')" data-mark="QA">测试设计</div>
       <div class="nav-item" data-view="formulas" onclick="switchView('formulas')" data-mark="CAL">计算公式</div>
       <div class="nav-item" data-view="items" onclick="switchView('items')" data-mark="ITM">道具表</div>
       <div class="nav-item admin-only" data-view="git" onclick="switchView('git')" style="display:none" data-mark="GIT">Git 拉取</div>
@@ -4434,6 +4671,93 @@
       <div class="container">
         <div id="scriptGroups"></div>
         <div id="scriptEmpty" class="empty" style="display:none">暂无脚本，点击「新增脚本」开始</div>
+      </div>
+    </div>
+
+    <!-- ============ QA 测试设计视图 ============ -->
+    <div class="view" id="view-qa">
+      <header>
+        <h1>测试设计</h1>
+        <div class="header-right">
+          <span id="qaEngineBadge" class="qa-engine-badge">检测服务</span>
+        </div>
+      </header>
+      <div class="container">
+        <div class="qa-workspace">
+          <section class="qa-pane" aria-label="测试需求输入">
+            <div class="qa-pane-head">
+              <span class="qa-pane-title">需求输入</span>
+              <span id="qaCharCount" class="qa-pane-meta">0 / 12000</span>
+            </div>
+            <div class="qa-input-body">
+              <div class="qa-config-grid">
+                <div class="qa-field qa-field-wide">
+                  <label for="qaTitle">需求标题</label>
+                  <input id="qaTitle" type="text" maxlength="120" placeholder="输入需求或功能名称" autocomplete="off">
+                </div>
+                <div class="qa-field">
+                  <label for="qaMode">交付模式</label>
+                  <select id="qaMode">
+                    <option value="full">完整测试设计</option>
+                    <option value="points">测试点</option>
+                    <option value="cases">详细测试用例</option>
+                    <option value="review">需求评审</option>
+                    <option value="impact">变更影响测试</option>
+                  </select>
+                </div>
+                <div class="qa-field">
+                  <label for="qaDomain">业务领域</label>
+                  <select id="qaDomain">
+                    <option value="auto">自动识别</option>
+                    <option value="gm">游戏与 GM 工具</option>
+                    <option value="web">Web 界面</option>
+                    <option value="api">API 与服务端</option>
+                    <option value="excel">Excel/CSV 配置表</option>
+                  </select>
+                </div>
+                <div class="qa-field qa-field-wide">
+                  <label for="qaDepth">设计深度</label>
+                  <select id="qaDepth">
+                    <option value="concise">精简</option>
+                    <option value="standard" selected>标准</option>
+                    <option value="deep">深入</option>
+                  </select>
+                </div>
+              </div>
+              <div class="qa-field">
+                <label for="qaRequirement">需求内容</label>
+                <textarea id="qaRequirement" class="qa-requirement" maxlength="12000" placeholder="粘贴 PRD、功能需求、缺陷描述或代码变更说明"></textarea>
+              </div>
+              <div class="qa-actions">
+                <button id="qaGenerateBtn" class="btn btn-primary" type="button" onclick="generateQaTestDesign()">生成测试设计</button>
+                <button class="btn btn-ghost" type="button" onclick="clearQaWorkspace()">清空</button>
+              </div>
+              <div id="qaRunState" class="qa-run-state">
+                <span id="qaRunText">等待提交</span>
+                <span class="qa-run-progress" aria-hidden="true"></span>
+              </div>
+            </div>
+          </section>
+
+          <section class="qa-pane" aria-label="测试设计结果">
+            <div class="qa-pane-head">
+              <span class="qa-pane-title">设计结果</span>
+              <div class="qa-output-tools">
+                <div class="qa-segmented" role="group" aria-label="结果显示模式">
+                  <button id="qaPreviewTab" class="active" type="button" onclick="setQaOutputMode('preview')">预览</button>
+                  <button id="qaRawTab" type="button" onclick="setQaOutputMode('raw')">Markdown</button>
+                </div>
+                <button id="qaCopyBtn" class="qa-tool-btn" type="button" onclick="copyQaResult()" disabled>复制</button>
+                <button id="qaDownloadBtn" class="qa-tool-btn" type="button" onclick="downloadQaResult()" disabled>下载</button>
+              </div>
+            </div>
+            <div class="qa-output-body">
+              <div id="qaOutputEmpty" class="qa-output-empty">暂无测试设计结果</div>
+              <div id="qaOutputPreview" class="qa-markdown" style="display:none"></div>
+              <pre id="qaOutputRaw" class="qa-raw" style="display:none"></pre>
+            </div>
+          </section>
+        </div>
       </div>
     </div>
 
@@ -4808,6 +5132,7 @@ const USER_API = '/api/users';
 const GIT_API = '/api/git';
 const KS_CATALOG_API = '/api/ks/catalog';
 const KS_SYNC_API = '/api/ks/sync';
+const QA_TEST_DESIGN_API = '/api/qa-test-design';
 let categoryCache = [];
 let currentView = 'commands';
 let currentUser = null;
@@ -4845,6 +5170,11 @@ let ksTokenExpired = false;
 let ksCatalogLoading = false;
 let ksSyncInFlight = false;
 let lastCocosCatalogSignature = '';
+let qaResultMarkdown = '';
+let qaRunning = false;
+let qaTimer = null;
+let qaStartedAt = 0;
+let qaServiceAvailable = false;
 
 function enhanceReactBitsComponents(root) {
   const scope = root && root.querySelectorAll ? root : document;
@@ -4964,6 +5294,7 @@ function switchView(view) {
     loadCocosStatus();
     loadScripts();
   }
+  else if (view === 'qa') loadQaTestDesignStatus();
   else if (view === 'formulas') loadFormulas();
   else if (view === 'items') loadItems();
   else if (view === 'git') loadGitRepos();
@@ -7332,6 +7663,292 @@ function renderGitOutput(data) {
   return '<div class="git-output-title">' + (ok ? '拉取成功' : '拉取失败') + '</div><pre>' + esc(body) + '</pre>';
 }
 
+/* ============ QA 测试设计 ============ */
+function updateQaCharCount() {
+  const input = document.getElementById('qaRequirement');
+  const count = input ? input.value.length : 0;
+  document.getElementById('qaCharCount').textContent = `${count} / 12000`;
+}
+
+function setQaRunState(state, message) {
+  const box = document.getElementById('qaRunState');
+  box.classList.remove('running', 'success', 'error');
+  if (state) box.classList.add(state);
+  document.getElementById('qaRunText').textContent = message || '';
+}
+
+function formatQaElapsed(milliseconds) {
+  const totalSeconds = Math.max(0, Math.round(milliseconds / 1000));
+  if (totalSeconds < 60) return `${totalSeconds} 秒`;
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes} 分 ${String(seconds).padStart(2, '0')} 秒`;
+}
+
+function startQaTimer() {
+  stopQaTimer();
+  qaStartedAt = Date.now();
+  const update = () => {
+    setQaRunState('running', `Codex 正在生成 · ${formatQaElapsed(Date.now() - qaStartedAt)}`);
+  };
+  update();
+  qaTimer = setInterval(update, 1000);
+}
+
+function stopQaTimer() {
+  if (qaTimer) clearInterval(qaTimer);
+  qaTimer = null;
+}
+
+async function readQaJsonResponse(res, fallbackMessage) {
+  const text = await res.text();
+  try {
+    return text ? JSON.parse(text) : {};
+  } catch (error) {
+    throw new Error(fallbackMessage || 'QA 服务返回了无法解析的内容');
+  }
+}
+
+async function loadQaTestDesignStatus() {
+  const badge = document.getElementById('qaEngineBadge');
+  const button = document.getElementById('qaGenerateBtn');
+  badge.classList.remove('ready', 'unavailable');
+  badge.textContent = '检测服务';
+  try {
+    const res = await fetch(`${QA_TEST_DESIGN_API}/status`, { cache: 'no-store' });
+    if (res.status === 401) { location.href = 'login.html'; return; }
+    const data = await readQaJsonResponse(res, 'QA 服务状态读取失败，请重启工具服务');
+    qaServiceAvailable = !!data.available;
+    badge.classList.add(qaServiceAvailable ? 'ready' : 'unavailable');
+    badge.textContent = qaServiceAvailable ? `${data.engine} · ${data.skill}` : (data.msg || '服务不可用');
+    button.disabled = !qaServiceAvailable || qaRunning;
+    if (!qaServiceAvailable) setQaRunState('error', data.msg || 'QA 测试设计服务不可用');
+    else if (!qaRunning && !qaResultMarkdown) setQaRunState('', '等待提交');
+  } catch (error) {
+    qaServiceAvailable = false;
+    badge.classList.add('unavailable');
+    badge.textContent = '服务不可用';
+    button.disabled = true;
+    setQaRunState('error', error.message || 'QA 服务状态读取失败');
+  }
+}
+
+function qaInlineMarkdown(value) {
+  const codeParts = [];
+  let text = esc(value).replace(/`([^`]+)`/g, (_, code) => {
+    const token = `@@QA_CODE_${codeParts.length}@@`;
+    codeParts.push(`<code>${code}</code>`);
+    return token;
+  });
+  text = text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  text = text.replace(/&lt;br\s*\/?&gt;/gi, '<br>');
+  codeParts.forEach((code, index) => {
+    text = text.replace(`@@QA_CODE_${index}@@`, code);
+  });
+  return text;
+}
+
+function qaTableCells(line) {
+  return line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map(cell => cell.trim());
+}
+
+function qaIsTableSeparator(line) {
+  const cells = qaTableCells(line);
+  return cells.length > 0 && cells.every(cell => /^:?-{3,}:?$/.test(cell));
+}
+
+function renderQaMarkdown(markdown) {
+  const lines = String(markdown || '').replace(/\r\n?/g, '\n').split('\n');
+  let html = '';
+  let listType = '';
+  let inCode = false;
+  let codeLines = [];
+
+  const closeList = () => {
+    if (!listType) return;
+    html += `</${listType}>`;
+    listType = '';
+  };
+
+  for (let i = 0; i < lines.length;) {
+    const line = lines[i];
+    if (/^```/.test(line.trim())) {
+      closeList();
+      if (!inCode) {
+        inCode = true;
+        codeLines = [];
+      } else {
+        html += `<pre><code>${esc(codeLines.join('\n'))}</code></pre>`;
+        inCode = false;
+      }
+      i += 1;
+      continue;
+    }
+    if (inCode) {
+      codeLines.push(line);
+      i += 1;
+      continue;
+    }
+
+    if (line.includes('|') && i + 1 < lines.length && qaIsTableSeparator(lines[i + 1])) {
+      closeList();
+      const headers = qaTableCells(line);
+      i += 2;
+      const rows = [];
+      while (i < lines.length && lines[i].includes('|') && lines[i].trim()) {
+        rows.push(qaTableCells(lines[i]));
+        i += 1;
+      }
+      html += '<div class="qa-table-wrap"><table><thead><tr>' +
+        headers.map(cell => `<th>${qaInlineMarkdown(cell)}</th>`).join('') +
+        '</tr></thead><tbody>' + rows.map(row => '<tr>' +
+          headers.map((_, index) => `<td>${qaInlineMarkdown(row[index] || '')}</td>`).join('') +
+          '</tr>').join('') + '</tbody></table></div>';
+      continue;
+    }
+
+    const heading = line.match(/^(#{1,4})\s+(.+)$/);
+    if (heading) {
+      closeList();
+      const level = heading[1].length;
+      html += `<h${level}>${qaInlineMarkdown(heading[2])}</h${level}>`;
+      i += 1;
+      continue;
+    }
+
+    const unordered = line.match(/^\s*[-*]\s+(.+)$/);
+    const ordered = line.match(/^\s*\d+[.)]\s+(.+)$/);
+    if (unordered || ordered) {
+      const type = ordered ? 'ol' : 'ul';
+      if (listType !== type) {
+        closeList();
+        listType = type;
+        html += `<${type}>`;
+      }
+      html += `<li>${qaInlineMarkdown((unordered || ordered)[1])}</li>`;
+      i += 1;
+      continue;
+    }
+
+    const quote = line.match(/^>\s?(.*)$/);
+    if (quote) {
+      closeList();
+      html += `<blockquote>${qaInlineMarkdown(quote[1])}</blockquote>`;
+      i += 1;
+      continue;
+    }
+
+    if (!line.trim()) {
+      closeList();
+      i += 1;
+      continue;
+    }
+
+    closeList();
+    html += `<p>${qaInlineMarkdown(line)}</p>`;
+    i += 1;
+  }
+
+  closeList();
+  if (inCode) html += `<pre><code>${esc(codeLines.join('\n'))}</code></pre>`;
+  return html;
+}
+
+function setQaOutputMode(mode) {
+  const preview = mode !== 'raw';
+  document.getElementById('qaPreviewTab').classList.toggle('active', preview);
+  document.getElementById('qaRawTab').classList.toggle('active', !preview);
+  document.getElementById('qaOutputPreview').style.display = preview && qaResultMarkdown ? 'block' : 'none';
+  document.getElementById('qaOutputRaw').style.display = !preview && qaResultMarkdown ? 'block' : 'none';
+}
+
+function renderQaResult(markdown) {
+  qaResultMarkdown = String(markdown || '').trim();
+  document.getElementById('qaOutputEmpty').style.display = qaResultMarkdown ? 'none' : 'grid';
+  document.getElementById('qaOutputPreview').innerHTML = renderQaMarkdown(qaResultMarkdown);
+  document.getElementById('qaOutputRaw').textContent = qaResultMarkdown;
+  document.getElementById('qaCopyBtn').disabled = !qaResultMarkdown;
+  document.getElementById('qaDownloadBtn').disabled = !qaResultMarkdown;
+  setQaOutputMode('preview');
+}
+
+async function generateQaTestDesign() {
+  if (qaRunning) return;
+  const requirement = document.getElementById('qaRequirement').value.trim();
+  if (!requirement) { toast('请输入需求内容'); return; }
+  if (!qaServiceAvailable) {
+    await loadQaTestDesignStatus();
+    if (!qaServiceAvailable) return;
+  }
+
+  qaRunning = true;
+  const button = document.getElementById('qaGenerateBtn');
+  button.disabled = true;
+  button.textContent = '正在生成';
+  startQaTimer();
+  try {
+    const res = await fetch(`${QA_TEST_DESIGN_API}/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: document.getElementById('qaTitle').value.trim(),
+        requirement,
+        mode: document.getElementById('qaMode').value,
+        domain: document.getElementById('qaDomain').value,
+        depth: document.getElementById('qaDepth').value,
+      }),
+    });
+    if (res.status === 401) { location.href = 'login.html'; return; }
+    const data = await readQaJsonResponse(res, '测试设计接口返回异常，请重启工具服务');
+    if (!res.ok || !data.ok) throw new Error(data.msg || '测试设计生成失败');
+    renderQaResult(data.content || '');
+    const elapsed = data.duration_ms || (Date.now() - qaStartedAt);
+    setQaRunState('success', `生成完成 · ${formatQaElapsed(elapsed)} · ${data.engine} / ${data.skill}`);
+    toast('测试设计已生成');
+  } catch (error) {
+    setQaRunState('error', error.message || '测试设计生成失败');
+    toast(error.message || '测试设计生成失败');
+  } finally {
+    stopQaTimer();
+    qaRunning = false;
+    button.disabled = !qaServiceAvailable;
+    button.textContent = '生成测试设计';
+  }
+}
+
+function clearQaWorkspace() {
+  const hasContent = document.getElementById('qaRequirement').value.trim() || qaResultMarkdown;
+  if (hasContent && !confirm('确定清空当前需求和测试设计结果吗？')) return;
+  document.getElementById('qaTitle').value = '';
+  document.getElementById('qaRequirement').value = '';
+  document.getElementById('qaMode').value = 'full';
+  document.getElementById('qaDomain').value = 'auto';
+  document.getElementById('qaDepth').value = 'standard';
+  renderQaResult('');
+  updateQaCharCount();
+  setQaRunState('', '等待提交');
+}
+
+async function copyQaResult() {
+  if (!qaResultMarkdown) return;
+  await copyText(qaResultMarkdown);
+}
+
+function downloadQaResult() {
+  if (!qaResultMarkdown) return;
+  const title = document.getElementById('qaTitle').value.trim() || 'qa-test-design';
+  const safeTitle = title.replace(/[\\/:*?"<>|]+/g, '-').slice(0, 60);
+  const date = new Date().toISOString().slice(0, 10);
+  const blob = new Blob([qaResultMarkdown], { type: 'text/markdown;charset=utf-8' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = `${safeTitle}-${date}.md`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(link.href);
+}
+
 /* ============ 用户管理 ============ */
 async function loadUsers() {
   const res = await fetch(USER_API);
@@ -7465,6 +8082,7 @@ document.getElementById('formulaSearch').addEventListener('keydown', e => { if (
 document.getElementById('formulaSearch').addEventListener('input', debouncedLoadFormulas);
 document.getElementById('itemSearch').addEventListener('keydown', e => { if (e.key === 'Enter') loadItems(); });
 document.getElementById('itemSearch').addEventListener('input', debouncedLoadItems);
+document.getElementById('qaRequirement').addEventListener('input', updateQaCharCount);
 document.getElementById('mask').addEventListener('click', e => { if (e.target.id === 'mask') closeModal(); });
 document.getElementById('scriptMask').addEventListener('click', e => { if (e.target.id === 'scriptMask') closeScriptModal(); });
 document.getElementById('catMask').addEventListener('click', e => { if (e.target.id === 'catMask') closeCategoryModal(); });
