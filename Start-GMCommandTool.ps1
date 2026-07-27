@@ -3,7 +3,11 @@ $ErrorActionPreference = 'Stop'
 $ToolDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $Port = 9092
 $ServerFile = Join-Path $ToolDir 'server.py'
-$BuildFiles = @($ServerFile, (Join-Path $ToolDir 'qa_local_engine.py')) | Where-Object { Test-Path -LiteralPath $_ }
+$BuildFiles = @(
+    $ServerFile,
+    (Join-Path $ToolDir 'qa_local_engine.py'),
+    (Join-Path $ToolDir 'skillhub_translation.py')
+) | Where-Object { Test-Path -LiteralPath $_ }
 $BuildBytes = [byte[]]($BuildFiles | ForEach-Object { [IO.File]::ReadAllBytes($_) })
 $ExpectedBuild = ([BitConverter]::ToString(
     [Security.Cryptography.SHA256]::Create().ComputeHash($BuildBytes)

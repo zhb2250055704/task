@@ -32,6 +32,10 @@ from email.parser import BytesParser
 from email.policy import default as email_policy_default
 
 from qa_local_engine import get_local_qa_status, run_local_qa_test_design
+from skillhub_translation import (
+    start_skillhub_translation_watcher,
+    sync_skillhub_chinese_usage,
+)
 
 if os.name == 'nt':
     try:
@@ -56,6 +60,7 @@ try:
     for build_file in (
         os.path.abspath(__file__),
         os.path.join(TOOL_DIR, 'qa_local_engine.py'),
+        os.path.join(TOOL_DIR, 'skillhub_translation.py'),
     ):
         with open(build_file, 'rb') as source_file:
             build_hash.update(source_file.read())
@@ -4583,6 +4588,7 @@ if __name__ == '__main__':
     if lan_ip:
         print(f'  局域网访问(发给同事): http://{lan_ip}:{port}')
     start_cocos_bridge()
+    start_skillhub_translation_watcher()
     print('  Ctrl+C 停止')
     print()
 
