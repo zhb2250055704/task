@@ -8,3 +8,4 @@ gm_account_cache.json
 .env
 runtime/
 public-url.txt
+gm_console_config.json
