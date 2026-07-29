@@ -3341,9 +3341,19 @@ def execute_gm_commands(commands, target_id='', target_ids=None, target_specs=No
 def _ks_display_account_match(account, target):
     if normalize_game_url(account.get('environment_url')) != normalize_game_url(target.get('environment_url')):
         return -1
+    account_role_id = _text_value(account.get('role_id'))
+    target_role_id = _text_value(target.get('role_id'))
+    if account_role_id and target_role_id:
+        if account_role_id != target_role_id:
+            return -1
+        account_server_id = _text_value(account.get('server_id'))
+        target_server_id = _text_value(target.get('server_id'))
+        if account_server_id and target_server_id and account_server_id != target_server_id:
+            return -1
+        return 10
     score = 0
     comparisons = (
-        ('role_id', 5), ('account_id', 4), ('account_name', 3), ('server_id', 2),
+        ('account_id', 4), ('account_name', 3), ('server_id', 2),
     )
     for field, weight in comparisons:
         left = _text_value(account.get(field))
