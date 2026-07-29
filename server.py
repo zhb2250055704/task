@@ -125,6 +125,8 @@ GIT_JOB_TTL = 30 * 60
 
 COCOS_WS_PORT = int(os.environ.get('GM_COCOS_WS_PORT', '5101'))
 COCOS_RPC_TIMEOUT = 15
+COCOS_PROXY_HTTP_PORT = int(os.environ.get('GM_COCOS_PROXY_HTTP_PORT', '5200'))
+COCOS_PROXY_TIMEOUT = 8
 _cocos_bridge_lock = threading.Lock()
 _cocos_connections = {}
 _cocos_bridge_error = ''
@@ -1544,6 +1546,11 @@ class CocosBridgeConnection:
                     fragments = []
                     continue
                 fragments = []
+                if data.get('method') == 'gmClientHello':
+                    params = data.get('params')
+                    info = params[0] if isinstance(params, list) and params else {}
+                    self.set_target_info(info)
+                    continue
                 request_id = data.get('id')
                 if request_id is None:
                     continue
@@ -1565,7 +1572,12 @@ class CocosBridgeConnection:
         result = self.send_rpc('getGmTargetInfo', [])
         if not result.get('ok') or not isinstance(result.get('result'), dict):
             return False
-        info = result['result']
+        self.set_target_info(result['result'])
+        return True
+
+    def set_target_info(self, info):
+        if not isinstance(info, dict):
+            return False
         allowed = {
             'environment', 'environmentUrl', 'accountId', 'accountName',
             'roleId', 'roleName', 'playerId', 'serverId', 'clientId', 'ready',
@@ -1692,6 +1704,160 @@ def normalize_game_url(value):
         return value.rstrip('/').lower()
 
 
+def _cocos_proxy_request_json(method, path, payload=None, timeout=COCOS_PROXY_TIMEOUT):
+    if COCOS_PROXY_HTTP_PORT <= 0:
+        raise RuntimeError('External Cocos proxy is disabled')
+    url = f'http://127.0.0.1:{COCOS_PROXY_HTTP_PORT}{path}'
+    body = None
+    headers = {'Accept': 'application/json'}
+    if payload is not None:
+        body = json.dumps(payload, ensure_ascii=False).encode('utf-8')
+        headers['Content-Type'] = 'application/json; charset=utf-8'
+    request = urllib.request.Request(url, data=body, headers=headers, method=method)
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            raw = response.read().decode('utf-8', errors='replace')
+    except urllib.error.HTTPError as exc:
+        raw = exc.read().decode('utf-8', errors='replace')
+        try:
+            error_payload = json.loads(raw)
+        except json.JSONDecodeError:
+            error_payload = {}
+        message = error_payload.get('error') if isinstance(error_payload, dict) else ''
+        raise RuntimeError(str(message or raw or f'External Cocos proxy request failed: HTTP {exc.code}')) from exc
+    except (OSError, TimeoutError, urllib.error.URLError) as exc:
+        raise RuntimeError(f'Cannot connect to external Cocos proxy: {exc}') from exc
+    try:
+        data = json.loads(raw or '{}')
+    except json.JSONDecodeError as exc:
+        raise RuntimeError('External Cocos proxy returned invalid JSON') from exc
+    if not isinstance(data, dict):
+        raise RuntimeError('External Cocos proxy returned an invalid payload')
+    if data.get('error'):
+        raise RuntimeError(str(data['error']))
+    return data
+
+
+def _cocos_proxy_target(raw_client, ws_port):
+    context = raw_client.get('context') if isinstance(raw_client.get('context'), dict) else {}
+    route_client_id = str(raw_client.get('clientId') or '').strip()
+    if not route_client_id:
+        return None
+    environment_url = normalize_game_url(
+        context.get('environmentUrl') or context.get('loginUrl')
+    )
+    environment = str(context.get('environment') or '').strip()
+    if not environment:
+        environment = _cocos_environment_name(environment_url)
+    account_id = str(
+        context.get('accountId') or context.get('userId') or context.get('account') or ''
+    ).strip()
+    account_name = str(context.get('accountName') or context.get('account') or '').strip()
+    role_id = str(context.get('roleId') or context.get('playerId') or '').strip()
+    role_name = str(context.get('roleName') or context.get('userName') or '').strip()
+    player_id = str(context.get('playerId') or context.get('userId') or '').strip()
+    server_id = str(context.get('serverId') or '').strip()
+    client_id = str(context.get('clientId') or route_client_id).strip()
+    port = str(ws_port or COCOS_WS_PORT)
+    identity_complete = all((client_id, port, account_id, role_id, server_id, environment_url))
+    ready = bool(context.get('ready')) if 'ready' in context else bool(context.get('online'))
+    dispatchable = identity_complete
+    label = role_name or account_name
+    if not label:
+        label = f'Role {role_id}' if role_id else (
+            f'Account {account_id}' if account_id else f'Online client {route_client_id}'
+        )
+    updated_at_ms = raw_client.get('contextUpdatedAt') or raw_client.get('connectedAt') or 0
+    try:
+        updated_at = int(float(updated_at_ms) / 1000)
+    except (TypeError, ValueError):
+        updated_at = 0
+    connection_id = f'proxy:{COCOS_PROXY_HTTP_PORT}:{route_client_id}'
+    return {
+        'id': connection_id,
+        'environment': environment or 'Unknown environment',
+        'environment_key': environment_url.lower() or environment.lower() or 'unknown',
+        'environment_url': environment_url,
+        'account_id': account_id,
+        'account_name': account_name,
+        'account_key': account_id or role_id or player_id or connection_id,
+        'account_label': label,
+        'role_id': role_id,
+        'role_name': role_name,
+        'player_id': player_id,
+        'server_id': server_id,
+        'client_id': client_id,
+        'proxy_client_id': route_client_id,
+        'proxy_connected_at': str(raw_client.get('connectedAt') or ''),
+        'port': port,
+        'ready': ready,
+        'dispatchable': dispatchable,
+        'identity_complete': identity_complete,
+        'connected': True,
+        'address': f'{raw_client.get("peer") or "127.0.0.1"}:{port}',
+        'updated_at': updated_at,
+        'source': 'external_proxy',
+    }
+
+
+def _cocos_proxy_targets():
+    if COCOS_PROXY_HTTP_PORT <= 0:
+        return [], ''
+    try:
+        data = _cocos_proxy_request_json('GET', '/clients')
+    except RuntimeError as exc:
+        return [], str(exc)
+    try:
+        ws_port = int(data.get('ws_port') or COCOS_WS_PORT)
+    except (TypeError, ValueError):
+        ws_port = COCOS_WS_PORT
+    clients = data.get('clients') if isinstance(data.get('clients'), list) else []
+    targets = []
+    for raw_client in clients:
+        if not isinstance(raw_client, dict):
+            continue
+        target = _cocos_proxy_target(raw_client, ws_port)
+        if target:
+            targets.append(target)
+    return targets, ''
+
+
+class CocosProxyConnection:
+    def __init__(self, target):
+        self.connection_id = target['id']
+        self.proxy_client_id = target['proxy_client_id']
+        self.command_lock = threading.Lock()
+        self.alive = True
+        self._target = dict(target)
+
+    def refresh_target_info(self):
+        targets, _error = _cocos_proxy_targets()
+        current = next((
+            item for item in targets
+            if item.get('proxy_client_id') == self.proxy_client_id
+        ), None)
+        if current is None:
+            self.alive = False
+            return False
+        self._target = dict(current)
+        return True
+
+    def target_snapshot(self):
+        return dict(self._target)
+
+    def send_rpc(self, method, params):
+        if method != 'sendProtocol':
+            return {'ok': False, 'error': 'External Cocos proxy does not support this operation'}
+        try:
+            data = _cocos_proxy_request_json('POST', '/rpc/sendProtocol', {
+                'clientId': self.proxy_client_id,
+                'params': params,
+            }, timeout=COCOS_RPC_TIMEOUT)
+        except RuntimeError as exc:
+            return {'ok': False, 'error': str(exc)}
+        return {'ok': True, 'result': data.get('result')}
+
+
 COCOS_IDENTITY_FIELDS = (
     'port', 'client_id', 'account_id', 'role_id', 'server_id', 'environment_url',
 )
@@ -1720,6 +1886,16 @@ def cocos_identity_mismatches(expected, current):
         if expected.get(field) != current.get(field)
     ]
     return [], mismatched
+
+
+def cocos_proxy_identity_mismatches(expected, current):
+    mismatched = []
+    for field in ('proxy_client_id', 'proxy_connected_at'):
+        expected_value = str(expected.get(field) or '').strip()
+        current_value = str(current.get(field) or '').strip()
+        if expected_value and expected_value != current_value:
+            mismatched.append(field)
+    return mismatched
 
 
 def _cocos_target_refresh_loop(connection):
@@ -1788,7 +1964,9 @@ def start_cocos_bridge():
 def cocos_bridge_status():
     with _cocos_bridge_lock:
         connections = [item for item in _cocos_connections.values() if item.alive]
-    targets = [item.target_snapshot() for item in connections]
+    direct_targets = [item.target_snapshot() for item in connections]
+    proxy_targets, proxy_error = _cocos_proxy_targets()
+    targets = direct_targets + proxy_targets
     grouped = {}
     for target in targets:
         key = target['environment_key']
@@ -1818,6 +1996,9 @@ def cocos_bridge_status():
         'url': f'ws://127.0.0.1:{COCOS_WS_PORT}',
         'port': COCOS_WS_PORT,
         'error': _cocos_bridge_error,
+        'proxy_error': proxy_error if not direct_targets and not proxy_targets else '',
+        'direct_instance_count': len(direct_targets),
+        'proxy_instance_count': len(proxy_targets),
         'environment_count': len(environments),
         'account_count': len(unique_accounts),
         'instance_count': len(targets),
@@ -1877,7 +2058,9 @@ def execute_cocos_commands(commands, target_id='', target_ids=None, target_specs
 
     with _cocos_bridge_lock:
         connections = [item for item in _cocos_connections.values() if item.alive]
-        connection_map = {item.connection_id: item for item in connections}
+    proxy_targets, _proxy_error = _cocos_proxy_targets()
+    connections.extend(CocosProxyConnection(item) for item in proxy_targets)
+    connection_map = {item.connection_id: item for item in connections}
 
     verified_targets = {}
     selected_connections = []
@@ -1900,7 +2083,11 @@ def execute_cocos_commands(commands, target_id='', target_ids=None, target_specs
                 'msg': '无法重新确认目标客户端身份，本次命令未发送',
             }
         current = connection.target_snapshot()
-        missing, mismatched = cocos_identity_mismatches(expected, current)
+        if isinstance(connection, CocosProxyConnection):
+            missing, mismatched = cocos_identity_mismatches(expected, current)
+            mismatched.extend(cocos_proxy_identity_mismatches(expected, current))
+        else:
+            missing, mismatched = cocos_identity_mismatches(expected, current)
         if missing:
             return {
                 'ok': False,
@@ -3286,7 +3473,9 @@ def ks_catalog_status():
     token_state = ks_token_status(config.get('token', ''))
     with _cocos_bridge_lock:
         connections = [item for item in _cocos_connections.values() if item.alive]
-    catalog = ks_catalog_with_online([item.target_snapshot() for item in connections])
+    targets = [item.target_snapshot() for item in connections]
+    proxy_targets, _proxy_error = _cocos_proxy_targets()
+    catalog = ks_catalog_with_online(targets + proxy_targets)
     return {
         'ok': True,
         'catalog': catalog,

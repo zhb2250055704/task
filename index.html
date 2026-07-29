@@ -5551,7 +5551,8 @@ function cocosCatalogSignature(catalog) {
     (environment.accounts || []).map(account => [
       account.id, account.cache_id, account.port, account.client_id,
       account.account_id, account.role_id, account.server_id,
-      account.environment_url, account.dispatchable, account.ks_dispatchable
+      account.environment_url, account.dispatchable, account.ks_dispatchable,
+      account.proxy_client_id, account.proxy_connected_at
     ])
   );
   return JSON.stringify([
@@ -6023,6 +6024,9 @@ function getSelectedCocosTargets() {
 function getCocosTargetSpec(target) {
   return {
     connection_id: target.id,
+    source: String(target.source || ''),
+    proxy_client_id: String(target.proxy_client_id || ''),
+    proxy_connected_at: String(target.proxy_connected_at || ''),
     port: String(target.port || ''),
     client_id: String(target.client_id || ''),
     account_id: String(target.account_id || ''),
