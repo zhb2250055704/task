@@ -5693,10 +5693,23 @@ function renderCocosStatus(data) {
   const empty = document.getElementById('cocosTargetEmpty');
   const content = document.getElementById('cocosTargetContent');
   if (!status) return;
-  const connected = !!(data && data.connected);
-  status.textContent = connected ? '已连接' : '未连接';
-  status.className = 'cocos-status ' + (connected ? 'connected' : 'disconnected');
-  status.title = connected ? ('游戏端地址：' + (data.address || '本机')) : ((data && data.error) || '等待 Cocos 游戏连接');
+  const clientConnected = !!(data && data.connected);
+  const remoteCatalog = data && data.ks_catalog;
+  const ksConnected = !!(remoteCatalog && (
+    remoteCatalog.ks_connected != null
+      ? remoteCatalog.ks_connected
+      : (remoteCatalog.configured && !remoteCatalog.expired)
+  ));
+  const anyConnected = clientConnected || ksConnected;
+  status.textContent = clientConnected && ksConnected
+    ? '双通道已连接'
+    : (clientConnected ? '客户端已连接' : (ksConnected ? 'KS 已连接' : '未连接'));
+  status.className = 'cocos-status ' + (anyConnected ? 'connected' : 'disconnected');
+  status.title = clientConnected && ksConnected
+    ? 'KS 远程通道和本机游戏客户端均可用'
+    : (clientConnected
+      ? ('游戏端地址：' + (data.address || '本机'))
+      : (ksConnected ? 'KS Token 有效，可向已创建账号发送 GM 命令' : ((data && data.error) || 'KS 与游戏客户端均未连接')));
   let catalogChanged = false;
   if (data && data.ks_catalog && Array.isArray(data.ks_catalog.environments)) {
     ksConfigured = data.ks_catalog.configured != null ? !!data.ks_catalog.configured : ksConfigured;
@@ -5787,7 +5800,7 @@ function renderCocosEnvironmentDetails() {
   const stat = document.getElementById('cocosEnvironmentStat');
   if (!select) return;
   select.innerHTML = `<option value="">全部环境（${cocosEnvironments.length} 个）</option>` + cocosEnvironments.map(item =>
-    `<option value="${esc(item.key)}"${item.key === selectedCocosEnvironmentKey ? ' selected' : ''}>${esc(item.name)}（${Number(item.account_count) || 0} 个账号 / ${Number(item.online_count) || 0} 个在线）</option>`
+    `<option value="${esc(item.key)}"${item.key === selectedCocosEnvironmentKey ? ' selected' : ''}>${esc(item.name)}（${Number(item.account_count) || 0} 个账号 / ${Number(item.executable_count) || 0} 个可执行）</option>`
   ).join('');
   const environment = cocosEnvironments.find(item => item.key === selectedCocosEnvironmentKey);
   if (current) current.textContent = environment ? environment.name : `全部 ${cocosEnvironments.length} 个环境`;
@@ -5797,10 +5810,12 @@ function renderCocosEnvironmentDetails() {
       : (cocosEnvironments.length === 1 ? (cocosEnvironments[0].login_url || cocosEnvironments[0].environment_url || '未读取到环境地址') : '选择环境后查看对应地址');
     url.title = url.textContent;
   }
-  const connectionCount = environment
-    ? Number(environment.online_count) || 0
-    : getCocosTargetEntries().filter(item => item.connected).length;
-  if (stat) stat.textContent = `${connectionCount} 个连接在线`;
+  const scopedTargets = environment
+    ? (environment.accounts || [])
+    : getCocosTargetEntries();
+  const clientOnlineCount = scopedTargets.filter(item => item.dispatchable).length;
+  const ksExecutableCount = scopedTargets.filter(item => item.ks_dispatchable).length;
+  if (stat) stat.textContent = `${clientOnlineCount} 个客户端在线 · ${ksExecutableCount} 个 KS 可执行`;
 }
 
 function renderCocosAccountCard(item) {

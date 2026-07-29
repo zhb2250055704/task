@@ -3273,7 +3273,9 @@ def ks_catalog_with_online(targets=None):
         'online_count': online_count,
         'executable_count': executable_count,
         'configured': token_state.get('configured', False),
-        'expires_at': cache.get('expires_at', 0),
+        'expired': token_state.get('expired', False),
+        'ks_connected': ks_available,
+        'expires_at': token_state.get('expires_at', 0),
         'profile': cache.get('profile', {}),
     })
     return catalog
