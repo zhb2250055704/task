@@ -2077,6 +2077,16 @@ def normalize_ls_base_url(value):
     return value.rstrip('/')
 
 
+def normalize_ks_base_url(value):
+    value = normalize_ls_base_url(value)
+    if not value:
+        return ''
+    parsed = urlparse(value)
+    if not parsed.scheme or not parsed.netloc:
+        return value
+    return f'{parsed.scheme}://{parsed.netloc}'
+
+
 def make_ls_urls(base_url):
     base = normalize_ls_base_url(base_url)
     if not base:
@@ -2434,14 +2444,14 @@ def load_ks_config():
     env_token = str(os.environ.get('GM_KS_TOKEN') or '').strip()
     env_base = str(os.environ.get('GM_KS_BASE_URL') or '').strip()
     return {
-        'base_url': normalize_ls_base_url(env_base or config.get('base_url') or KS_DEFAULT_BASE_URL),
+        'base_url': normalize_ks_base_url(env_base or config.get('base_url') or KS_DEFAULT_BASE_URL),
         'token': env_token or str(config.get('token') or '').strip(),
     }
 
 
 def save_ks_config(base_url, token):
     _save_json_object(KS_CONFIG_FILE, {
-        'base_url': normalize_ls_base_url(base_url or KS_DEFAULT_BASE_URL),
+        'base_url': normalize_ks_base_url(base_url or KS_DEFAULT_BASE_URL),
         'token': str(token or '').strip(),
     })
 
@@ -2464,7 +2474,7 @@ def ks_token_status(token):
 
 
 def ks_request_json(base_url, token, path, params=None, method='GET', payload=None, timeout=15):
-    base_url = normalize_ls_base_url(base_url or KS_DEFAULT_BASE_URL)
+    base_url = normalize_ks_base_url(base_url or KS_DEFAULT_BASE_URL)
     url = urljoin(base_url + '/', str(path or '').lstrip('/'))
     if params:
         url += ('&' if '?' in url else '?') + urlencode(params)
@@ -2486,6 +2496,7 @@ def ks_request_json(base_url, token, path, params=None, method='GET', payload=No
     try:
         with urllib.request.urlopen(req, timeout=timeout) as response:
             raw = response.read(8 * 1024 * 1024)
+            content_type = str(response.headers.get('Content-Type') or '')
     except urllib.error.HTTPError as exc:
         try:
             detail = exc.read(4096).decode('utf-8', errors='replace')
@@ -2496,9 +2507,15 @@ def ks_request_json(base_url, token, path, params=None, method='GET', payload=No
         raise ValueError(f'KS 接口请求失败（HTTP {exc.code}）：{detail[:240]}') from exc
     except urllib.error.URLError as exc:
         raise ValueError(f'无法连接 KS：{exc.reason}') from exc
+    text = raw.decode('utf-8-sig', errors='replace')
     try:
-        data = json.loads(raw.decode('utf-8'))
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        data = json.loads(text)
+    except json.JSONDecodeError as exc:
+        if 'text/html' in content_type.lower() or text.lstrip().lower().startswith(('<!doctype html', '<html')):
+            raise ValueError(
+                'KS 接口返回了网页内容。请填写 KS 站点地址（例如 https://zxty.tuyoo.com），'
+                '不要填写 /keystone/applications 页面链接；若地址正确，请重新获取 Token'
+            ) from exc
         raise ValueError('KS 接口返回内容不是有效 JSON') from exc
     if not isinstance(data, (dict, list)):
         raise ValueError('KS 接口返回的数据格式不受支持')
@@ -2809,7 +2826,7 @@ def sync_ks_catalog(token='', base_url='', persist_config=False):
     config = load_ks_config()
     _, parsed_token = parse_ls_credential_headers(token)
     token = parsed_token or str(token or '').strip() or config.get('token', '')
-    base_url = normalize_ls_base_url(base_url or config.get('base_url') or KS_DEFAULT_BASE_URL)
+    base_url = normalize_ks_base_url(base_url or config.get('base_url') or KS_DEFAULT_BASE_URL)
     token_state = ks_token_status(token)
     if not token:
         return {'ok': False, 'code': 'ks_token_missing', 'msg': '未配置 KS Token'}
