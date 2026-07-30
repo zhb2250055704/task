@@ -4574,10 +4574,43 @@
     font: 12px/1.7 Consolas, monospace;
   }
   .qa-json { color: #315f55; }
+  .qa-actions .qa-generate-action { min-width: 0; flex: 1 1 150px; justify-content: center; }
+  .qa-result-stack {
+    min-height: 550px;
+    max-height: calc(100vh - 220px);
+    display: grid;
+    grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+    overflow: hidden;
+    background: var(--input-bg);
+  }
+  .qa-artifact-result { min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); }
+  .qa-artifact-result + .qa-artifact-result { border-top: 1px solid var(--border); }
+  .qa-artifact-head { min-height: 62px; padding: 12px 16px; display: flex; align-items: center; gap: 11px; border-bottom: 1px solid var(--border); background: var(--panel); }
+  .qa-artifact-icon { width: 34px; height: 34px; display: grid; place-items: center; flex: 0 0 auto; border: 1px solid var(--border); border-radius: 7px; background: var(--panel-solid); color: #4f78aa; }
+  .qa-artifact-icon.excel { color: #2f8f62; }
+  .qa-artifact-title { min-width: 0; flex: 1 1 auto; }
+  .qa-artifact-title strong { display: block; color: var(--text); font-size: 13px; }
+  .qa-artifact-title span { display: block; margin-top: 2px; color: var(--text-dim); font-size: 9px; }
+  .qa-artifact-status { padding: 3px 7px; border: 1px solid var(--border); border-radius: 6px; color: var(--text-dim); font-size: 9px; }
+  .qa-artifact-status.ready { border-color: rgba(47, 143, 98, .42); color: #2f8f62; }
+  .qa-artifact-download { min-width: 104px; justify-content: center; }
+  .qa-artifact-body { min-height: 0; padding: 14px 16px 18px; overflow: auto; }
+  .qa-artifact-empty { height: 100%; min-height: 170px; display: grid; place-items: center; color: var(--text-dim); font-size: 11px; }
+  .qa-artifact-summary { margin-bottom: 12px; display: flex; align-items: baseline; gap: 8px; color: var(--text-dim); font-size: 10px; }
+  .qa-artifact-summary strong { color: var(--text); font-size: 24px; }
+  .qa-artifact-list { display: grid; gap: 6px; }
+  .qa-artifact-item { min-width: 0; padding: 8px 10px; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 9px; border-bottom: 1px solid var(--border); }
+  .qa-artifact-id { color: #4f78aa; font: 700 9px/16px Consolas, monospace; }
+  .qa-artifact-item strong { display: block; overflow: hidden; color: var(--text); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+  .qa-artifact-item small { display: block; margin-top: 3px; color: var(--text-dim); font-size: 9px; }
+  .qa-case-preview { width: 100%; border-collapse: collapse; }
+  .qa-case-preview th,
+  .qa-case-preview td { padding: 7px 8px; font-size: 9px; }
   @media (max-width: 1180px) {
     .qa-workspace { grid-template-columns: 1fr; }
     .qa-requirement { min-height: 180px; }
     .qa-output-body { max-height: none; }
+    .qa-result-stack { max-height: none; }
   }
   @media (max-width: 760px) {
     #view-qa .container { padding: 12px; }
@@ -4591,6 +4624,10 @@
     .qa-upload-content { align-items: flex-start; }
     .qa-output-body { min-height: 430px; padding: 16px 14px 24px; }
     .qa-output-empty { min-height: 380px; }
+    .qa-result-stack { min-height: 620px; grid-template-rows: auto auto; }
+    .qa-artifact-body { max-height: 360px; }
+    .qa-artifact-head { flex-wrap: wrap; }
+    .qa-artifact-download { width: 100%; }
   }
 </style>
 </head>
@@ -4822,16 +4859,6 @@
                   <input id="qaTitle" type="text" maxlength="120" placeholder="输入需求或功能名称" autocomplete="off">
                 </div>
                 <div class="qa-field">
-                  <label for="qaMode">交付模式</label>
-                  <select id="qaMode">
-                    <option value="full">完整测试设计</option>
-                    <option value="points">测试点</option>
-                    <option value="cases">详细测试用例</option>
-                    <option value="review">需求评审</option>
-                    <option value="impact">变更影响测试</option>
-                  </select>
-                </div>
-                <div class="qa-field">
                   <label for="qaDomain">业务领域</label>
                   <select id="qaDomain">
                     <option value="auto">自动识别</option>
@@ -4872,7 +4899,12 @@
                 <textarea id="qaRequirement" class="qa-requirement" maxlength="12000" placeholder="补充业务背景、测试范围或文档中没有说明的规则"></textarea>
               </div>
               <div class="qa-actions">
-                <button id="qaGenerateBtn" class="btn btn-primary" type="button" onclick="generateQaTestDesign()">生成测试设计</button>
+                <button id="qaGeneratePointsBtn" class="btn btn-primary qa-generate-action" type="button" onclick="generateQaTestDesign('points')">
+                  <span class="material-symbols-outlined">account_tree</span><span>生成测试点</span>
+                </button>
+                <button id="qaGenerateCasesBtn" class="btn btn-primary qa-generate-action" type="button" onclick="generateQaTestDesign('cases')">
+                  <span class="material-symbols-outlined">table_view</span><span>生成测试用例</span>
+                </button>
                 <button class="btn btn-ghost" type="button" onclick="clearQaWorkspace()">清空</button>
               </div>
               <div id="qaRunState" class="qa-run-state">
@@ -4885,21 +4917,31 @@
           <section class="qa-pane" aria-label="测试设计结果">
             <div class="qa-pane-head">
               <span class="qa-pane-title">设计结果</span>
-              <div class="qa-output-tools">
-                <div class="qa-segmented" role="group" aria-label="结果显示模式">
-                  <button id="qaPreviewTab" class="active" type="button" onclick="setQaOutputMode('preview')">预览</button>
-                  <button id="qaRawTab" type="button" onclick="setQaOutputMode('raw')">Markdown</button>
-                  <button id="qaJsonTab" type="button" onclick="setQaOutputMode('json')" disabled>JSON</button>
-                </div>
-                <button id="qaCopyBtn" class="qa-tool-btn" type="button" onclick="copyQaResult()" disabled>复制</button>
-                <button id="qaDownloadBtn" class="qa-tool-btn" type="button" onclick="downloadQaResult()" disabled>下载</button>
-              </div>
+              <span class="qa-pane-meta">XMind / Excel</span>
             </div>
-            <div class="qa-output-body">
-              <div id="qaOutputEmpty" class="qa-output-empty">暂无测试设计结果</div>
-              <div id="qaOutputPreview" class="qa-markdown" style="display:none"></div>
-              <pre id="qaOutputRaw" class="qa-raw" style="display:none"></pre>
-              <pre id="qaOutputJson" class="qa-raw qa-json" style="display:none"></pre>
+            <div class="qa-result-stack">
+              <section class="qa-artifact-result" aria-label="测试点 XMind 结果">
+                <div class="qa-artifact-head">
+                  <span class="qa-artifact-icon"><span class="material-symbols-outlined">account_tree</span></span>
+                  <div class="qa-artifact-title"><strong>测试点</strong><span id="qaPointsMeta">XMind 文档</span></div>
+                  <span id="qaPointsStatus" class="qa-artifact-status">未生成</span>
+                  <button id="qaPointsDownload" class="btn btn-ghost qa-artifact-download" type="button" onclick="downloadQaArtifact('points')" disabled>
+                    <span class="material-symbols-outlined">download</span><span>下载 XMind</span>
+                  </button>
+                </div>
+                <div id="qaPointsBody" class="qa-artifact-body"><div class="qa-artifact-empty">暂无测试点结果</div></div>
+              </section>
+              <section class="qa-artifact-result" aria-label="测试用例 Excel 结果">
+                <div class="qa-artifact-head">
+                  <span class="qa-artifact-icon excel"><span class="material-symbols-outlined">table_view</span></span>
+                  <div class="qa-artifact-title"><strong>测试用例</strong><span id="qaCasesMeta">Excel 文档</span></div>
+                  <span id="qaCasesStatus" class="qa-artifact-status">未生成</span>
+                  <button id="qaCasesDownload" class="btn btn-ghost qa-artifact-download" type="button" onclick="downloadQaArtifact('cases')" disabled>
+                    <span class="material-symbols-outlined">download</span><span>下载 Excel</span>
+                  </button>
+                </div>
+                <div id="qaCasesBody" class="qa-artifact-body"><div class="qa-artifact-empty">暂无测试用例结果</div></div>
+              </section>
             </div>
           </section>
         </div>
@@ -5315,16 +5357,14 @@ let ksTokenExpired = false;
 let ksCatalogLoading = false;
 let ksSyncInFlight = false;
 let lastCocosCatalogSignature = '';
-let qaResultMarkdown = '';
-let qaResultStructured = null;
-let qaOutputMode = 'preview';
 let qaProvider = 'codex';
 let qaProviderStatuses = {};
 let qaProviderResults = {
-  codex: { markdown: '', structured: null },
-  ollama: { markdown: '', structured: null },
+  codex: { points: null, cases: null },
+  ollama: { points: null, cases: null },
 };
 let qaRunning = false;
+let qaRunningMode = '';
 let qaTimer = null;
 let qaStartedAt = 0;
 let qaServiceAvailable = false;
@@ -7859,12 +7899,12 @@ function formatQaElapsed(milliseconds) {
   return `${minutes} 分 ${String(seconds).padStart(2, '0')} 秒`;
 }
 
-function startQaTimer() {
+function startQaTimer(mode) {
   stopQaTimer();
   qaStartedAt = Date.now();
   const update = () => {
     const engine = qaProvider === 'ollama' ? '本地测试引擎' : 'Codex';
-    setQaRunState('running', `${engine} 正在生成 · ${formatQaElapsed(Date.now() - qaStartedAt)}`);
+    setQaRunState('running', `${engine} 正在生成${qaDeliverableLabel(mode)} · ${formatQaElapsed(Date.now() - qaStartedAt)}`);
   };
   update();
   qaTimer = setInterval(update, 1000);
@@ -7882,8 +7922,8 @@ function formatQaFileSize(bytes) {
   return `${(size / 1024 / 1024).toFixed(1)} MB`;
 }
 
-function qaGenerateButtonLabel() {
-  return qaProvider === 'ollama' ? '使用本地引擎生成' : '使用 Codex 生成';
+function qaDeliverableLabel(mode) {
+  return mode === 'cases' ? '测试用例' : '测试点';
 }
 
 function currentQaProviderStatus() {
@@ -7911,10 +7951,9 @@ function applyQaProviderStatus() {
   if (codexMeta && qaProviderStatuses.codex) {
     codexMeta.textContent = qaProviderStatuses.codex.available ? 'qa-test-design 已就绪' : '服务未就绪';
   }
-  const button = document.getElementById('qaGenerateBtn');
-  if (button && !qaRunning) button.textContent = qaGenerateButtonLabel();
   updateQaGenerateAvailability();
-  if (!qaRunning && !qaResultMarkdown) {
+  const providerResults = qaProviderResults[qaProvider] || {};
+  if (!qaRunning && !providerResults.points && !providerResults.cases) {
     setQaRunState(
       status && !status.available ? 'error' : '',
       status ? (status.msg || '等待提交') : '正在检测服务'
@@ -7932,15 +7971,16 @@ function switchQaProvider(provider) {
     button.classList.toggle('active', active);
     button.setAttribute('aria-selected', active ? 'true' : 'false');
   });
-  const saved = qaProviderResults[qaProvider] || { markdown: '', structured: null };
-  renderQaResult(saved.markdown, saved.structured, false);
+  renderQaArtifactResults(qaProviderResults[qaProvider]);
   applyQaProviderStatus();
   if (!currentQaProviderStatus()) loadQaTestDesignStatus();
 }
 
 function updateQaGenerateAvailability() {
-  const button = document.getElementById('qaGenerateBtn');
-  if (button) button.disabled = !qaServiceAvailable || qaRunning || qaUploading;
+  ['qaGeneratePointsBtn', 'qaGenerateCasesBtn'].forEach(id => {
+    const button = document.getElementById(id);
+    if (button) button.disabled = !qaServiceAvailable || qaRunning || qaUploading;
+  });
 }
 
 function qaRequestErrorMessage(error, action) {
@@ -8182,40 +8222,49 @@ function renderQaMarkdown(markdown) {
   return html;
 }
 
-function setQaOutputMode(mode) {
-  if (mode === 'json' && !qaResultStructured) mode = 'preview';
-  qaOutputMode = mode;
-  document.getElementById('qaPreviewTab').classList.toggle('active', mode === 'preview');
-  document.getElementById('qaRawTab').classList.toggle('active', mode === 'raw');
-  document.getElementById('qaJsonTab').classList.toggle('active', mode === 'json');
-  document.getElementById('qaOutputPreview').style.display = mode === 'preview' && qaResultMarkdown ? 'block' : 'none';
-  document.getElementById('qaOutputRaw').style.display = mode === 'raw' && qaResultMarkdown ? 'block' : 'none';
-  document.getElementById('qaOutputJson').style.display = mode === 'json' && qaResultStructured ? 'block' : 'none';
+function qaArtifactMeta(result, fallback) {
+  if (!result || !result.artifact) return fallback;
+  const artifact = result.artifact;
+  const engine = result.engine || '测试设计引擎';
+  return `${engine} · ${formatQaFileSize(artifact.size)} · ${artifact.generated_at || result.generated_at || ''}`;
 }
 
-function renderQaResult(markdown, structured = null, store = true) {
-  qaResultMarkdown = String(markdown || '').trim();
-  qaResultStructured = structured && typeof structured === 'object' ? structured : null;
-  if (store) {
-    qaProviderResults[qaProvider] = {
-      markdown: qaResultMarkdown,
-      structured: qaResultStructured,
-    };
-  }
-  document.getElementById('qaOutputEmpty').style.display = qaResultMarkdown ? 'none' : 'grid';
-  document.getElementById('qaOutputPreview').innerHTML = renderQaMarkdown(qaResultMarkdown);
-  document.getElementById('qaOutputRaw').textContent = qaResultMarkdown;
-  document.getElementById('qaOutputJson').textContent = qaResultStructured
-    ? JSON.stringify(qaResultStructured, null, 2)
-    : '';
-  document.getElementById('qaJsonTab').disabled = !qaResultStructured;
-  document.getElementById('qaCopyBtn').disabled = !qaResultMarkdown;
-  document.getElementById('qaDownloadBtn').disabled = !qaResultMarkdown;
-  setQaOutputMode(qaResultStructured && qaOutputMode === 'json' ? 'json' : 'preview');
+function renderQaArtifactResults(results) {
+  const state = results || { points: null, cases: null };
+  const pointsResult = state.points;
+  const casesResult = state.cases;
+  const pointItems = pointsResult && pointsResult.structured && Array.isArray(pointsResult.structured.test_points) ? pointsResult.structured.test_points : [];
+  const caseItems = casesResult && casesResult.structured && Array.isArray(casesResult.structured.test_cases) ? casesResult.structured.test_cases : [];
+
+  const pointsStatus = document.getElementById('qaPointsStatus');
+  const pointsDownload = document.getElementById('qaPointsDownload');
+  pointsStatus.textContent = pointsResult ? '已生成' : '未生成';
+  pointsStatus.classList.toggle('ready', !!pointsResult);
+  pointsDownload.disabled = !(pointsResult && pointsResult.artifact && pointsResult.artifact.download_url);
+  document.getElementById('qaPointsMeta').textContent = qaArtifactMeta(pointsResult, 'XMind 文档');
+  document.getElementById('qaPointsBody').innerHTML = pointsResult ? `
+    <div class="qa-artifact-summary"><strong>${pointItems.length}</strong><span>条测试点 · XMind</span></div>
+    <div class="qa-artifact-list">${pointItems.slice(0, 10).map(item => `
+      <div class="qa-artifact-item"><span class="qa-artifact-id">${esc(item.id || 'TP')}</span>
+      <div><strong title="${esc(item.scenario || '')}">${esc(item.scenario || '未命名测试点')}</strong>
+      <small>${esc([item.module, item.type, item.priority].filter(Boolean).join(' · '))}</small></div></div>`).join('')}</div>` : '<div class="qa-artifact-empty">暂无测试点结果</div>';
+
+  const casesStatus = document.getElementById('qaCasesStatus');
+  const casesDownload = document.getElementById('qaCasesDownload');
+  casesStatus.textContent = casesResult ? '已生成' : '未生成';
+  casesStatus.classList.toggle('ready', !!casesResult);
+  casesDownload.disabled = !(casesResult && casesResult.artifact && casesResult.artifact.download_url);
+  document.getElementById('qaCasesMeta').textContent = qaArtifactMeta(casesResult, 'Excel 文档');
+  document.getElementById('qaCasesBody').innerHTML = casesResult ? `
+    <div class="qa-artifact-summary"><strong>${caseItems.length}</strong><span>条测试用例 · Excel</span></div>
+    <table class="qa-case-preview"><thead><tr><th>ID</th><th>用例标题</th><th>优先级</th><th>类型</th></tr></thead><tbody>
+    ${caseItems.slice(0, 10).map(item => `<tr><td>${esc(item.id || '')}</td><td>${esc(item.title || '')}</td><td>${esc(item.priority || '')}</td><td>${esc(item.type || '')}</td></tr>`).join('')}
+    </tbody></table>` : '<div class="qa-artifact-empty">暂无测试用例结果</div>';
 }
 
-async function generateQaTestDesign() {
+async function generateQaTestDesign(mode) {
   if (qaRunning) return;
+  if (!['points', 'cases'].includes(mode)) return;
   const requirement = document.getElementById('qaRequirement').value.trim();
   if (!requirement && !qaUploadedFiles.length) { toast('请导入需求文件或填写补充说明'); return; }
   if (!qaServiceAvailable) {
@@ -8224,10 +8273,11 @@ async function generateQaTestDesign() {
   }
 
   qaRunning = true;
-  const button = document.getElementById('qaGenerateBtn');
-  button.disabled = true;
-  button.textContent = '正在生成';
-  startQaTimer();
+  qaRunningMode = mode;
+  const button = document.getElementById(mode === 'cases' ? 'qaGenerateCasesBtn' : 'qaGeneratePointsBtn');
+  updateQaGenerateAvailability();
+  button.classList.add('loading');
+  startQaTimer(mode);
   try {
     const res = await fetch(`${QA_TEST_DESIGN_API}/generate`, {
       method: 'POST',
@@ -8237,7 +8287,7 @@ async function generateQaTestDesign() {
         title: document.getElementById('qaTitle').value.trim(),
         requirement,
         file_ids: qaUploadedFiles.map(file => file.id),
-        mode: document.getElementById('qaMode').value,
+        mode,
         domain: document.getElementById('qaDomain').value,
         depth: document.getElementById('qaDepth').value,
       }),
@@ -8245,64 +8295,53 @@ async function generateQaTestDesign() {
     if (res.status === 401) { location.href = 'login.html'; return; }
     const data = await readQaJsonResponse(res, '测试设计接口返回异常，请重启工具服务');
     if (!res.ok || !data.ok) throw new Error(data.msg || '测试设计生成失败');
-    renderQaResult(data.content || '', data.structured || null);
+    qaProviderResults[qaProvider] = qaProviderResults[qaProvider] || { points: null, cases: null };
+    qaProviderResults[qaProvider][mode] = data;
+    renderQaArtifactResults(qaProviderResults[qaProvider]);
     const elapsed = data.duration_ms || (Date.now() - qaStartedAt);
-    setQaRunState('success', `生成完成 · ${formatQaElapsed(elapsed)} · ${data.engine} / ${data.skill}`);
-    toast('测试设计已生成');
+    const fallbackNote = data.fallback_reason ? ` · ${data.fallback_reason}` : '';
+    setQaRunState('success', `${qaDeliverableLabel(mode)}已生成 · ${formatQaElapsed(elapsed)} · ${data.engine} / ${data.skill}${fallbackNote}`);
+    toast(data.fallback_reason || `${qaDeliverableLabel(mode)}已生成，可下载${mode === 'cases' ? ' Excel' : ' XMind'}`);
   } catch (error) {
     setQaRunState('error', error.message || '测试设计生成失败');
     toast(error.message || '测试设计生成失败');
   } finally {
     stopQaTimer();
     qaRunning = false;
+    qaRunningMode = '';
+    button.classList.remove('loading');
     updateQaGenerateAvailability();
-    button.textContent = qaGenerateButtonLabel();
   }
 }
 
 async function clearQaWorkspace() {
-  const hasContent = document.getElementById('qaRequirement').value.trim() || qaResultMarkdown || qaUploadedFiles.length;
+  const hasResult = Object.values(qaProviderResults).some(result => result && (result.points || result.cases));
+  const hasContent = document.getElementById('qaRequirement').value.trim() || hasResult || qaUploadedFiles.length;
   if (hasContent && !confirm('确定清空当前需求和测试设计结果吗？')) return;
   await clearQaFiles();
   document.getElementById('qaTitle').value = '';
   document.getElementById('qaRequirement').value = '';
-  document.getElementById('qaMode').value = 'full';
   document.getElementById('qaDomain').value = 'auto';
   document.getElementById('qaDepth').value = 'standard';
   qaProviderResults = {
-    codex: { markdown: '', structured: null },
-    ollama: { markdown: '', structured: null },
+    codex: { points: null, cases: null },
+    ollama: { points: null, cases: null },
   };
-  renderQaResult('', null);
+  renderQaArtifactResults(qaProviderResults[qaProvider]);
   updateQaCharCount();
   setQaRunState('', '等待提交');
 }
 
-async function copyQaResult() {
-  if (!qaResultMarkdown) return;
-  const content = qaOutputMode === 'json' && qaResultStructured
-    ? JSON.stringify(qaResultStructured, null, 2)
-    : qaResultMarkdown;
-  await copyText(content);
-}
-
-function downloadQaResult() {
-  if (!qaResultMarkdown) return;
-  const title = document.getElementById('qaTitle').value.trim() || 'qa-test-design';
-  const safeTitle = title.replace(/[\\/:*?"<>|]+/g, '-').slice(0, 60);
-  const date = new Date().toISOString().slice(0, 10);
-  const downloadJson = qaOutputMode === 'json' && qaResultStructured;
-  const content = downloadJson ? JSON.stringify(qaResultStructured, null, 2) : qaResultMarkdown;
-  const blob = new Blob([content], {
-    type: downloadJson ? 'application/json;charset=utf-8' : 'text/markdown;charset=utf-8',
-  });
+function downloadQaArtifact(mode) {
+  const result = qaProviderResults[qaProvider] && qaProviderResults[qaProvider][mode];
+  const artifact = result && result.artifact;
+  if (!artifact || !artifact.download_url) return;
   const link = document.createElement('a');
-  link.href = URL.createObjectURL(blob);
-  link.download = `${safeTitle}-${date}.${downloadJson ? 'json' : 'md'}`;
+  link.href = artifact.download_url;
+  link.download = artifact.name || '';
   document.body.appendChild(link);
   link.click();
   link.remove();
-  URL.revokeObjectURL(link.href);
 }
 
 /* ============ 用户管理 ============ */

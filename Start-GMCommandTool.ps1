@@ -6,6 +6,7 @@ $ServerFile = Join-Path $ToolDir 'server.py'
 $BuildFiles = @(
     $ServerFile,
     (Join-Path $ToolDir 'qa_local_engine.py'),
+    (Join-Path $ToolDir 'qa_artifacts.py'),
     (Join-Path $ToolDir 'skillhub_translation.py')
 ) | Where-Object { Test-Path -LiteralPath $_ }
 $BuildBytes = [byte[]]($BuildFiles | ForEach-Object { [IO.File]::ReadAllBytes($_) })

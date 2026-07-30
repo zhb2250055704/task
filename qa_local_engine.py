@@ -557,6 +557,50 @@ def _extract_json_content(text):
     return data
 
 
+def _list_value(value):
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    if value in (None, ''):
+        return []
+    return [item.strip() for item in re.split(r'[,，、;；\n]+', str(value)) if item.strip()]
+
+
+def parse_qa_design_json(text, mode='full', title=''):
+    """Parse and normalize a model JSON response for preview and artifacts."""
+    data = _extract_json_content(text)
+    normalized = dict(data)
+    normalized['schema_version'] = str(data.get('schema_version') or '1.0')
+    normalized['title'] = str(data.get('title') or title or '未命名需求').strip()
+    normalized['summary'] = data.get('summary') if isinstance(data.get('summary'), dict) else {}
+    for key in ('facts', 'assumptions', 'questions', 'requirements', 'risks', 'test_points', 'test_cases'):
+        value = data.get(key)
+        normalized[key] = [item for item in value if isinstance(item, dict)] if isinstance(value, list) else []
+
+    for point in normalized['test_points']:
+        point['requirement_ids'] = _list_value(point.get('requirement_ids'))
+    for case in normalized['test_cases']:
+        case['requirement_ids'] = _list_value(case.get('requirement_ids'))
+        case['test_point_ids'] = _list_value(case.get('test_point_ids'))
+        case['preconditions'] = _list_value(case.get('preconditions'))
+        case['test_data'] = _list_value(case.get('test_data'))
+        case['steps'] = [item for item in case.get('steps', []) if isinstance(item, dict)]
+
+    if mode in ('points', 'review'):
+        normalized['test_cases'] = []
+    _renumber(normalized['requirements'], 'REQ')
+    _renumber(normalized['risks'], 'RISK')
+    _renumber(normalized['test_points'], 'TP')
+    _renumber(normalized['test_cases'], 'TC')
+    _repair_links(normalized)
+    normalized['warnings'] = _list_value(data.get('warnings'))
+
+    if mode == 'points' and not normalized['test_points']:
+        raise ValueError('模型未返回测试点')
+    if mode == 'cases' and not normalized['test_cases']:
+        raise ValueError('模型未返回测试用例')
+    return normalized
+
+
 def _merge_items(primary, fallback, identity_fields):
     output = [item for item in primary if isinstance(item, dict)]
     seen = set()

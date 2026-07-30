@@ -24,14 +24,20 @@ import subprocess
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import xml.etree.ElementTree as ET
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
-from urllib.parse import urlparse, parse_qs, urljoin, urlencode
+from urllib.parse import urlparse, parse_qs, urljoin, urlencode, quote
 import urllib.error
 import urllib.request
 import ssl
 from email.parser import BytesParser
 from email.policy import default as email_policy_default
 
-from qa_local_engine import get_local_qa_status, run_local_qa_test_design
+from qa_artifacts import build_qa_artifact
+from qa_local_engine import (
+    design_to_markdown,
+    get_local_qa_status,
+    parse_qa_design_json,
+    run_local_qa_test_design,
+)
 from skillhub_translation import (
     start_skillhub_translation_watcher,
     sync_skillhub_chinese_usage,
@@ -60,6 +66,7 @@ try:
     for build_file in (
         os.path.abspath(__file__),
         os.path.join(TOOL_DIR, 'qa_local_engine.py'),
+        os.path.join(TOOL_DIR, 'qa_artifacts.py'),
         os.path.join(TOOL_DIR, 'skillhub_translation.py'),
     ):
         with open(build_file, 'rb') as source_file:
@@ -143,6 +150,8 @@ QA_SKILL_DIR = os.environ.get(
 QA_RUNTIME_DIR = os.path.join(TOOL_DIR, 'runtime', QA_SKILL_NAME)
 QA_UPLOAD_DIR = os.path.join(QA_RUNTIME_DIR, 'uploads')
 QA_UPLOAD_TTL = 60 * 60
+QA_ARTIFACT_TTL = 2 * 60 * 60
+QA_ARTIFACT_MAX_PER_USER = 12
 QA_UPLOAD_MAX_FILES = 8
 QA_UPLOAD_MAX_FILE_SIZE_MB = 100
 QA_UPLOAD_MAX_REQUEST_SIZE_MB = 200
@@ -156,6 +165,8 @@ QA_ALLOWED_EXTENSIONS = {
 _qa_codex_lock = threading.Lock()
 _qa_upload_lock = threading.Lock()
 _qa_uploads = {}
+_qa_artifact_lock = threading.Lock()
+_qa_artifacts = {}
 
 
 def load_data():
@@ -3739,6 +3750,67 @@ def delete_qa_upload(owner_id, file_id):
     return True
 
 
+def save_qa_artifact(owner_id, artifact):
+    cutoff = time.time() - QA_ARTIFACT_TTL
+    with _qa_artifact_lock:
+        for artifact_id, record in list(_qa_artifacts.items()):
+            if float(record.get('created_at') or 0) < cutoff:
+                _qa_artifacts.pop(artifact_id, None)
+        owner_records = sorted(
+            (record for record in _qa_artifacts.values() if record.get('owner_id') == owner_id),
+            key=lambda item: float(item.get('created_at') or 0),
+        )
+        while len(owner_records) >= QA_ARTIFACT_MAX_PER_USER:
+            stale = owner_records.pop(0)
+            _qa_artifacts.pop(stale.get('id'), None)
+
+        artifact_id = secrets.token_urlsafe(18)
+        content = bytes(artifact.get('content') or b'')
+        record = {
+            'id': artifact_id,
+            'owner_id': owner_id,
+            'name': str(artifact.get('filename') or '测试设计文件'),
+            'mime': str(artifact.get('mime') or 'application/octet-stream'),
+            'format': str(artifact.get('format') or ''),
+            'count': int(artifact.get('count') or 0),
+            'size': len(content),
+            'content': content,
+            'created_at': time.time(),
+            'generated_at': now_str(),
+        }
+        _qa_artifacts[artifact_id] = record
+    return {
+        'id': artifact_id,
+        'name': record['name'],
+        'format': record['format'],
+        'count': record['count'],
+        'size': record['size'],
+        'generated_at': record['generated_at'],
+        'download_url': f'/api/qa-test-design/artifact?id={quote(artifact_id)}',
+    }
+
+
+def resolve_qa_artifact(owner_id, artifact_id):
+    with _qa_artifact_lock:
+        record = _qa_artifacts.get(str(artifact_id or '').strip())
+        if not record or record.get('owner_id') != owner_id:
+            return None
+        if float(record.get('created_at') or 0) < time.time() - QA_ARTIFACT_TTL:
+            _qa_artifacts.pop(record.get('id'), None)
+            return None
+        return dict(record)
+
+
+def finalize_qa_design_result(owner_id, result, mode, title=''):
+    structured = result.get('structured') if isinstance(result, dict) else None
+    if not isinstance(structured, dict):
+        raise ValueError('测试设计没有返回可生成文件的结构化结果')
+    artifact = build_qa_artifact(structured, mode, title)
+    result['artifact'] = save_qa_artifact(owner_id, artifact)
+    result['mode'] = mode
+    return result
+
+
 def build_qa_test_design_prompt(
     requirement, mode='full', domain='auto', depth='standard', title='', attachments=None
 ):
@@ -3792,8 +3864,12 @@ def build_qa_test_design_prompt(
 3. Windows PowerShell 读取 Skill 参考文件时显式使用 UTF-8 编码。
 4. 如需生成临时解析产物，只能写入当前工作目录；不得修改上传文件，不访问网络，不调用外部服务。
 5. {attachment_instruction}
-6. 只输出最终中文 Markdown 测试设计，不输出分析过程、工具调用或开场说明。
-7. 不补造需求。把无法确定的内容列为合理假设或待确认项，并在来源中标明文件名。
+6. 只输出一个合法 JSON 对象，不要 Markdown 代码块、解释、分析过程、工具调用或开场说明。
+7. JSON 顶层必须包含：title、summary、facts、assumptions、questions、requirements、risks、test_points、test_cases、warnings。
+8. test_points 每项包含 requirement_ids、module、precondition、scenario、type、priority、target、source。
+9. test_cases 每项包含 requirement_ids、test_point_ids、module、title、preconditions、test_data、steps、priority、type、automation；steps 必须是 action/expected 对象数组。
+10. 测试点模式下 test_cases 返回空数组；测试用例模式必须同时返回 test_points 和 test_cases，保留追踪关系。
+11. 不补造需求。把无法确定的内容列为合理假设或待确认项，并在来源中标明文件名。
 
 <attachments_json>
 {attachments_json}
@@ -3866,7 +3942,7 @@ def run_qa_test_design(
         if os.name == 'nt':
             kwargs['creationflags'] = subprocess.CREATE_NO_WINDOW
         proc = subprocess.run(_codex_exec_args(cli_path, run_dir), **kwargs)
-        content = str(proc.stdout or '').strip()
+        raw_content = str(proc.stdout or '').strip()
         if proc.returncode != 0:
             diagnostic = str(proc.stderr or '').strip()
             print(f'[QA-TEST-DESIGN] Codex failed({proc.returncode}): {diagnostic[-3000:]}')
@@ -3874,12 +3950,19 @@ def run_qa_test_design(
             if 'authentication' in lowered or 'not logged in' in lowered or 'unauthorized' in lowered:
                 raise RuntimeError('Codex 尚未登录，请先在本机完成 Codex 登录')
             raise RuntimeError('Codex 生成失败，请查看服务日志')
-        if not content:
+        if not raw_content:
             print(f'[QA-TEST-DESIGN] empty output: {str(proc.stderr or "")[-3000:]}')
             raise RuntimeError('Codex 未返回测试设计结果')
+        try:
+            structured = parse_qa_design_json(raw_content, mode=mode, title=title)
+        except ValueError as exc:
+            print(f'[QA-TEST-DESIGN] invalid structured output: {exc}; output={raw_content[-3000:]}')
+            raise RuntimeError('Codex 返回结果不是可生成文件的结构化测试设计') from exc
+        content = design_to_markdown(structured)
         return {
             'ok': True,
             'content': content,
+            'structured': structured,
             'engine': 'Codex',
             'skill': QA_SKILL_NAME,
             'duration_ms': int((time.time() - started_at) * 1000),
@@ -3970,6 +4053,10 @@ class GMHandler(SimpleHTTPRequestHandler):
                 self._send_json(ks_catalog_status())
             elif path == '/api/qa-test-design/status':
                 self._send_json(qa_test_design_status())
+            elif path == '/api/qa-test-design/artifact':
+                sess = self._require_login()
+                if sess is not None:
+                    self._qa_test_design_artifact(sess, parse_qs(parsed.query))
             elif path == '/api/git/repos':
                 if self._require_admin() is None:
                     return
@@ -4707,6 +4794,22 @@ class GMHandler(SimpleHTTPRequestHandler):
             return
         self._send_json({'ok': True})
 
+    def _qa_test_design_artifact(self, sess, params):
+        artifact_id = str((params.get('id') or [''])[0]).strip()
+        record = resolve_qa_artifact(sess.get('id'), artifact_id)
+        if record is None:
+            self._send_json({'ok': False, 'msg': '生成文件不存在、已过期或无权访问'}, status=404)
+            return
+        content = record.get('content') or b''
+        filename = record.get('name') or '测试设计文件'
+        self.send_response(200)
+        self.send_header('Content-Type', record.get('mime') or 'application/octet-stream')
+        self.send_header('Content-Length', str(len(content)))
+        self.send_header('Content-Disposition', f"attachment; filename*=UTF-8''{quote(filename)}")
+        self.send_header('Cache-Control', 'private, no-store')
+        self.end_headers()
+        self.wfile.write(content)
+
     def _qa_test_design_generate(self, sess):
         data = self._read_json()
         if data is None:
@@ -4725,6 +4828,9 @@ class GMHandler(SimpleHTTPRequestHandler):
                 data.get('depth'),
                 data.get('title'),
                 attachments,
+            )
+            result = finalize_qa_design_result(
+                sess.get('id'), result, data.get('mode'), data.get('title')
             )
         except ValueError as exc:
             self._send_json({'ok': False, 'code': 'invalid_request', 'msg': str(exc)}, status=400)
