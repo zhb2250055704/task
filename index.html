@@ -4619,6 +4619,101 @@
   .qa-case-preview { width: 100%; border-collapse: collapse; }
   .qa-case-preview th,
   .qa-case-preview td { padding: 7px 8px; font-size: 9px; }
+  .qa-history {
+    margin-top: 18px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--panel);
+  }
+  .qa-history-head {
+    min-height: 58px;
+    padding: 10px 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .qa-history-heading { min-width: 0; }
+  .qa-history-heading strong { display: block; color: var(--text); font-size: 13px; font-weight: 650; }
+  .qa-history-heading span { display: block; margin-top: 2px; color: var(--text-dim); font-size: 10px; }
+  .qa-history-tools { display: flex; align-items: center; gap: 8px; }
+  .qa-history-filters { display: flex; padding: 2px; border: 1px solid var(--border); border-radius: 6px; background: var(--input-bg); }
+  .qa-history-filter {
+    min-height: 28px;
+    padding: 4px 10px;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--text-dim);
+    font: inherit;
+    font-size: 10px;
+    letter-spacing: 0;
+    cursor: pointer;
+  }
+  .qa-history-filter.active { background: var(--panel-solid); color: var(--text); }
+  .qa-history-refresh,
+  .qa-history-action {
+    width: 32px;
+    height: 32px;
+    display: inline-grid;
+    place-items: center;
+    flex: 0 0 auto;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--input-bg);
+    color: var(--text-dim);
+    cursor: pointer;
+  }
+  .qa-history-refresh:hover,
+  .qa-history-action:hover { border-color: var(--border-strong); color: var(--text); }
+  .qa-history-action.delete:hover { border-color: rgba(245, 34, 45, .45); color: #d9363e; }
+  .qa-history-refresh .material-symbols-outlined,
+  .qa-history-action .material-symbols-outlined { font-size: 17px; }
+  .qa-history-columns,
+  .qa-history-row {
+    display: grid;
+    grid-template-columns: minmax(190px, 1.35fr) minmax(150px, .9fr) 110px 90px 82px;
+    gap: 14px;
+    align-items: center;
+  }
+  .qa-history-columns { padding: 8px 14px; border-bottom: 1px solid var(--border); color: var(--text-dim); font-size: 9px; }
+  .qa-history-row {
+    min-height: 64px;
+    padding: 9px 14px;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    outline: none;
+  }
+  .qa-history-row:last-child { border-bottom: 0; }
+  .qa-history-row:hover,
+  .qa-history-row.active { background: var(--row-hover); }
+  .qa-history-row:focus-visible { box-shadow: inset 0 0 0 2px #4f78aa; }
+  .qa-history-main,
+  .qa-history-engine { min-width: 0; }
+  .qa-history-main strong,
+  .qa-history-engine strong { display: block; overflow: hidden; color: var(--text); font-size: 11px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+  .qa-history-main span,
+  .qa-history-engine span,
+  .qa-history-time,
+  .qa-history-size { color: var(--text-dim); font-size: 9px; }
+  .qa-history-mode { display: inline-flex; align-items: center; gap: 5px; margin-bottom: 3px; color: #4f78aa; font-size: 9px; }
+  .qa-history-actions { display: flex; justify-content: flex-end; gap: 6px; }
+  .qa-history-empty { min-height: 112px; display: grid; place-items: center; padding: 24px; color: var(--text-dim); font-size: 11px; text-align: center; }
+
+  @media (max-width: 760px) {
+    .qa-history-head { align-items: flex-start; flex-direction: column; }
+    .qa-history-tools { width: 100%; }
+    .qa-history-filters { flex: 1 1 auto; }
+    .qa-history-filter { flex: 1 1 auto; }
+    .qa-history-columns { display: none; }
+    .qa-history-row { grid-template-columns: minmax(0, 1fr) auto; gap: 8px 12px; }
+    .qa-history-engine,
+    .qa-history-time,
+    .qa-history-size { grid-column: 1; }
+    .qa-history-actions { grid-column: 2; grid-row: 1 / span 4; align-self: center; }
+  }
   @media (max-width: 1180px) {
     .qa-workspace { grid-template-columns: 1fr; }
     .qa-requirement { min-height: 180px; }
@@ -4958,6 +5053,30 @@
             </div>
           </section>
         </div>
+        <section class="qa-history" aria-label="测试设计生成记录">
+          <div class="qa-history-head">
+            <div class="qa-history-heading">
+              <strong>生成记录</strong>
+              <span id="qaHistoryCount">正在读取</span>
+            </div>
+            <div class="qa-history-tools">
+              <div class="qa-history-filters" role="group" aria-label="记录类型">
+                <button class="qa-history-filter active" type="button" data-qa-history-filter="all" aria-pressed="true" onclick="setQaHistoryFilter('all')">全部</button>
+                <button class="qa-history-filter" type="button" data-qa-history-filter="points" aria-pressed="false" onclick="setQaHistoryFilter('points')">测试点</button>
+                <button class="qa-history-filter" type="button" data-qa-history-filter="cases" aria-pressed="false" onclick="setQaHistoryFilter('cases')">测试用例</button>
+              </div>
+              <button class="qa-history-refresh" type="button" title="刷新生成记录" aria-label="刷新生成记录" onclick="loadQaHistory({ restoreLatest: false })">
+                <span class="material-symbols-outlined" aria-hidden="true">refresh</span>
+              </button>
+            </div>
+          </div>
+          <div class="qa-history-columns" aria-hidden="true">
+            <span>需求与文件</span><span>生成引擎</span><span>生成时间</span><span>文件大小</span><span>操作</span>
+          </div>
+          <div id="qaHistoryList" aria-live="polite">
+            <div class="qa-history-empty">正在读取生成记录</div>
+          </div>
+        </section>
       </div>
     </div>
 
@@ -5386,6 +5505,11 @@ let qaStatusPollTimer = null;
 let qaServiceAvailable = false;
 let qaUploadedFiles = [];
 let qaUploading = false;
+let qaHistoryItems = [];
+let qaHistoryFilter = 'all';
+let qaHistoryLoaded = false;
+let qaHistoryLoading = false;
+let qaHistoryActiveId = '';
 
 function enhanceReactBitsComponents(root) {
   const scope = root && root.querySelectorAll ? root : document;
@@ -5506,7 +5630,10 @@ function switchView(view) {
     loadCocosStatus();
     loadScripts();
   }
-  else if (view === 'qa') loadQaTestDesignStatus();
+  else if (view === 'qa') {
+    loadQaTestDesignStatus();
+    loadQaHistory({ restoreLatest: !qaHistoryLoaded });
+  }
   else if (view === 'formulas') loadFormulas();
   else if (view === 'items') loadItems();
   else if (view === 'git') loadGitRepos();
@@ -7996,7 +8123,8 @@ function syncQaServerTask(status) {
     if (wasBusy && !qaRunning) {
       stopQaTimer();
       setQaArtifactBusy((task && task.mode) || 'points', false);
-      setQaRunState('success', '后台测试设计任务已结束，可以继续生成或查看原任务页面的结果');
+      setQaRunState('success', '后台测试设计任务已结束，正在恢复生成结果');
+      loadQaHistory({ restoreLatest: true, silent: true });
       return true;
     }
   }
@@ -8043,15 +8171,7 @@ function applyQaProviderStatus() {
 function switchQaProvider(provider) {
   if (!['codex', 'ollama'].includes(provider) || provider === qaProvider) return;
   if (qaRunning || qaServerBusy || qaUploading) { toast('当前任务结束后再切换测试引擎'); return; }
-  qaProvider = provider;
-  ['codex', 'ollama'].forEach(name => {
-    const button = document.getElementById(name === 'codex' ? 'qaProviderCodex' : 'qaProviderOllama');
-    const active = name === qaProvider;
-    button.classList.toggle('active', active);
-    button.setAttribute('aria-selected', active ? 'true' : 'false');
-  });
-  renderQaArtifactResults(qaProviderResults[qaProvider]);
-  applyQaProviderStatus();
+  applyQaProviderSelection(provider);
   if (!currentQaProviderStatus()) loadQaTestDesignStatus();
 }
 
@@ -8316,6 +8436,177 @@ function renderQaMarkdown(markdown) {
   return html;
 }
 
+function applyQaProviderSelection(provider) {
+  if (!['codex', 'ollama'].includes(provider)) return;
+  qaProvider = provider;
+  ['codex', 'ollama'].forEach(name => {
+    const button = document.getElementById(name === 'codex' ? 'qaProviderCodex' : 'qaProviderOllama');
+    const active = name === qaProvider;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-selected', active ? 'true' : 'false');
+  });
+  renderQaArtifactResults(qaProviderResults[qaProvider]);
+  applyQaProviderStatus();
+}
+
+function qaHistoryModeLabel(mode) {
+  return mode === 'cases' ? '测试用例 · Excel' : '测试点 · XMind';
+}
+
+function setQaHistoryFilter(filter) {
+  qaHistoryFilter = ['points', 'cases'].includes(filter) ? filter : 'all';
+  document.querySelectorAll('[data-qa-history-filter]').forEach(button => {
+    const active = button.dataset.qaHistoryFilter === qaHistoryFilter;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-pressed', active ? 'true' : 'false');
+  });
+  renderQaHistory();
+}
+
+function renderQaHistory() {
+  const list = document.getElementById('qaHistoryList');
+  const count = document.getElementById('qaHistoryCount');
+  if (!list || !count) return;
+  count.textContent = qaHistoryLoading ? '正在读取' : `共 ${qaHistoryItems.length} 条`;
+  if (qaHistoryLoading && !qaHistoryLoaded) {
+    list.innerHTML = '<div class="qa-history-empty">正在读取生成记录</div>';
+    return;
+  }
+  const items = qaHistoryFilter === 'all'
+    ? qaHistoryItems
+    : qaHistoryItems.filter(item => item.mode === qaHistoryFilter);
+  if (!items.length) {
+    list.innerHTML = `<div class="qa-history-empty">${qaHistoryItems.length ? '当前类型暂无记录' : '暂无生成记录'}</div>`;
+    return;
+  }
+  list.innerHTML = items.map(item => {
+    const artifact = item.artifact || {};
+    const modeLabel = qaHistoryModeLabel(item.mode);
+    const countUnit = item.mode === 'cases' ? '条用例' : '条规则';
+    const providerLabel = item.provider === 'ollama' ? '本地 Qwen3' : 'Codex 设计';
+    return `
+      <div class="qa-history-row ${item.id === qaHistoryActiveId ? 'active' : ''}" role="button" tabindex="0"
+        aria-label="查看 ${esc(item.title || '未命名需求')} 的${esc(modeLabel)}"
+        onclick='openQaHistory(${JSON.stringify(item.id)})'
+        onkeydown='handleQaHistoryKey(event, ${JSON.stringify(item.id)})'>
+        <div class="qa-history-main">
+          <span class="qa-history-mode">${esc(modeLabel)} · ${Number(item.count || 0)} ${countUnit}</span>
+          <strong title="${esc(item.title || '未命名需求')}">${esc(item.title || '未命名需求')}</strong>
+        </div>
+        <div class="qa-history-engine">
+          <strong title="${esc(item.engine || '测试设计引擎')}">${esc(item.engine || '测试设计引擎')}</strong>
+          <span>${esc(providerLabel)}</span>
+        </div>
+        <span class="qa-history-time">${esc(item.generated_at || '')}</span>
+        <span class="qa-history-size">${esc(formatQaFileSize(artifact.size || item.size))}</span>
+        <div class="qa-history-actions" onclick="event.stopPropagation()">
+          <button class="qa-history-action" type="button" title="下载 ${esc(artifact.name || modeLabel)}"
+            aria-label="下载 ${esc(artifact.name || modeLabel)}" onclick='downloadQaHistory(${JSON.stringify(item.id)})'>
+            <span class="material-symbols-outlined" aria-hidden="true">download</span>
+          </button>
+          <button class="qa-history-action delete" type="button" title="删除记录" aria-label="删除记录"
+            onclick='deleteQaHistory(${JSON.stringify(item.id)})'>
+            <span class="material-symbols-outlined" aria-hidden="true">delete</span>
+          </button>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function handleQaHistoryKey(event, artifactId) {
+  if (event.key !== 'Enter' && event.key !== ' ') return;
+  event.preventDefault();
+  openQaHistory(artifactId);
+}
+
+async function loadQaHistory(options = {}) {
+  if (qaHistoryLoading) return;
+  qaHistoryLoading = true;
+  renderQaHistory();
+  try {
+    const res = await fetch(`${QA_TEST_DESIGN_API}/history`, { cache: 'no-store' });
+    if (res.status === 401) { location.href = 'login.html'; return; }
+    const data = await readQaJsonResponse(res, '生成记录返回了无法解析的内容');
+    if (!res.ok || !data.ok) throw new Error(data.msg || '生成记录读取失败');
+    qaHistoryItems = Array.isArray(data.items) ? data.items : [];
+    qaHistoryLoaded = true;
+    qaHistoryLoading = false;
+    renderQaHistory();
+    if (options.restoreLatest && qaHistoryItems.length) {
+      await openQaHistory(qaHistoryItems[0].id, { silent: true });
+    }
+  } catch (error) {
+    qaHistoryLoading = false;
+    const list = document.getElementById('qaHistoryList');
+    const count = document.getElementById('qaHistoryCount');
+    if (count) count.textContent = '读取失败';
+    if (list) {
+      list.innerHTML = `<div class="qa-history-empty">生成记录读取失败<br><button class="qa-history-filter" type="button" onclick="loadQaHistory({ restoreLatest: false })">重新读取</button></div>`;
+    }
+    if (!options.silent) toast(qaRequestErrorMessage(error, '生成记录读取'));
+  }
+}
+
+async function openQaHistory(artifactId, options = {}) {
+  qaHistoryActiveId = artifactId;
+  renderQaHistory();
+  try {
+    const res = await fetch(`${QA_TEST_DESIGN_API}/history?id=${encodeURIComponent(artifactId)}`, { cache: 'no-store' });
+    if (res.status === 401) { location.href = 'login.html'; return; }
+    const data = await readQaJsonResponse(res, '历史记录返回了无法解析的内容');
+    if (!res.ok || !data.ok || !data.item) throw new Error(data.msg || '历史记录读取失败');
+    const item = data.item;
+    const mode = item.mode === 'cases' ? 'cases' : 'points';
+    const provider = item.provider === 'ollama' ? 'ollama' : 'codex';
+    qaProviderResults[provider] = qaProviderResults[provider] || { points: null, cases: null };
+    qaProviderResults[provider][mode] = item.result || null;
+    applyQaProviderSelection(provider);
+    setQaRunState('success', `已恢复 ${item.title || '未命名需求'} · ${qaHistoryModeLabel(mode)}`);
+    if (!options.silent) toast('已恢复历史设计结果');
+  } catch (error) {
+    qaHistoryActiveId = '';
+    renderQaHistory();
+    toast(qaRequestErrorMessage(error, '历史记录读取'));
+  }
+}
+
+function downloadQaHistory(artifactId) {
+  const item = qaHistoryItems.find(record => record.id === artifactId);
+  const artifact = item && item.artifact;
+  if (!artifact || !artifact.download_url) return;
+  const link = document.createElement('a');
+  link.href = artifact.download_url;
+  link.download = artifact.name || '';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+}
+
+async function deleteQaHistory(artifactId) {
+  const item = qaHistoryItems.find(record => record.id === artifactId);
+  if (!item || !confirm(`确定删除“${item.title || '未命名需求'}”的${qaHistoryModeLabel(item.mode)}记录吗？`)) return;
+  try {
+    const res = await fetch(`${QA_TEST_DESIGN_API}/history?id=${encodeURIComponent(artifactId)}`, { method: 'DELETE' });
+    if (res.status === 401) { location.href = 'login.html'; return; }
+    const data = await readQaJsonResponse(res, '删除记录返回了无法解析的内容');
+    if (!res.ok || !data.ok) throw new Error(data.msg || '删除记录失败');
+    qaHistoryItems = qaHistoryItems.filter(record => record.id !== artifactId);
+    Object.values(qaProviderResults).forEach(results => {
+      ['points', 'cases'].forEach(mode => {
+        const result = results && results[mode];
+        if (result && result.artifact && result.artifact.id === artifactId) results[mode] = null;
+      });
+    });
+    if (qaHistoryActiveId === artifactId) qaHistoryActiveId = '';
+    renderQaArtifactResults(qaProviderResults[qaProvider]);
+    renderQaHistory();
+    toast('生成记录已删除');
+  } catch (error) {
+    toast(qaRequestErrorMessage(error, '删除记录'));
+  }
+}
+
+
 function qaArtifactMeta(result, fallback) {
   if (!result || !result.artifact) return fallback;
   const artifact = result.artifact;
@@ -8408,6 +8699,8 @@ async function generateQaTestDesign(mode) {
     qaProviderResults[qaProvider] = qaProviderResults[qaProvider] || { points: null, cases: null };
     qaProviderResults[qaProvider][mode] = data;
     renderQaArtifactResults(qaProviderResults[qaProvider]);
+    qaHistoryActiveId = data.artifact && data.artifact.id || '';
+    await loadQaHistory({ restoreLatest: false, silent: true });
     const elapsed = data.duration_ms || (Date.now() - qaStartedAt);
     const fallbackNote = data.fallback_reason ? ` · ${data.fallback_reason}` : '';
     setQaRunState('success', `${qaDeliverableLabel(mode)}已生成 · ${formatQaElapsed(elapsed)} · ${data.engine} / ${data.skill}${fallbackNote}`);

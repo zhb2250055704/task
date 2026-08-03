@@ -151,9 +151,9 @@ QA_SKILL_DIR = os.environ.get(
 )
 QA_RUNTIME_DIR = os.path.join(TOOL_DIR, 'runtime', QA_SKILL_NAME)
 QA_UPLOAD_DIR = os.path.join(QA_RUNTIME_DIR, 'uploads')
+QA_HISTORY_DIR = os.path.join(QA_RUNTIME_DIR, 'history')
 QA_UPLOAD_TTL = 60 * 60
-QA_ARTIFACT_TTL = 2 * 60 * 60
-QA_ARTIFACT_MAX_PER_USER = 12
+QA_ARTIFACT_MAX_PER_USER = 100
 QA_UPLOAD_MAX_FILES = 8
 QA_UPLOAD_MAX_FILE_SIZE_MB = 100
 QA_UPLOAD_MAX_REQUEST_SIZE_MB = 200
@@ -175,7 +175,6 @@ _qa_codex_state = {
 _qa_upload_lock = threading.Lock()
 _qa_uploads = {}
 _qa_artifact_lock = threading.Lock()
-_qa_artifacts = {}
 
 
 def load_data():
@@ -3784,64 +3783,200 @@ def delete_qa_upload(owner_id, file_id):
     return True
 
 
-def save_qa_artifact(owner_id, artifact):
-    cutoff = time.time() - QA_ARTIFACT_TTL
-    with _qa_artifact_lock:
-        for artifact_id, record in list(_qa_artifacts.items()):
-            if float(record.get('created_at') or 0) < cutoff:
-                _qa_artifacts.pop(artifact_id, None)
-        owner_records = sorted(
-            (record for record in _qa_artifacts.values() if record.get('owner_id') == owner_id),
-            key=lambda item: float(item.get('created_at') or 0),
-        )
-        while len(owner_records) >= QA_ARTIFACT_MAX_PER_USER:
-            stale = owner_records.pop(0)
-            _qa_artifacts.pop(stale.get('id'), None)
+def _qa_history_owner_dir(owner_id):
+    owner_key = hashlib.sha256(str(owner_id).encode('utf-8')).hexdigest()[:32]
+    return os.path.join(QA_HISTORY_DIR, owner_key)
 
-        artifact_id = secrets.token_urlsafe(18)
-        content = bytes(artifact.get('content') or b'')
-        record = {
-            'id': artifact_id,
-            'owner_id': owner_id,
-            'name': str(artifact.get('filename') or '测试设计文件'),
-            'mime': str(artifact.get('mime') or 'application/octet-stream'),
-            'format': str(artifact.get('format') or ''),
-            'count': int(artifact.get('count') or 0),
-            'size': len(content),
-            'content': content,
-            'created_at': time.time(),
-            'generated_at': now_str(),
-        }
-        _qa_artifacts[artifact_id] = record
+
+def _qa_history_id(value):
+    artifact_id = str(value or '').strip()
+    return artifact_id if re.fullmatch(r'[a-f0-9]{32}', artifact_id) else ''
+
+
+def _qa_public_artifact(record):
+    artifact_id = record['id']
     return {
         'id': artifact_id,
-        'name': record['name'],
-        'format': record['format'],
-        'count': record['count'],
-        'size': record['size'],
-        'generated_at': record['generated_at'],
+        'name': record.get('name') or '测试设计文件',
+        'format': record.get('format') or '',
+        'count': int(record.get('count') or 0),
+        'size': int(record.get('size') or 0),
+        'generated_at': record.get('generated_at') or '',
         'download_url': f'/api/qa-test-design/artifact?id={quote(artifact_id)}',
     }
 
 
+def _qa_history_summary(record):
+    return {
+        'id': record['id'],
+        'title': record.get('title') or '未命名需求',
+        'mode': record.get('mode') or '',
+        'provider': record.get('provider') or 'codex',
+        'engine': record.get('engine') or '测试设计引擎',
+        'skill': record.get('skill') or '',
+        'count': int(record.get('count') or 0),
+        'size': int(record.get('size') or 0),
+        'generated_at': record.get('generated_at') or '',
+        'created_at': float(record.get('created_at') or 0),
+        'artifact': _qa_public_artifact(record),
+    }
+
+
+def _load_qa_history_record(owner_id, artifact_id):
+    artifact_id = _qa_history_id(artifact_id)
+    if not artifact_id:
+        return None
+    owner_dir = _qa_history_owner_dir(owner_id)
+    metadata_path = os.path.join(owner_dir, f'{artifact_id}.json')
+    try:
+        with open(metadata_path, 'r', encoding='utf-8') as source:
+            record = json.load(source)
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(record, dict) or str(record.get('owner_id')) != str(owner_id):
+        return None
+    artifact_format = str(record.get('format') or '').lower()
+    if artifact_format not in ('xmind', 'xlsx') or record.get('id') != artifact_id:
+        return None
+    artifact_path = os.path.join(owner_dir, f'{artifact_id}.{artifact_format}')
+    if not os.path.isfile(artifact_path):
+        return None
+    record['size'] = os.path.getsize(artifact_path)
+    record['_artifact_path'] = artifact_path
+    record['_metadata_path'] = metadata_path
+    return record
+
+
+def _delete_qa_history_record_files(record):
+    for path in (record.get('_artifact_path'), record.get('_metadata_path')):
+        if path and os.path.isfile(path):
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+
+
+def _list_qa_history_records(owner_id):
+    owner_dir = _qa_history_owner_dir(owner_id)
+    if not os.path.isdir(owner_dir):
+        return []
+    records = []
+    for filename in os.listdir(owner_dir):
+        if not filename.endswith('.json'):
+            continue
+        record = _load_qa_history_record(owner_id, filename[:-5])
+        if record:
+            records.append(record)
+    return sorted(records, key=lambda item: float(item.get('created_at') or 0), reverse=True)
+
+
+def list_qa_history(owner_id):
+    with _qa_artifact_lock:
+        return [_qa_history_summary(record) for record in _list_qa_history_records(owner_id)]
+
+
+def resolve_qa_history(owner_id, artifact_id):
+    with _qa_artifact_lock:
+        record = _load_qa_history_record(owner_id, artifact_id)
+        if not record:
+            return None
+        result = record.get('result') if isinstance(record.get('result'), dict) else {}
+        result = dict(result)
+        result['artifact'] = _qa_public_artifact(record)
+        result['mode'] = record.get('mode') or result.get('mode') or ''
+        item = _qa_history_summary(record)
+        item['result'] = result
+        return item
+
+
+def delete_qa_history(owner_id, artifact_id):
+    with _qa_artifact_lock:
+        record = _load_qa_history_record(owner_id, artifact_id)
+        if not record:
+            return False
+        _delete_qa_history_record_files(record)
+        return True
+
+
+def save_qa_artifact(owner_id, artifact, result=None, mode='', title='', provider=''):
+    artifact_format = str(artifact.get('format') or '').lower()
+    if artifact_format not in ('xmind', 'xlsx'):
+        raise ValueError('不支持的测试设计文件格式')
+    content = bytes(artifact.get('content') or b'')
+    if not content:
+        raise ValueError('测试设计文件内容为空')
+    artifact_id = secrets.token_hex(16)
+    result_data = dict(result) if isinstance(result, dict) else {}
+    result_data.pop('artifact', None)
+    result_data = json.loads(json.dumps(result_data, ensure_ascii=False))
+    normalized_provider = 'ollama' if str(provider).lower() in ('ollama', 'local') else 'codex'
+    record = {
+        'version': 1,
+        'id': artifact_id,
+        'owner_id': str(owner_id),
+        'title': str(title or '').strip()[:120] or '未命名需求',
+        'mode': str(mode or result_data.get('mode') or '').strip(),
+        'provider': normalized_provider,
+        'engine': str(result_data.get('engine') or '测试设计引擎'),
+        'skill': str(result_data.get('skill') or ''),
+        'name': str(artifact.get('filename') or '测试设计文件'),
+        'mime': str(artifact.get('mime') or 'application/octet-stream'),
+        'format': artifact_format,
+        'count': int(artifact.get('count') or 0),
+        'size': len(content),
+        'created_at': time.time(),
+        'generated_at': str(result_data.get('generated_at') or now_str()),
+        'result': result_data,
+    }
+    owner_dir = _qa_history_owner_dir(owner_id)
+    artifact_path = os.path.join(owner_dir, f'{artifact_id}.{artifact_format}')
+    metadata_path = os.path.join(owner_dir, f'{artifact_id}.json')
+    artifact_tmp = f'{artifact_path}.{secrets.token_hex(4)}.tmp'
+    metadata_tmp = f'{metadata_path}.{secrets.token_hex(4)}.tmp'
+    with _qa_artifact_lock:
+        os.makedirs(owner_dir, exist_ok=True)
+        try:
+            with open(artifact_tmp, 'wb') as output:
+                output.write(content)
+            os.replace(artifact_tmp, artifact_path)
+            with open(metadata_tmp, 'w', encoding='utf-8') as output:
+                json.dump(record, output, ensure_ascii=False, indent=2)
+            os.replace(metadata_tmp, metadata_path)
+        except Exception:
+            for path in (artifact_tmp, metadata_tmp, artifact_path, metadata_path):
+                if os.path.isfile(path):
+                    try:
+                        os.remove(path)
+                    except OSError:
+                        pass
+            raise
+
+        records = _list_qa_history_records(owner_id)
+        for stale in records[QA_ARTIFACT_MAX_PER_USER:]:
+            _delete_qa_history_record_files(stale)
+    return _qa_public_artifact(record)
+
+
 def resolve_qa_artifact(owner_id, artifact_id):
     with _qa_artifact_lock:
-        record = _qa_artifacts.get(str(artifact_id or '').strip())
-        if not record or record.get('owner_id') != owner_id:
+        record = _load_qa_history_record(owner_id, artifact_id)
+        if not record:
             return None
-        if float(record.get('created_at') or 0) < time.time() - QA_ARTIFACT_TTL:
-            _qa_artifacts.pop(record.get('id'), None)
+        try:
+            with open(record['_artifact_path'], 'rb') as source:
+                record['content'] = source.read()
+        except OSError:
             return None
-        return dict(record)
+        return record
 
 
-def finalize_qa_design_result(owner_id, result, mode, title=''):
+def finalize_qa_design_result(owner_id, result, mode, title='', provider=''):
     structured = result.get('structured') if isinstance(result, dict) else None
     if not isinstance(structured, dict):
         raise ValueError('测试设计没有返回可生成文件的结构化结果')
     artifact = build_qa_artifact(structured, mode, title)
-    result['artifact'] = save_qa_artifact(owner_id, artifact)
     result['mode'] = mode
+    result['artifact'] = save_qa_artifact(owner_id, artifact, result, mode, title, provider)
     return result
 
 
@@ -4099,6 +4234,10 @@ class GMHandler(SimpleHTTPRequestHandler):
                 sess = self._require_login()
                 if sess is not None:
                     self._qa_test_design_artifact(sess, parse_qs(parsed.query))
+            elif path == '/api/qa-test-design/history':
+                sess = self._require_login()
+                if sess is not None:
+                    self._qa_test_design_history(sess, parse_qs(parsed.query))
             elif path == '/api/git/repos':
                 if self._require_admin() is None:
                     return
@@ -4199,6 +4338,11 @@ class GMHandler(SimpleHTTPRequestHandler):
             sess = self._require_login()
             if sess is not None:
                 self._qa_test_design_delete_upload(sess, parse_qs(parsed.query))
+            return
+        if path == '/api/qa-test-design/history':
+            sess = self._require_login()
+            if sess is not None:
+                self._qa_test_design_delete_history(sess, parse_qs(parsed.query))
             return
         if path.startswith('/api/users/'):
             if self._require_admin() is None:
@@ -4840,7 +4984,7 @@ class GMHandler(SimpleHTTPRequestHandler):
         artifact_id = str((params.get('id') or [''])[0]).strip()
         record = resolve_qa_artifact(sess.get('id'), artifact_id)
         if record is None:
-            self._send_json({'ok': False, 'msg': '生成文件不存在、已过期或无权访问'}, status=404)
+            self._send_json({'ok': False, 'msg': '生成文件不存在或无权访问'}, status=404)
             return
         content = record.get('content') or b''
         filename = record.get('name') or '测试设计文件'
@@ -4851,6 +4995,28 @@ class GMHandler(SimpleHTTPRequestHandler):
         self.send_header('Cache-Control', 'private, no-store')
         self.end_headers()
         self.wfile.write(content)
+
+    def _qa_test_design_history(self, sess, params):
+        artifact_id = str((params.get('id') or [''])[0]).strip()
+        if artifact_id:
+            item = resolve_qa_history(sess.get('id'), artifact_id)
+            if item is None:
+                self._send_json({'ok': False, 'msg': '历史记录不存在或无权访问'}, status=404)
+                return
+            self._send_json({'ok': True, 'item': item})
+            return
+        items = list_qa_history(sess.get('id'))
+        self._send_json({'ok': True, 'items': items, 'total': len(items)})
+
+    def _qa_test_design_delete_history(self, sess, params):
+        artifact_id = str((params.get('id') or [''])[0]).strip()
+        if not artifact_id:
+            self._send_json({'ok': False, 'msg': '缺少历史记录编号'}, status=400)
+            return
+        if not delete_qa_history(sess.get('id'), artifact_id):
+            self._send_json({'ok': False, 'msg': '历史记录不存在或无权访问'}, status=404)
+            return
+        self._send_json({'ok': True})
 
     def _qa_test_design_generate(self, sess):
         data = self._read_json()
@@ -4872,7 +5038,7 @@ class GMHandler(SimpleHTTPRequestHandler):
                 attachments,
             )
             result = finalize_qa_design_result(
-                sess.get('id'), result, data.get('mode'), data.get('title')
+                sess.get('id'), result, data.get('mode'), data.get('title'), engine
             )
         except ValueError as exc:
             self._send_json({'ok': False, 'code': 'invalid_request', 'msg': str(exc)}, status=400)
