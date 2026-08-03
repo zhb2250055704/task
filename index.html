@@ -4299,7 +4299,15 @@
   }
   .qa-engine-badge.ready::before { background: #2f8f62; }
   .qa-engine-badge.fallback::before { background: #c39435; }
+  .qa-engine-badge.busy::before {
+    background: #4f78aa;
+    animation: qaBusyPulse 1.4s ease-in-out infinite;
+  }
   .qa-engine-badge.unavailable::before { background: #c46a33; }
+  @keyframes qaBusyPulse {
+    0%, 100% { opacity: .45; transform: scale(.82); }
+    50% { opacity: 1; transform: scale(1); }
+  }
   .qa-workspace {
     display: grid;
     grid-template-columns: minmax(320px, .9fr) minmax(0, 1.1fr);
@@ -4451,7 +4459,7 @@
     line-height: 1.55;
     overflow: hidden;
   }
-  .qa-run-state.running { color: var(--text); }
+  .qa-run-state.running { border-color: rgba(79, 120, 170, .48); background: rgba(79, 120, 170, .08); color: var(--text); }
   .qa-run-state.success { border-color: rgba(47, 143, 98, .42); color: #2f8f62; }
   .qa-run-state.error { border-color: rgba(196, 106, 51, .45); color: #b45f2f; }
   .qa-run-progress {
@@ -4468,14 +4476,15 @@
   .qa-run-progress::after {
     content: '';
     display: block;
-    width: 34%;
+    width: 100%;
     height: 100%;
     background: #4f78aa;
-    animation: qaProgress 1.35s ease-in-out infinite;
+    transform-origin: left center;
+    animation: qaProgress 1.35s ease-in-out infinite alternate;
   }
   @keyframes qaProgress {
-    from { transform: translateX(-100%); }
-    to { transform: translateX(300%); }
+    from { opacity: .5; transform: scaleX(.18); }
+    to { opacity: 1; transform: scaleX(.92); }
   }
   .qa-output-tools { min-width: 0; max-width: 100%; display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
   .qa-segmented {
@@ -4593,9 +4602,13 @@
   .qa-artifact-title span { display: block; margin-top: 2px; color: var(--text-dim); font-size: 9px; }
   .qa-artifact-status { padding: 3px 7px; border: 1px solid var(--border); border-radius: 6px; color: var(--text-dim); font-size: 9px; }
   .qa-artifact-status.ready { border-color: rgba(47, 143, 98, .42); color: #2f8f62; }
+  .qa-artifact-status.running { border-color: rgba(79, 120, 170, .42); color: #4f78aa; }
   .qa-artifact-download { min-width: 104px; justify-content: center; }
   .qa-artifact-body { min-height: 0; padding: 14px 16px 18px; overflow: auto; }
   .qa-artifact-empty { height: 100%; min-height: 170px; display: grid; place-items: center; color: var(--text-dim); font-size: 11px; }
+  .qa-artifact-loading { height: 100%; min-height: 170px; display: grid; place-content: center; justify-items: center; gap: 8px; color: var(--text-dim); text-align: center; }
+  .qa-artifact-loading .material-symbols-outlined { color: #4f78aa; font-size: 28px; }
+  .qa-artifact-loading strong { color: var(--text); font-size: 12px; font-weight: 650; }
   .qa-artifact-summary { margin-bottom: 12px; display: flex; align-items: baseline; gap: 8px; color: var(--text-dim); font-size: 10px; }
   .qa-artifact-summary strong { color: var(--text); font-size: 24px; }
   .qa-artifact-list { display: grid; gap: 6px; }
@@ -4907,7 +4920,7 @@
                 </button>
                 <button class="btn btn-ghost" type="button" onclick="clearQaWorkspace()">清空</button>
               </div>
-              <div id="qaRunState" class="qa-run-state">
+              <div id="qaRunState" class="qa-run-state" role="status" aria-live="polite" aria-atomic="true">
                 <span id="qaRunText">等待提交</span>
                 <span class="qa-run-progress" aria-hidden="true"></span>
               </div>
@@ -5367,6 +5380,9 @@ let qaRunning = false;
 let qaRunningMode = '';
 let qaTimer = null;
 let qaStartedAt = 0;
+let qaServerBusy = false;
+let qaServerTask = null;
+let qaStatusPollTimer = null;
 let qaServiceAvailable = false;
 let qaUploadedFiles = [];
 let qaUploading = false;
@@ -7900,20 +7916,31 @@ function formatQaElapsed(milliseconds) {
   return `${minutes} 分 ${String(seconds).padStart(2, '0')} 秒`;
 }
 
-function startQaTimer(mode) {
+function startQaTimer(mode, task = null) {
   stopQaTimer();
-  qaStartedAt = Date.now();
+  qaStartedAt = Number(task && task.started_at_ms) || Date.now();
   const update = () => {
-    const engine = qaProvider === 'ollama' ? '本地测试引擎' : 'Codex';
+    const engine = (task && task.engine) || (qaProvider === 'ollama' ? '本地测试引擎' : 'Codex');
     setQaRunState('running', `${engine} 正在生成${qaDeliverableLabel(mode)} · ${formatQaElapsed(Date.now() - qaStartedAt)}`);
   };
   update();
+  setQaArtifactBusy(mode, true);
   qaTimer = setInterval(update, 1000);
 }
 
 function stopQaTimer() {
   if (qaTimer) clearInterval(qaTimer);
   qaTimer = null;
+}
+
+function stopQaStatusPolling() {
+  if (qaStatusPollTimer) clearInterval(qaStatusPollTimer);
+  qaStatusPollTimer = null;
+}
+
+function startQaStatusPolling() {
+  if (qaStatusPollTimer) return;
+  qaStatusPollTimer = setInterval(() => loadQaTestDesignStatus({ silent: true }), 2000);
 }
 
 function formatQaFileSize(bytes) {
@@ -7927,22 +7954,73 @@ function qaDeliverableLabel(mode) {
   return mode === 'cases' ? '测试用例' : '测试点';
 }
 
+function setQaArtifactBusy(mode, busy) {
+  const isCases = mode === 'cases';
+  const status = document.getElementById(isCases ? 'qaCasesStatus' : 'qaPointsStatus');
+  const body = document.getElementById(isCases ? 'qaCasesBody' : 'qaPointsBody');
+  const result = qaProviderResults[qaProvider] && qaProviderResults[qaProvider][mode];
+  if (!status || !body) return;
+  status.classList.toggle('running', !!busy);
+  if (!busy) {
+    renderQaArtifactResults(qaProviderResults[qaProvider]);
+    return;
+  }
+  status.classList.remove('ready');
+  status.textContent = result ? '重新生成中' : '生成中';
+  if (!result) {
+    body.innerHTML = `
+      <div class="qa-artifact-loading">
+        <span class="material-symbols-outlined" aria-hidden="true">progress_activity</span>
+        <strong>正在生成${qaDeliverableLabel(mode)}</strong>
+        <span>任务完成后可在这里查看并下载${isCases ? ' Excel' : ' XMind'}</span>
+      </div>`;
+  }
+}
+
 function currentQaProviderStatus() {
   return qaProviderStatuses[qaProvider] || null;
+}
+
+function syncQaServerTask(status) {
+  const task = status && status.task && typeof status.task === 'object' ? status.task : null;
+  const wasBusy = qaServerBusy;
+  qaServerBusy = !!(task && task.running);
+  qaServerTask = qaServerBusy ? task : null;
+  if (qaServerBusy) {
+    if (!qaRunning && (!wasBusy || !qaTimer)) {
+      startQaTimer(task.mode || 'points', task);
+    }
+    startQaStatusPolling();
+  } else {
+    stopQaStatusPolling();
+    if (wasBusy && !qaRunning) {
+      stopQaTimer();
+      setQaArtifactBusy((task && task.mode) || 'points', false);
+      setQaRunState('success', '后台测试设计任务已结束，可以继续生成或查看原任务页面的结果');
+      return true;
+    }
+  }
+  return false;
 }
 
 function applyQaProviderStatus() {
   const badge = document.getElementById('qaEngineBadge');
   const status = currentQaProviderStatus();
-  badge.classList.remove('ready', 'fallback', 'unavailable');
+  const taskFinished = syncQaServerTask(status);
+  badge.classList.remove('ready', 'fallback', 'busy', 'unavailable');
   if (!status) {
     qaServiceAvailable = false;
     badge.textContent = '检测服务';
   } else {
     qaServiceAvailable = !!status.available;
     const fallback = qaProvider === 'ollama' && status.mode === 'rules';
-    badge.classList.add(qaServiceAvailable ? (fallback ? 'fallback' : 'ready') : 'unavailable');
-    badge.textContent = status.msg || (qaServiceAvailable ? status.engine : '服务不可用');
+    if (qaServerBusy) {
+      badge.classList.add('busy');
+      badge.textContent = `${qaServerTask.engine || status.engine || '测试设计引擎'} 正在生成`;
+    } else {
+      badge.classList.add(qaServiceAvailable ? (fallback ? 'fallback' : 'ready') : 'unavailable');
+      badge.textContent = status.msg || (qaServiceAvailable ? status.engine : '服务不可用');
+    }
   }
   const localMeta = document.getElementById('qaProviderOllamaMeta');
   if (localMeta && qaProviderStatuses.ollama) {
@@ -7954,7 +8032,7 @@ function applyQaProviderStatus() {
   }
   updateQaGenerateAvailability();
   const providerResults = qaProviderResults[qaProvider] || {};
-  if (!qaRunning && !providerResults.points && !providerResults.cases) {
+  if (!taskFinished && !qaRunning && !qaServerBusy && !providerResults.points && !providerResults.cases) {
     setQaRunState(
       status && !status.available ? 'error' : '',
       status ? (status.msg || '等待提交') : '正在检测服务'
@@ -7964,7 +8042,7 @@ function applyQaProviderStatus() {
 
 function switchQaProvider(provider) {
   if (!['codex', 'ollama'].includes(provider) || provider === qaProvider) return;
-  if (qaRunning || qaUploading) { toast('当前任务结束后再切换测试引擎'); return; }
+  if (qaRunning || qaServerBusy || qaUploading) { toast('当前任务结束后再切换测试引擎'); return; }
   qaProvider = provider;
   ['codex', 'ollama'].forEach(name => {
     const button = document.getElementById(name === 'codex' ? 'qaProviderCodex' : 'qaProviderOllama');
@@ -7980,7 +8058,7 @@ function switchQaProvider(provider) {
 function updateQaGenerateAvailability() {
   ['qaGeneratePointsBtn', 'qaGenerateCasesBtn'].forEach(id => {
     const button = document.getElementById(id);
-    if (button) button.disabled = !qaServiceAvailable || qaRunning || qaUploading;
+    if (button) button.disabled = !qaServiceAvailable || qaRunning || qaServerBusy || qaUploading;
   });
 }
 
@@ -8010,6 +8088,10 @@ async function uploadQaFiles(fileList) {
   const input = document.getElementById('qaFileInput');
   if (input) input.value = '';
   if (!files.length || qaUploading) return;
+  if (qaRunning || qaServerBusy) {
+    toast('当前测试设计任务结束后再调整需求文件');
+    return;
+  }
   if (qaUploadedFiles.length + files.length > 8) {
     toast('一次最多导入 8 个文件');
     return;
@@ -8039,6 +8121,10 @@ async function uploadQaFiles(fileList) {
 }
 
 async function removeQaFile(fileId) {
+  if (qaRunning || qaServerBusy) {
+    toast('当前测试设计任务结束后再调整需求文件');
+    return;
+  }
   const target = qaUploadedFiles.find(file => file.id === fileId);
   if (!target) return;
   try {
@@ -8072,10 +8158,13 @@ async function readQaJsonResponse(res, fallbackMessage) {
   }
 }
 
-async function loadQaTestDesignStatus() {
+async function loadQaTestDesignStatus(options = {}) {
+  const silent = !!options.silent;
   const badge = document.getElementById('qaEngineBadge');
-  badge.classList.remove('ready', 'fallback', 'unavailable');
-  badge.textContent = '检测服务';
+  if (!silent) {
+    badge.classList.remove('ready', 'fallback', 'busy', 'unavailable');
+    badge.textContent = '检测服务';
+  }
   try {
     const res = await fetch(`${QA_TEST_DESIGN_API}/status`, { cache: 'no-store' });
     if (res.status === 401) { location.href = 'login.html'; return; }
@@ -8095,10 +8184,14 @@ async function loadQaTestDesignStatus() {
   } catch (error) {
     qaProviderStatuses = {};
     qaServiceAvailable = false;
-    badge.classList.add('unavailable');
-    badge.textContent = '服务不可用';
+    if (!silent) {
+      badge.classList.add('unavailable');
+      badge.textContent = '服务不可用';
+    }
     updateQaGenerateAvailability();
-    setQaRunState('error', error.message || 'QA 服务状态读取失败');
+    if (!qaServerBusy || !silent) {
+      setQaRunState('error', error.message || 'QA 服务状态读取失败');
+    }
   }
 }
 
@@ -8242,6 +8335,7 @@ function renderQaArtifactResults(results) {
 
   const pointsStatus = document.getElementById('qaPointsStatus');
   const pointsDownload = document.getElementById('qaPointsDownload');
+  pointsStatus.classList.remove('running');
   pointsStatus.textContent = pointsResult ? '已生成' : '未生成';
   pointsStatus.classList.toggle('ready', !!pointsResult);
   pointsDownload.disabled = !(pointsResult && pointsResult.artifact && pointsResult.artifact.download_url);
@@ -8258,6 +8352,7 @@ function renderQaArtifactResults(results) {
 
   const casesStatus = document.getElementById('qaCasesStatus');
   const casesDownload = document.getElementById('qaCasesDownload');
+  casesStatus.classList.remove('running');
   casesStatus.textContent = casesResult ? '已生成' : '未生成';
   casesStatus.classList.toggle('ready', !!casesResult);
   casesDownload.disabled = !(casesResult && casesResult.artifact && casesResult.artifact.download_url);
@@ -8270,7 +8365,10 @@ function renderQaArtifactResults(results) {
 }
 
 async function generateQaTestDesign(mode) {
-  if (qaRunning) return;
+  if (qaRunning || qaServerBusy) {
+    toast('已有测试设计任务正在生成，请等待当前任务完成');
+    return;
+  }
   if (!['points', 'cases'].includes(mode)) return;
   const requirement = document.getElementById('qaRequirement').value.trim();
   if (!requirement && !qaUploadedFiles.length) { toast('请导入需求文件或填写补充说明'); return; }
@@ -8301,7 +8399,12 @@ async function generateQaTestDesign(mode) {
     });
     if (res.status === 401) { location.href = 'login.html'; return; }
     const data = await readQaJsonResponse(res, '测试设计接口返回异常，请重启工具服务');
-    if (!res.ok || !data.ok) throw new Error(data.msg || '测试设计生成失败');
+    if (!res.ok || !data.ok) {
+      const requestError = new Error(data.msg || '测试设计生成失败');
+      requestError.code = data.code || '';
+      requestError.status = res.status;
+      throw requestError;
+    }
     qaProviderResults[qaProvider] = qaProviderResults[qaProvider] || { points: null, cases: null };
     qaProviderResults[qaProvider][mode] = data;
     renderQaArtifactResults(qaProviderResults[qaProvider]);
@@ -8310,18 +8413,35 @@ async function generateQaTestDesign(mode) {
     setQaRunState('success', `${qaDeliverableLabel(mode)}已生成 · ${formatQaElapsed(elapsed)} · ${data.engine} / ${data.skill}${fallbackNote}`);
     toast(data.fallback_reason || `${qaDeliverableLabel(mode)}已生成，可下载${mode === 'cases' ? ' Excel' : ' XMind'}`);
   } catch (error) {
-    setQaRunState('error', error.message || '测试设计生成失败');
-    toast(error.message || '测试设计生成失败');
+    if (error.code === 'busy' || error.status === 429) {
+      await loadQaTestDesignStatus({ silent: true });
+      const message = '已有测试设计任务正在生成，当前页面会持续显示任务状态';
+      if (!qaServerBusy) setQaRunState('running', message);
+      toast(message);
+    } else {
+      setQaArtifactBusy(mode, false);
+      setQaRunState('error', error.message || '测试设计生成失败');
+      toast(error.message || '测试设计生成失败');
+    }
   } finally {
     stopQaTimer();
     qaRunning = false;
     qaRunningMode = '';
     button.classList.remove('loading');
+    if (qaServerBusy && qaServerTask) {
+      if (qaServerTask.mode && qaServerTask.mode !== mode) setQaArtifactBusy(mode, false);
+      startQaTimer(qaServerTask.mode || mode, qaServerTask);
+      startQaStatusPolling();
+    }
     updateQaGenerateAvailability();
   }
 }
 
 async function clearQaWorkspace() {
+  if (qaRunning || qaServerBusy) {
+    toast('当前测试设计任务正在生成，结束后才能清空');
+    return;
+  }
   const hasResult = Object.values(qaProviderResults).some(result => result && (result.points || result.cases));
   const hasContent = document.getElementById('qaRequirement').value.trim() || hasResult || qaUploadedFiles.length;
   if (hasContent && !confirm('确定清空当前需求和测试设计结果吗？')) return;

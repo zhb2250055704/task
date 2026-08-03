@@ -35,6 +35,7 @@ from qa_artifacts import build_qa_artifact
 from qa_local_engine import (
     apply_qa_document_hierarchy,
     design_to_markdown,
+    get_local_qa_task_status,
     get_local_qa_status,
     parse_qa_design_json,
     run_local_qa_test_design,
@@ -164,6 +165,13 @@ QA_ALLOWED_EXTENSIONS = {
     '.pdf', '.docx', '.txt', '.md', '.xlsx', '.csv', '.pptx'
 }
 _qa_codex_lock = threading.Lock()
+_qa_codex_state_lock = threading.Lock()
+_qa_codex_state = {
+    'running': False,
+    'mode': '',
+    'title': '',
+    'started_at_ms': 0,
+}
 _qa_upload_lock = threading.Lock()
 _qa_uploads = {}
 _qa_artifact_lock = threading.Lock()
@@ -3524,6 +3532,30 @@ def find_codex_cli():
     return ''
 
 
+def qa_codex_task_status():
+    with _qa_codex_state_lock:
+        state = dict(_qa_codex_state)
+    state['engine'] = 'Codex'
+    if state.get('running') and state.get('started_at_ms'):
+        state['elapsed_ms'] = max(0, int(time.time() * 1000) - state['started_at_ms'])
+    else:
+        state['elapsed_ms'] = 0
+    return state
+
+
+def set_qa_codex_task_status(running, mode='', title=''):
+    with _qa_codex_state_lock:
+        _qa_codex_state.update({
+            'running': bool(running),
+            'mode': str(mode or _qa_codex_state.get('mode') or ''),
+            'title': str(title or _qa_codex_state.get('title') or ''),
+            'started_at_ms': (
+                int(time.time() * 1000)
+                if running else int(_qa_codex_state.get('started_at_ms') or 0)
+            ),
+        })
+
+
 def qa_codex_test_design_status():
     cli_path = find_codex_cli()
     skill_file = os.path.join(QA_SKILL_DIR, 'SKILL.md')
@@ -3564,9 +3596,10 @@ def qa_test_design_status():
         'max_file_size': QA_UPLOAD_MAX_FILE_SIZE,
     }
     codex = qa_codex_test_design_status()
+    codex['task'] = qa_codex_task_status()
     codex.setdefault('upload', upload)
     local = get_local_qa_status()
-    local.update({'ok': True, 'upload': upload})
+    local.update({'ok': True, 'upload': upload, 'task': get_local_qa_task_status()})
     return {
         **codex,
         'upload': upload,
@@ -3926,6 +3959,7 @@ def run_qa_test_design(
     if not _qa_codex_lock.acquire(blocking=False):
         raise BlockingIOError('已有测试设计任务正在生成，请稍后再试')
 
+    set_qa_codex_task_status(True, mode, title)
     started_at = time.time()
     run_dir = os.path.join(QA_RUNTIME_DIR, 'runs', uuid.uuid4().hex)
     try:
@@ -3977,6 +4011,7 @@ def run_qa_test_design(
         }
     finally:
         shutil.rmtree(run_dir, ignore_errors=True)
+        set_qa_codex_task_status(False)
         _qa_codex_lock.release()
 
 

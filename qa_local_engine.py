@@ -20,6 +20,37 @@ MAX_DOCUMENT_CHARS = int(os.environ.get('GM_QA_DOCUMENT_CHARS', '60000'))
 MAX_TOTAL_CHARS = int(os.environ.get('GM_QA_TOTAL_CHARS', '120000'))
 MAX_PDF_PAGES = int(os.environ.get('GM_QA_PDF_PAGES', '500'))
 _generation_lock = threading.Lock()
+_generation_state_lock = threading.Lock()
+_generation_state = {
+    'running': False,
+    'mode': '',
+    'title': '',
+    'started_at_ms': 0,
+}
+
+
+def get_local_qa_task_status():
+    with _generation_state_lock:
+        state = dict(_generation_state)
+    state['engine'] = '本地测试引擎'
+    if state.get('running') and state.get('started_at_ms'):
+        state['elapsed_ms'] = max(0, int(time.time() * 1000) - state['started_at_ms'])
+    else:
+        state['elapsed_ms'] = 0
+    return state
+
+
+def _set_local_qa_task_status(running, mode='', title=''):
+    with _generation_state_lock:
+        _generation_state.update({
+            'running': bool(running),
+            'mode': str(mode or _generation_state.get('mode') or ''),
+            'title': str(title or _generation_state.get('title') or ''),
+            'started_at_ms': (
+                int(time.time() * 1000)
+                if running else int(_generation_state.get('started_at_ms') or 0)
+            ),
+        })
 
 
 MODE_LABELS = {
@@ -1524,6 +1555,7 @@ def run_local_qa_test_design(requirement, mode='full', domain='auto', depth='sta
         raise ValueError('请上传需求文件或填写补充说明')
     if not _generation_lock.acquire(blocking=False):
         raise BlockingIOError('已有本地测试设计任务正在生成，请稍后再试')
+    _set_local_qa_task_status(True, mode, title)
     started_at = time.time()
     try:
         documents, warnings = extract_qa_documents(attachments)
@@ -1550,4 +1582,5 @@ def run_local_qa_test_design(requirement, mode='full', domain='auto', depth='sta
             'generated_at': time.strftime('%Y-%m-%d %H:%M:%S'),
         }
     finally:
+        _set_local_qa_task_status(False)
         _generation_lock.release()
