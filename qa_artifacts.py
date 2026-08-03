@@ -39,6 +39,35 @@ def _topic(title, children=None, notes=''):
     return topic
 
 
+def _items(value):
+    if isinstance(value, (list, tuple, set)):
+        return [_text(item) for item in value if _text(item)]
+    text = _text(value)
+    return [text] if text else []
+
+
+def _section_topic(title, values, fallback='无'):
+    items = _items(values)
+    return _topic(title, [_topic(item) for item in items] or [_topic(fallback)])
+
+
+def _point_steps(point):
+    steps = []
+    for item in point.get('steps', []):
+        if not isinstance(item, dict):
+            continue
+        action = _text(item.get('action'))
+        expected = _text(item.get('expected'))
+        if action or expected:
+            steps.append({'action': action or '执行测试操作', 'expected': expected or '预期结果待确认'})
+    if steps:
+        return steps
+
+    action = _text(point.get('scenario')) or '执行测试场景'
+    expected = _text(point.get('target')) or _text(point.get('expected_results')) or '预期结果待确认'
+    return [{'action': action, 'expected': expected}]
+
+
 def build_test_points_xmind(design, title=''):
     points = [item for item in design.get('test_points', []) if isinstance(item, dict)]
     if not points:
@@ -46,28 +75,62 @@ def build_test_points_xmind(design, title=''):
 
     modules = OrderedDict()
     for point in points:
-        modules.setdefault(_text(point.get('module')) or '未分类', []).append(point)
+        module = _text(point.get('module')) or '未分类'
+        feature = _text(point.get('feature')) or '核心功能'
+        dimension = _text(point.get('dimension')) or _text(point.get('type')) or '功能验证'
+        modules.setdefault(module, OrderedDict()).setdefault(feature, OrderedDict()).setdefault(
+            dimension, []
+        ).append(point)
 
     module_topics = []
-    for module, module_points in modules.items():
-        point_topics = []
-        for point in module_points:
-            point_id = _text(point.get('id'))
-            priority = _text(point.get('priority'))
-            point_type = _text(point.get('type'))
-            prefix = ''.join(f'[{value}]' for value in (point_id, priority, point_type) if value)
-            details = [
-                _topic(f'前置条件：{_text(point.get("precondition")) or "无"}'),
-                _topic(f'验证目标：{_text(point.get("target")) or "待确认"}'),
-                _topic(f'关联需求：{_text(point.get("requirement_ids")) or "未关联"}'),
-                _topic(f'来源：{_text(point.get("source")) or "需求分析"}'),
-            ]
-            point_topics.append(_topic(
-                f'{prefix} {_text(point.get("scenario"))}'.strip(),
-                details,
-                notes=_text(point.get('target')),
-            ))
-        module_topics.append(_topic(f'{module}（{len(module_points)}）', point_topics))
+    for module, feature_groups in modules.items():
+        feature_topics = []
+        module_count = 0
+        for feature, dimension_groups in feature_groups.items():
+            dimension_topics = []
+            for dimension, dimension_points in dimension_groups.items():
+                point_topics = []
+                module_count += len(dimension_points)
+                for point in dimension_points:
+                    point_id = _text(point.get('id'))
+                    priority = _text(point.get('priority'))
+                    point_type = _text(point.get('type'))
+                    prefix = ''.join(f'[{value}]' for value in (point_id, priority, point_type) if value)
+                    steps = _point_steps(point)
+                    step_topics = [
+                        _topic(
+                            f'{index}. {step["action"]}',
+                            [_topic(f'预期：{step["expected"]}')],
+                        )
+                        for index, step in enumerate(steps, 1)
+                    ]
+                    expected_results = _items(point.get('expected_results'))
+                    if not expected_results:
+                        expected_results = list(dict.fromkeys(
+                            step['expected'] for step in steps if step.get('expected')
+                        ))
+                    details = [
+                        _section_topic(
+                            '前置条件',
+                            point.get('preconditions') or point.get('precondition'),
+                        ),
+                        _section_topic('测试数据', point.get('test_data'), '按场景准备对应数据'),
+                        _topic('操作步骤', step_topics),
+                        _section_topic('最终检查', expected_results, '预期结果待确认'),
+                    ]
+                    notes = '\n'.join(filter(None, (
+                        f'来源：{_text(point.get("source"))}' if _text(point.get('source')) else '',
+                        f'需求追踪：{_text(point.get("requirement_ids"))}'
+                        if _text(point.get('requirement_ids')) else '',
+                    )))
+                    point_topics.append(_topic(
+                        f'{prefix} {_text(point.get("scenario"))}'.strip(),
+                        details,
+                        notes=notes,
+                    ))
+                dimension_topics.append(_topic(dimension, point_topics))
+            feature_topics.append(_topic(feature, dimension_topics))
+        module_topics.append(_topic(f'{module}（{module_count}）', feature_topics))
 
     document_title = _text(title) or _text(design.get('title')) or '测试点设计'
     summary = design.get('summary') if isinstance(design.get('summary'), dict) else {}

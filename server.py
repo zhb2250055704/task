@@ -3816,7 +3816,7 @@ def build_qa_test_design_prompt(
 ):
     mode_labels = {
         'full': '完整测试设计：需求模型、风险、测试点、详细用例和追踪矩阵',
-        'points': '测试点：只输出测试点、关键风险和待确认项，不生成详细用例',
+        'points': '测试点：输出可直接执行的完整测试逻辑、关键风险和待确认项，不另行生成测试用例',
         'cases': '测试用例：输出可执行的详细用例，并保留需求与测试点追踪关系',
         'review': '需求评审：聚焦歧义、冲突、遗漏、不可测条件和风险',
         'impact': '变更影响测试：输出直接影响、间接影响、回归范围和对应测试',
@@ -3866,10 +3866,13 @@ def build_qa_test_design_prompt(
 5. {attachment_instruction}
 6. 只输出一个合法 JSON 对象，不要 Markdown 代码块、解释、分析过程、工具调用或开场说明。
 7. JSON 顶层必须包含：title、summary、facts、assumptions、questions、requirements、risks、test_points、test_cases、warnings。
-8. test_points 每项包含 requirement_ids、module、precondition、scenario、type、priority、target、source。
-9. test_cases 每项包含 requirement_ids、test_point_ids、module、title、preconditions、test_data、steps、priority、type、automation；steps 必须是 action/expected 对象数组。
-10. 测试点模式下 test_cases 返回空数组；测试用例模式必须同时返回 test_points 和 test_cases，保留追踪关系。
-11. 不补造需求。把无法确定的内容列为合理假设或待确认项，并在来源中标明文件名。
+8. test_points 每项必须包含 requirement_ids、module、feature、dimension、scenario、preconditions、test_data、steps、expected_results、type、priority、source；preconditions、test_data、expected_results 必须是字符串数组，steps 必须是 action/expected 对象数组。
+9. 每条测试点必须自带完整测试逻辑，使测试人员无需回看需求文档即可明确测试对象、前置条件、测试数据、执行步骤、逐步预期和最终检查；不得用“符合需求”“结果正确”“功能正常”等不可判定表述代替具体预期。无法从材料确认的值明确写“待确认”，不得编造。
+10. test_points 按业务模块、具体功能和验证维度组织；requirement_ids 仅用于后台追踪，不把“关联需求”作为测试点的主要内容。
+11. feature 使用具体业务对象，例如“活动商城礼包”；dimension 使用业务验证维度，例如“时间、档位、奖励数量、限购次数、邮件、美术”。材料给出“持续 7 天、每日刷新”时，必须把“7 天”和“每日刷新”写入对应步骤预期或最终检查，不能只写“关联需求”。
+12. test_cases 每项包含 requirement_ids、test_point_ids、module、title、preconditions、test_data、steps、priority、type、automation；steps 必须是 action/expected 对象数组。
+13. 测试点模式下 test_cases 返回空数组；测试用例模式必须同时返回 test_points 和 test_cases，保留追踪关系。
+14. 不补造需求。把无法确定的内容列为合理假设或待确认项，并在来源中标明文件名。
 
 <attachments_json>
 {attachments_json}

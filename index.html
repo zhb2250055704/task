@@ -8248,7 +8248,14 @@ function renderQaArtifactResults(results) {
     <div class="qa-artifact-list">${pointItems.slice(0, 10).map(item => `
       <div class="qa-artifact-item"><span class="qa-artifact-id">${esc(item.id || 'TP')}</span>
       <div><strong title="${esc(item.scenario || '')}">${esc(item.scenario || '未命名测试点')}</strong>
-      <small>${esc([item.module, item.type, item.priority].filter(Boolean).join(' · '))}</small></div></div>`).join('')}</div>` : '<div class="qa-artifact-empty">暂无测试点结果</div>';
+      <small>${esc([
+        item.module,
+        item.feature,
+        item.dimension || item.type,
+        item.priority,
+        `${Array.isArray(item.steps) ? item.steps.length : 0} 步`,
+        `${Array.isArray(item.expected_results) ? item.expected_results.length : 0} 项检查`,
+      ].filter(Boolean).join(' · '))}</small></div></div>`).join('')}</div>` : '<div class="qa-artifact-empty">暂无测试点结果</div>';
 
   const casesStatus = document.getElementById('qaCasesStatus');
   const casesDownload = document.getElementById('qaCasesDownload');
