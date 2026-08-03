@@ -46,100 +46,88 @@ def _items(value):
     return [text] if text else []
 
 
-def _section_topic(title, values, fallback='无'):
-    items = _items(values)
-    return _topic(title, [_topic(item) for item in items] or [_topic(fallback)])
-
-
-def _point_steps(point):
-    steps = []
-    for item in point.get('steps', []):
-        if not isinstance(item, dict):
+def _tree_topics(nodes):
+    topics = []
+    for node in nodes if isinstance(nodes, list) else []:
+        if not isinstance(node, dict):
             continue
-        action = _text(item.get('action'))
-        expected = _text(item.get('expected'))
-        if action or expected:
-            steps.append({'action': action or '执行测试操作', 'expected': expected or '预期结果待确认'})
-    if steps:
-        return steps
+        title = _text(node.get('title'))
+        if not title:
+            continue
+        children = _tree_topics(node.get('children'))
+        topics.append(_topic(title, children, notes=_text(node.get('notes'))))
+    return topics
 
-    action = _text(point.get('scenario')) or '执行测试场景'
-    expected = _text(point.get('target')) or _text(point.get('expected_results')) or '预期结果待确认'
-    return [{'action': action, 'expected': expected}]
+
+def _tree_leaf_count(nodes):
+    count = 0
+    for node in nodes if isinstance(nodes, list) else []:
+        if not isinstance(node, dict) or not _text(node.get('title')):
+            continue
+        children = [item for item in node.get('children', []) if isinstance(item, dict)]
+        count += _tree_leaf_count(children) if children else 1
+    return count
+
+
+def _points_to_business_tree(points):
+    modules = OrderedDict()
+    for point in points:
+        module = _text(point.get('module')) or '需求内容'
+        feature = _text(point.get('feature')) or module
+        dimension = _text(point.get('dimension')) or '规则'
+        values = _items(
+            point.get('content')
+            or point.get('expected_results')
+            or point.get('target')
+            or point.get('scenario')
+        )
+        notes = '\n'.join(filter(None, (
+            f'来源：{_text(point.get("source"))}' if _text(point.get('source')) else '',
+            f'需求追踪：{_text(point.get("requirement_ids"))}'
+            if _text(point.get('requirement_ids')) else '',
+        )))
+        bucket = modules.setdefault(module, OrderedDict()).setdefault(
+            feature, OrderedDict()
+        ).setdefault(dimension, [])
+        for value in values:
+            if value and value not in {item['title'] for item in bucket}:
+                bucket.append({'title': value, 'notes': notes})
+
+    tree = []
+    generic_modules = {
+        '需求内容', '核心功能', '未分类', '自动识别', '通用软件',
+        '游戏与 GM 工具', 'Web 界面', 'API 与服务端', 'Excel/CSV 配置表',
+    }
+    for module, feature_groups in modules.items():
+        feature_nodes = []
+        for feature, dimension_groups in feature_groups.items():
+            dimensions = [
+                {
+                    'title': dimension,
+                    'children': values,
+                }
+                for dimension, values in dimension_groups.items()
+            ]
+            feature_nodes.append({'title': feature, 'children': dimensions})
+        if module in generic_modules:
+            tree.extend(feature_nodes)
+        else:
+            tree.append({'title': module, 'children': feature_nodes})
+    return tree
 
 
 def build_test_points_xmind(design, title=''):
     points = [item for item in design.get('test_points', []) if isinstance(item, dict)]
-    if not points:
+    business_tree = [item for item in design.get('xmind_tree', []) if isinstance(item, dict)]
+    if not business_tree:
+        business_tree = _points_to_business_tree(points)
+    if not business_tree:
         raise ValueError('测试点结果为空，无法生成 XMind 文件')
 
-    modules = OrderedDict()
-    for point in points:
-        module = _text(point.get('module')) or '未分类'
-        feature = _text(point.get('feature')) or '核心功能'
-        dimension = _text(point.get('dimension')) or _text(point.get('type')) or '功能验证'
-        modules.setdefault(module, OrderedDict()).setdefault(feature, OrderedDict()).setdefault(
-            dimension, []
-        ).append(point)
-
-    module_topics = []
-    for module, feature_groups in modules.items():
-        feature_topics = []
-        module_count = 0
-        for feature, dimension_groups in feature_groups.items():
-            dimension_topics = []
-            for dimension, dimension_points in dimension_groups.items():
-                point_topics = []
-                module_count += len(dimension_points)
-                for point in dimension_points:
-                    point_id = _text(point.get('id'))
-                    priority = _text(point.get('priority'))
-                    point_type = _text(point.get('type'))
-                    prefix = ''.join(f'[{value}]' for value in (point_id, priority, point_type) if value)
-                    steps = _point_steps(point)
-                    step_topics = [
-                        _topic(
-                            f'{index}. {step["action"]}',
-                            [_topic(f'预期：{step["expected"]}')],
-                        )
-                        for index, step in enumerate(steps, 1)
-                    ]
-                    expected_results = _items(point.get('expected_results'))
-                    if not expected_results:
-                        expected_results = list(dict.fromkeys(
-                            step['expected'] for step in steps if step.get('expected')
-                        ))
-                    details = [
-                        _section_topic(
-                            '前置条件',
-                            point.get('preconditions') or point.get('precondition'),
-                        ),
-                        _section_topic('测试数据', point.get('test_data'), '按场景准备对应数据'),
-                        _topic('操作步骤', step_topics),
-                        _section_topic('最终检查', expected_results, '预期结果待确认'),
-                    ]
-                    notes = '\n'.join(filter(None, (
-                        f'来源：{_text(point.get("source"))}' if _text(point.get('source')) else '',
-                        f'需求追踪：{_text(point.get("requirement_ids"))}'
-                        if _text(point.get('requirement_ids')) else '',
-                    )))
-                    point_topics.append(_topic(
-                        f'{prefix} {_text(point.get("scenario"))}'.strip(),
-                        details,
-                        notes=notes,
-                    ))
-                dimension_topics.append(_topic(dimension, point_topics))
-            feature_topics.append(_topic(feature, dimension_topics))
-        module_topics.append(_topic(f'{module}（{module_count}）', feature_topics))
-
     document_title = _text(title) or _text(design.get('title')) or '测试点设计'
-    summary = design.get('summary') if isinstance(design.get('summary'), dict) else {}
-    overview = _topic('测试概览', [
-        _topic(f'测试点数量：{len(points)}'),
-        _topic(f'测试目标：{_text(summary.get("objective")) or "待确认"}'),
-        _topic(f'覆盖范围：{_text(summary.get("scope")) or "待确认"}'),
-        _topic(f'最高风险：{_text(summary.get("highest_risk")) or "待确认"}'),
-    ])
+    root_tree = business_tree
+    if len(business_tree) == 1 and _text(business_tree[0].get('title')) == document_title:
+        root_tree = business_tree[0].get('children') or business_tree
     sheet_id = uuid.uuid4().hex
     content = [{
         'id': sheet_id,
@@ -150,7 +138,7 @@ def build_test_points_xmind(design, title=''):
             'class': 'topic',
             'title': document_title,
             'structureClass': 'org.xmind.ui.logic.right',
-            'children': {'attached': [overview, *module_topics]},
+            'children': {'attached': _tree_topics(root_tree)},
         },
     }]
     metadata = {
@@ -174,7 +162,7 @@ def build_test_points_xmind(design, title=''):
         'filename': _safe_filename(document_title, '测试点') + '-测试点.xmind',
         'mime': XMIND_MIME,
         'format': 'xmind',
-        'count': len(points),
+        'count': _tree_leaf_count(business_tree),
     }
 
 

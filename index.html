@@ -8235,6 +8235,9 @@ function renderQaArtifactResults(results) {
   const pointsResult = state.points;
   const casesResult = state.cases;
   const pointItems = pointsResult && pointsResult.structured && Array.isArray(pointsResult.structured.test_points) ? pointsResult.structured.test_points : [];
+  const pointRuleCount = pointItems.reduce((total, item) => (
+    total + (Array.isArray(item.content) && item.content.length ? item.content.length : 1)
+  ), 0);
   const caseItems = casesResult && casesResult.structured && Array.isArray(casesResult.structured.test_cases) ? casesResult.structured.test_cases : [];
 
   const pointsStatus = document.getElementById('qaPointsStatus');
@@ -8244,17 +8247,13 @@ function renderQaArtifactResults(results) {
   pointsDownload.disabled = !(pointsResult && pointsResult.artifact && pointsResult.artifact.download_url);
   document.getElementById('qaPointsMeta').textContent = qaArtifactMeta(pointsResult, 'XMind 文档');
   document.getElementById('qaPointsBody').innerHTML = pointsResult ? `
-    <div class="qa-artifact-summary"><strong>${pointItems.length}</strong><span>条测试点 · XMind</span></div>
+    <div class="qa-artifact-summary"><strong>${pointRuleCount}</strong><span>条需求规则 · XMind 内容树</span></div>
     <div class="qa-artifact-list">${pointItems.slice(0, 10).map(item => `
       <div class="qa-artifact-item"><span class="qa-artifact-id">${esc(item.id || 'TP')}</span>
-      <div><strong title="${esc(item.scenario || '')}">${esc(item.scenario || '未命名测试点')}</strong>
+      <div><strong title="${esc([item.feature, item.dimension].filter(Boolean).join(' → '))}">${esc([item.feature, item.dimension].filter(Boolean).join(' → ') || item.scenario || '未命名规则')}</strong>
       <small>${esc([
-        item.module,
-        item.feature,
-        item.dimension || item.type,
-        item.priority,
-        `${Array.isArray(item.steps) ? item.steps.length : 0} 步`,
-        `${Array.isArray(item.expected_results) ? item.expected_results.length : 0} 项检查`,
+        ...(Array.isArray(item.content) ? item.content : []),
+        item.source,
       ].filter(Boolean).join(' · '))}</small></div></div>`).join('')}</div>` : '<div class="qa-artifact-empty">暂无测试点结果</div>';
 
   const casesStatus = document.getElementById('qaCasesStatus');

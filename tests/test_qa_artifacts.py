@@ -19,6 +19,17 @@ SAMPLE_DESIGN = {
     'requirements': [
         {'id': 'REQ-X', 'module': '登录', 'behavior': '有效账号可以登录'},
     ],
+    'xmind_tree': [
+        {
+            'title': '账号登录',
+            'children': [
+                {
+                    'title': '登录规则',
+                    'children': [{'title': '有效账号登录后进入角色界面'}],
+                },
+            ],
+        },
+    ],
     'test_points': [
         {
             'id': 'POINT-X',
@@ -78,20 +89,37 @@ class QaArtifactTests(unittest.TestCase):
         root = content[0]['rootTopic']
         self.assertEqual(root['title'], '账号登录需求')
         serialized = json.dumps(content, ensure_ascii=False)
-        self.assertIn('使用有效账号登录', serialized)
-        self.assertIn('登录成功并进入角色界面', serialized)
-        self.assertIn('登录（1）', serialized)
         self.assertIn('账号登录', serialized)
-        self.assertIn('主流程', serialized)
-        self.assertIn('前置条件', serialized)
-        self.assertIn('账号已创建', serialized)
-        self.assertIn('测试数据', serialized)
-        self.assertIn('有效账号 A', serialized)
-        self.assertIn('操作步骤', serialized)
-        self.assertIn('输入账号 A 和密码 P，点击登录', serialized)
-        self.assertIn('预期：登录请求成功，进入角色界面', serialized)
-        self.assertIn('最终检查', serialized)
+        self.assertIn('登录规则', serialized)
+        self.assertIn('有效账号登录后进入角色界面', serialized)
+        self.assertNotIn('测试概览', serialized)
+        self.assertNotIn('前置条件', serialized)
+        self.assertNotIn('测试数据', serialized)
+        self.assertNotIn('操作步骤', serialized)
+        self.assertNotIn('最终检查', serialized)
         self.assertNotIn('关联需求：', serialized)
+
+    def test_xmind_preserves_exact_business_rule_path(self):
+        design = {
+            'title': '奇兵突袭',
+            'xmind_tree': [{
+                'title': '奇兵突袭',
+                'children': [{
+                    'title': '申请时间',
+                    'children': [{'title': '周一08:00~18:00'}],
+                }],
+            }],
+            'test_points': [],
+        }
+        artifact = build_qa_artifact(design, 'points', '奇兵突袭')
+        with zipfile.ZipFile(io.BytesIO(artifact['content'])) as archive:
+            content = json.loads(archive.read('content.json').decode('utf-8'))
+        root = content[0]['rootTopic']
+        self.assertEqual(root['title'], '奇兵突袭')
+        dimension = root['children']['attached'][0]
+        value = dimension['children']['attached'][0]
+        self.assertEqual(dimension['title'], '申请时间')
+        self.assertEqual(value['title'], '周一08:00~18:00')
 
     def test_xlsx_contains_cases_steps_and_traceability(self):
         artifact = build_qa_artifact(SAMPLE_DESIGN, 'cases', '账号登录需求')
@@ -108,6 +136,7 @@ class QaArtifactTests(unittest.TestCase):
         parsed = parse_qa_design_json(raw, mode='cases', title='账号登录需求')
         self.assertEqual(parsed['requirements'][0]['id'], 'REQ-001')
         self.assertEqual(parsed['test_points'][0]['id'], 'TP-001')
+        self.assertEqual(parsed['xmind_tree'][0]['title'], '账号登录')
         self.assertEqual(parsed['test_points'][0]['feature'], '账号登录')
         self.assertEqual(parsed['test_points'][0]['dimension'], '主流程')
         self.assertEqual(parsed['test_points'][0]['preconditions'][0], '账号已创建')
@@ -117,6 +146,7 @@ class QaArtifactTests(unittest.TestCase):
 
     def test_legacy_test_point_is_upgraded_to_executable_structure(self):
         legacy = json.loads(json.dumps(SAMPLE_DESIGN, ensure_ascii=False))
+        legacy.pop('xmind_tree')
         legacy['test_points'][0] = {
             'requirement_ids': ['REQ-X'],
             'module': '登录',
@@ -134,25 +164,40 @@ class QaArtifactTests(unittest.TestCase):
             'action': '使用有效账号登录',
             'expected': '登录成功并进入角色界面',
         })
+        self.assertTrue(parsed['xmind_tree'])
 
-    def test_rule_engine_points_are_directly_executable(self):
+    def test_rule_engine_converts_requirement_to_business_tree(self):
         design = build_rule_design(
-            '活动商城礼包持续 7 天，每日刷新，购买成功后通过邮件发放奖励。',
+            '奇兵突袭申请时间--周一08:00~18:00',
             [],
             'points',
             'gm',
             'standard',
-            '活动商城礼包',
+            '奇兵突袭',
         )
-        self.assertTrue(design['test_points'])
-        for point in design['test_points']:
-            self.assertTrue(point.get('feature'))
-            self.assertTrue(point.get('dimension'))
-            self.assertTrue(point.get('preconditions'))
-            self.assertTrue(point.get('test_data'))
-            self.assertTrue(point.get('steps'))
-            self.assertTrue(point.get('expected_results'))
-            self.assertTrue(all(step.get('action') and step.get('expected') for step in point['steps']))
+        point = design['test_points'][0]
+        self.assertEqual(point['feature'], '奇兵突袭')
+        self.assertEqual(point['dimension'], '申请时间')
+        self.assertEqual(point['content'], ['周一08:00~18:00'])
+        self.assertEqual(point['steps'], [])
+        self.assertEqual(design['xmind_tree'], [{
+            'title': '奇兵突袭',
+            'children': [{
+                'title': '申请时间',
+                'children': [{
+                    'title': '周一08:00~18:00',
+                    'children': [],
+                    'notes': '来源：补充说明',
+                }],
+            }],
+        }])
+
+    def test_point_mode_keeps_more_than_old_sentence_limit(self):
+        requirement = '\n'.join(f'玩法{i}奖励数量--{i}个' for i in range(1, 61))
+        design = build_rule_design(
+            requirement, [], 'points', 'gm', 'standard', '批量玩法规则'
+        )
+        self.assertEqual(len(design['test_points']), 60)
 
 
 if __name__ == '__main__':
