@@ -33,6 +33,7 @@ from email.policy import default as email_policy_default
 
 from qa_artifacts import build_qa_artifact
 from qa_local_engine import (
+    apply_qa_document_hierarchy,
     design_to_markdown,
     get_local_qa_status,
     parse_qa_design_json,
@@ -3867,13 +3868,14 @@ def build_qa_test_design_prompt(
 6. 只输出一个合法 JSON 对象，不要 Markdown 代码块、解释、分析过程、工具调用或开场说明。
 7. JSON 顶层必须包含：title、summary、facts、assumptions、questions、requirements、risks、xmind_tree、test_points、test_cases、warnings。
 8. xmind_tree 是递归的 title/children 节点数组，必须完整承载需求文档里的业务对象、流程、条件、时间、数值、奖励、状态和文案；生成的 XMind 应能替代需求文档，测试人员不能再依赖回看原文。
-9. xmind_tree 按“业务模块或玩法 -> 具体规则字段 -> 原文中的准确内容”组织。输入“奇兵突袭申请时间--周一08:00~18:00”时，必须形成“奇兵突袭 -> 申请时间 -> 周一08:00~18:00”的三层节点。
-10. 需求中的准确时间、数值、条件、流程顺序、奖励和限制必须原样进入主树，不能改写成“关联需求”“符合需求”“结果正确”等泛化描述，也不能遗漏后要求测试人员自行对照原文。
-11. xmind_tree 禁止出现“测试概览、目标功能已部署、准备有效数据、操作步骤、最终检查”等通用测试模板节点；这些内容只属于详细测试用例，不属于本次 XMind 需求内容树。
-12. test_points 每项包含 requirement_ids、module、feature、dimension、scenario、content、type、priority、source；content 必须是直接来自需求的具体规则数组，requirement_ids 仅用于后台追踪。
-13. test_cases 每项包含 requirement_ids、test_point_ids、module、title、preconditions、test_data、steps、priority、type、automation；steps 必须是 action/expected 对象数组。
-14. 测试点模式下 test_cases 返回空数组；测试用例模式必须同时返回 test_points 和 test_cases，保留追踪关系。
-15. 不补造需求。无法确定的值在对应业务节点标明“待确认”，并在来源中标明文件名。
+9. 优先保留 Word/PDF 中已有的章节层级和表格语义，按“一级业务模块或玩法 -> 二级子模块 -> 具体规则字段 -> 原文中的准确内容”组织；存在业务章节时，禁止改用“Web 界面、状态反馈、权限与身份”等技术分类作为顶层模块。
+10. 输入“奇兵突袭申请时间--周一08:00~18:00”时，必须形成“奇兵突袭 -> 申请时间 -> 周一08:00~18:00”的三层节点；文档中存在“奇兵突袭 / 审批与宣战”章节时，应继续形成“奇兵突袭 -> 审批与宣战 -> 审批时间、审批人物与权限、审批流程与结果 -> 具体规则”。
+11. 需求中的准确时间、数值、条件、流程顺序、奖励和限制必须原样进入主树，不能改写成“关联需求”“符合需求”“结果正确”等泛化描述，也不能遗漏后要求测试人员自行对照原文。
+12. xmind_tree 禁止出现“测试概览、目标功能已部署、准备有效数据、操作步骤、最终检查”等通用测试模板节点；这些内容只属于详细测试用例，不属于本次 XMind 需求内容树。
+13. test_points 每项包含 requirement_ids、module、feature、dimension、scenario、content、type、priority、source；content 必须是直接来自需求的具体规则数组，requirement_ids 仅用于后台追踪。
+14. test_cases 每项包含 requirement_ids、test_point_ids、module、title、preconditions、test_data、steps、priority、type、automation；steps 必须是 action/expected 对象数组。
+15. 测试点模式下 test_cases 返回空数组；测试用例模式必须同时返回 test_points 和 test_cases，保留追踪关系。
+16. 不补造需求。无法确定的值在对应业务节点标明“待确认”，并在来源中标明文件名。
 
 <attachments_json>
 {attachments_json}
@@ -3962,6 +3964,7 @@ def run_qa_test_design(
         except ValueError as exc:
             print(f'[QA-TEST-DESIGN] invalid structured output: {exc}; output={raw_content[-3000:]}')
             raise RuntimeError('Codex 返回结果不是可生成文件的结构化测试设计') from exc
+        structured = apply_qa_document_hierarchy(structured, attachments)
         content = design_to_markdown(structured)
         return {
             'ok': True,

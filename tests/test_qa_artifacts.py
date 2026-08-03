@@ -1,12 +1,14 @@
 import io
 import json
+import os
+import tempfile
 import unittest
 import zipfile
 
 from openpyxl import load_workbook
 
 from qa_artifacts import build_qa_artifact
-from qa_local_engine import build_rule_design, parse_qa_design_json
+from qa_local_engine import build_rule_design, extract_qa_documents, parse_qa_design_json
 
 
 SAMPLE_DESIGN = {
@@ -76,6 +78,39 @@ SAMPLE_DESIGN = {
         },
     ],
 }
+
+
+def _write_structured_docx(path):
+    document_xml = '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>
+  <w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>11 奇兵突袭</w:t></w:r></w:p>
+  <w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:t>11.5 审批与宣战</w:t></w:r></w:p>
+  <w:p><w:pPr><w:pStyle w:val="ListBullet"/></w:pPr><w:r><w:t>天子审批时间：奇兵突袭阶段的周一 08:00-18:00。</w:t></w:r></w:p>
+  <w:p><w:pPr><w:pStyle w:val="ListBullet"/></w:pPr><w:r><w:t>审批权限人：同阵营中第一服务器的天子。</w:t></w:r></w:p>
+  <w:tbl>
+    <w:tr><w:tc><w:p><w:r><w:t>审批场景</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>预期结果</w:t></w:r></w:p></w:tc></w:tr>
+    <w:tr><w:tc><w:p><w:r><w:t>同意两个同盟</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>自动拒绝其他申请</w:t></w:r></w:p></w:tc></w:tr>
+  </w:tbl>
+</w:body></w:document>'''
+    styles_xml = '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:pPr><w:outlineLvl w:val="0"/></w:pPr></w:style>
+  <w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="heading 2"/><w:pPr><w:outlineLvl w:val="1"/></w:pPr></w:style>
+  <w:style w:type="paragraph" w:styleId="ListBullet"><w:name w:val="List Bullet"/></w:style>
+</w:styles>'''
+    with zipfile.ZipFile(path, 'w', compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr('word/document.xml', document_xml)
+        archive.writestr('word/styles.xml', styles_xml)
+
+
+def _tree_path_exists(nodes, path):
+    current = nodes
+    for title in path:
+        node = next((item for item in current if item.get('title') == title), None)
+        if node is None:
+            return False
+        current = node.get('children', [])
+    return True
 
 
 class QaArtifactTests(unittest.TestCase):
@@ -198,6 +233,61 @@ class QaArtifactTests(unittest.TestCase):
             requirement, [], 'points', 'gm', 'standard', '批量玩法规则'
         )
         self.assertEqual(len(design['test_points']), 60)
+
+    def test_docx_headings_lists_and_tables_become_business_hierarchy(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, '奇兵突袭需求.docx')
+            _write_structured_docx(path)
+            documents, warnings = extract_qa_documents([{
+                'name': '奇兵突袭需求.docx',
+                'extension': '.docx',
+                'path': path,
+            }])
+        self.assertEqual(warnings, [])
+        design = build_rule_design(
+            '', documents, 'points', 'gm', 'standard', '汉中争锋'
+        )
+        tree = design['xmind_tree']
+        self.assertTrue(_tree_path_exists(tree, [
+            '奇兵突袭',
+            '审批与宣战',
+            '审批时间',
+            '天子审批时间：奇兵突袭阶段的周一 08:00-18:00',
+        ]))
+        self.assertTrue(_tree_path_exists(tree, [
+            '奇兵突袭',
+            '审批与宣战',
+            '审批人物与权限',
+            '审批权限人：同阵营中第一服务器的天子',
+        ]))
+        self.assertTrue(_tree_path_exists(tree, [
+            '奇兵突袭',
+            '审批与宣战',
+            '审批场景',
+            '同意两个同盟',
+            '预期结果',
+            '自动拒绝其他申请',
+        ]))
+        self.assertFalse(any(item.get('title') == 'Web 界面' for item in tree))
+
+    def test_structured_docx_xmind_export_keeps_nested_depth(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, '需求.docx')
+            _write_structured_docx(path)
+            documents, _ = extract_qa_documents([{
+                'name': '需求.docx', 'extension': '.docx', 'path': path,
+            }])
+        design = build_rule_design('', documents, 'points', 'gm', 'standard', '汉中争锋')
+        artifact = build_qa_artifact(design, 'points', '汉中争锋')
+        with zipfile.ZipFile(io.BytesIO(artifact['content'])) as archive:
+            content = json.loads(archive.read('content.json').decode('utf-8'))
+        root = content[0]['rootTopic']
+        node = root
+        for title in ('奇兵突袭', '审批与宣战', '审批时间'):
+            node = next(
+                item for item in node['children']['attached'] if item['title'] == title
+            )
+        self.assertIn('天子审批时间', node['children']['attached'][0]['title'])
 
 
 if __name__ == '__main__':

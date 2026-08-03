@@ -184,10 +184,182 @@ def _xml_text(payload, paragraph_tags=('p', 'tr')):
     return ''.join(parts)
 
 
+def _local_name(element):
+    return element.tag.rsplit('}', 1)[-1]
+
+
+def _docx_element_text(element):
+    parts = []
+    for node in element.iter():
+        local = _local_name(node)
+        if local == 't' and node.text:
+            parts.append(node.text)
+        elif local == 'tab':
+            parts.append('\t')
+        elif local == 'br':
+            parts.append('\n')
+    return ''.join(parts).strip()
+
+
+def _docx_style_metadata(archive):
+    try:
+        root = ET.fromstring(archive.read('word/styles.xml'))
+    except KeyError:
+        return {}
+    styles = {}
+    for element in root.iter():
+        if _local_name(element) != 'style':
+            continue
+        style_id = next(
+            (value for key, value in element.attrib.items() if key.endswith('}styleId')),
+            '',
+        )
+        if not style_id:
+            continue
+        metadata = {'name': '', 'based_on': '', 'heading_level': 0}
+        for child in element.iter():
+            local = _local_name(child)
+            value = next(
+                (item for key, item in child.attrib.items() if key.endswith('}val')),
+                '',
+            )
+            if local == 'name':
+                metadata['name'] = value
+            elif local == 'basedOn':
+                metadata['based_on'] = value
+            elif local == 'outlineLvl' and str(value).isdigit():
+                metadata['heading_level'] = int(value) + 1
+        styles[style_id] = metadata
+
+    def resolve_heading_level(style_id, visited=None):
+        visited = set(visited or ())
+        if not style_id or style_id in visited:
+            return 0
+        visited.add(style_id)
+        metadata = styles.get(style_id, {})
+        if metadata.get('heading_level'):
+            return metadata['heading_level']
+        label = f'{style_id} {metadata.get("name", "")}'
+        match = re.search(r'(?:heading|标题)\s*([1-9])', label, re.IGNORECASE)
+        if match:
+            return int(match.group(1))
+        return resolve_heading_level(metadata.get('based_on'), visited)
+
+    for style_id in styles:
+        styles[style_id]['heading_level'] = resolve_heading_level(style_id)
+    return styles
+
+
+def _docx_paragraph_record(element, styles):
+    text = _docx_element_text(element)
+    if not text:
+        return None
+    style_id = ''
+    list_level = 0
+    has_numbering = False
+    for child in element:
+        if _local_name(child) != 'pPr':
+            continue
+        for prop in child.iter():
+            local = _local_name(prop)
+            value = next(
+                (item for key, item in prop.attrib.items() if key.endswith('}val')),
+                '',
+            )
+            if local == 'pStyle':
+                style_id = value
+            elif local == 'numPr':
+                has_numbering = True
+            elif local == 'ilvl' and str(value).isdigit():
+                list_level = int(value)
+        break
+    metadata = styles.get(style_id, {})
+    heading_level = int(metadata.get('heading_level') or 0)
+    if heading_level:
+        return {'type': 'heading', 'level': heading_level, 'text': text}
+    style_label = f'{style_id} {metadata.get("name", "")}'.lower()
+    is_list = has_numbering or any(
+        marker in style_label for marker in ('list', 'bullet', 'number', '项目符号', '编号')
+    )
+    if is_list:
+        ordered = any(marker in style_label for marker in ('number', '编号'))
+        return {
+            'type': 'list',
+            'level': list_level,
+            'ordered': ordered,
+            'text': text,
+        }
+    return {'type': 'paragraph', 'text': text}
+
+
+def _docx_table_record(element):
+    rows = []
+    for row in (child for child in element if _local_name(child) == 'tr'):
+        cells = []
+        for cell in (child for child in row if _local_name(child) == 'tc'):
+            paragraphs = [
+                _docx_element_text(item)
+                for item in cell
+                if _local_name(item) == 'p'
+            ]
+            cells.append('\n'.join(item for item in paragraphs if item).strip())
+        if any(cells):
+            rows.append(cells)
+    return {'type': 'table', 'rows': rows} if rows else None
+
+
+def _docx_structure_text(records):
+    lines = []
+    for record in records:
+        if record.get('type') == 'table':
+            lines.extend(' | '.join(row) for row in record.get('rows', []) if any(row))
+        elif record.get('text'):
+            lines.append(record['text'])
+    return '\n'.join(lines)
+
+
+def _truncate_docx_structure(records, limit):
+    output = []
+    remaining = max(0, int(limit))
+    for record in records:
+        if remaining <= 0:
+            break
+        if record.get('type') == 'table':
+            rows = []
+            for row in record.get('rows', []):
+                row_length = sum(len(str(cell)) for cell in row) + max(0, len(row) - 1) * 3
+                if row_length > remaining:
+                    break
+                rows.append(row)
+                remaining -= row_length
+            if rows:
+                output.append({**record, 'rows': rows})
+            continue
+        text = str(record.get('text') or '')
+        if len(text) > remaining:
+            text = text[:remaining]
+        if text:
+            output.append({**record, 'text': text})
+            remaining -= len(text)
+    return output
+
+
 def _extract_docx(path):
     with zipfile.ZipFile(path) as archive:
-        content = archive.read('word/document.xml')
-    return _xml_text(content)
+        root = ET.fromstring(archive.read('word/document.xml'))
+        styles = _docx_style_metadata(archive)
+    body = next((item for item in root.iter() if _local_name(item) == 'body'), None)
+    records = []
+    for element in body or ():
+        local = _local_name(element)
+        record = None
+        if local == 'p':
+            record = _docx_paragraph_record(element, styles)
+        elif local == 'tbl':
+            record = _docx_table_record(element)
+        if record:
+            records.append(record)
+    return _docx_structure_text(records), records
 
 
 def _natural_number(value):
@@ -296,11 +468,12 @@ def extract_qa_documents(attachments):
         name = str(item.get('name') or '未命名文件')
         extension = str(item.get('extension') or os.path.splitext(name)[1]).lower()
         path = os.path.abspath(str(item.get('path') or ''))
+        structure = []
         try:
             if extension == '.pdf':
                 content = _extract_pdf(path)
             elif extension == '.docx':
-                content = _extract_docx(path)
+                content, structure = _extract_docx(path)
             elif extension == '.pptx':
                 content = _extract_pptx(path)
             elif extension == '.xlsx':
@@ -320,11 +493,14 @@ def extract_qa_documents(attachments):
             limit = min(MAX_DOCUMENT_CHARS, remaining)
             truncated = len(content) > limit
             content = content[:limit]
+            if structure:
+                structure = _truncate_docx_structure(structure, limit)
             total_chars += len(content)
             documents.append({
                 'name': name,
                 'extension': extension,
                 'content': content,
+                'structure': structure,
                 'truncated': truncated,
             })
             if truncated:
@@ -505,6 +681,208 @@ def _points_to_xmind_tree(points):
                 notes=f'来源：{point.get("source") or "需求分析"}',
             )
     return tree
+
+
+DOCUMENT_META_HEADINGS = {
+    '阅读导航', '目录', '文档目录', '修订记录', '版本记录', '原 PDF 页码索引',
+}
+
+
+def _clean_heading_title(value):
+    title = str(value or '').strip()
+    title = re.sub(r'^\s*第[一二三四五六七八九十百0-9]+[章节篇部分]\s*', '', title)
+    title = re.sub(r'^\s*\d+(?:\.\d+)*[、.．]?\s+(?=\S)', '', title)
+    return title.strip(' -—:：')
+
+
+def _clean_rule_text(value):
+    return re.sub(r'\s+', ' ', str(value or '')).strip().rstrip('。；;')
+
+
+def _rule_group(value, context=''):
+    text = str(value or '')
+    context = str(context or '')
+    has_time = bool(re.search(
+        r'(?:周[一二三四五六日天]|\d{1,2}:\d{2}|\d+\s*(?:秒|分钟|小时|天)|倒计时|冷却|\bCD\b)',
+        text,
+        re.IGNORECASE,
+    ))
+    if '审批与宣战' in context:
+        if any(word in text for word in ('私聊', '邮件', '通知', '聊天', '发送')):
+            return '审批通知'
+        if '宣战' in text:
+            if any(word in text for word in ('取消', '返还', '次数')):
+                return '宣战取消与次数'
+            return '宣战流程'
+        if has_time:
+            return '审批时间'
+        if any(word in text for word in ('权限人', '审批人', '拥有审批', '审批权利')):
+            return '审批人物与权限'
+        if any(word in text for word in ('审批', '同意', '拒绝', '通过', '申请')):
+            return '审批流程与结果'
+    if '审批' in text or ('天子' in text and any(word in text for word in ('同意', '拒绝', '申请'))):
+        if has_time:
+            return '审批时间'
+        if any(word in text for word in ('权限', '权利', '审批人')):
+            return '审批人物与权限'
+        if any(word in text for word in ('私聊', '邮件', '通知', '聊天', '发送')):
+            return '审批通知'
+        return '审批流程与结果'
+    if '申请' in text:
+        if has_time:
+            return '申请时间'
+        if any(word in text for word in ('资格', '权限', '条件')):
+            return '申请资格与条件'
+        if any(word in text for word in ('撤销', '取消', '返还')):
+            return '申请撤销与返还'
+        return '申请流程与结果'
+    groups = (
+        ('提示与文案', ('提示', 'tips', 'key', '文案', '邮件', '广播', '私聊')),
+        ('时间与阶段', ('时间', '阶段', '倒计时', '冷却', '开启', '结束', '持续')),
+        ('资格与权限', ('资格', '权限', '仅', '盟主', '武侯', '统领')),
+        ('次数与数量', ('次数', '数量', '上限', '下限', '最多', '至少')),
+        ('入口与操作', ('入口', '按钮', '点击', '选择', '前往', '打开', '关闭')),
+        ('状态与展示', ('显示', '展示', '置灰', '隐藏', '图标', '红点', '状态', '界面', 'UI')),
+        ('奖励与结算', ('奖励', '积分', '排名', '结算', '领取', '发放')),
+        ('战斗与判定', ('战斗', '攻击', '攻占', '驻守', '斩杀', '胜利', '失败')),
+        ('限制与异常', ('无法', '不能', '禁止', '限制', '拦截', '错误', '异常')),
+        ('配置与数据', ('配置', '字段', 'ID', 'id', '数据', '默认')),
+    )
+    if has_time:
+        return '时间与阶段'
+    for group, keywords in groups:
+        if any(keyword in text for keyword in keywords):
+            return group
+    return '业务规则'
+
+
+def _paragraph_rule_path(value, context=''):
+    text = _clean_rule_text(value)
+    if not text:
+        return []
+    for label in ('整理原则', '玩法定位', '流程定位'):
+        if text.startswith(label) and len(text) > len(label):
+            return [label, text[len(label):].strip(' ：:')]
+    contextual_group = _rule_group(text, context)
+    if '审批与宣战' in str(context or ''):
+        return [contextual_group, text]
+    separator = re.search(r'\s*(?:--+|——+|：|(?<!\d):(?!\d))\s*', text)
+    if separator:
+        field = text[:separator.start()].strip(' -—:：')
+        detail = text[separator.end():].strip()
+        if field and detail and len(field) <= 48:
+            field = re.sub(r'\btips?\b', '提示', field, flags=re.IGNORECASE)
+            if '审批时间' in field:
+                return ['审批时间', text]
+            if any(marker in field for marker in ('审批权限人', '审批人物', '审批角色')):
+                return ['审批人物与权限', text]
+            return [field, detail]
+    return [contextual_group, text]
+
+
+def _table_rule_paths(rows):
+    normalized_rows = [
+        [_clean_rule_text(cell) for cell in row]
+        for row in rows or []
+        if isinstance(row, list) and any(_clean_rule_text(cell) for cell in row)
+    ]
+    if not normalized_rows:
+        return []
+    if len(normalized_rows) == 1:
+        row = normalized_rows[0]
+        if len(row) == 1:
+            path = _paragraph_rule_path(row[0])
+            return [path] if path else []
+        field = row[0] or '表格内容'
+        return [[field, value] for value in row[1:] if value]
+
+    headers = normalized_rows[0]
+    output = []
+    for row in normalized_rows[1:]:
+        width = max(len(headers), len(row))
+        values = row + [''] * (width - len(row))
+        labels = headers + [''] * (width - len(headers))
+        key_index = next((index for index, value in enumerate(values) if value), None)
+        if key_index is None:
+            continue
+        key_label = labels[key_index] or '项目'
+        row_key = values[key_index]
+        base = [key_label, row_key]
+        details_added = False
+        for index, value in enumerate(values):
+            if index == key_index or not value:
+                continue
+            field = labels[index] or f'字段 {index + 1}'
+            output.append([*base, field, value])
+            details_added = True
+        if not details_added:
+            output.append(base)
+    return output
+
+
+def build_document_xmind_tree(documents):
+    tree = []
+    for document in documents or []:
+        records = document.get('structure') if isinstance(document, dict) else None
+        if not isinstance(records, list) or not records:
+            continue
+        source = str(document.get('name') or '需求文档')
+        heading_path = []
+        ignored_level = 0
+        has_headings = any(record.get('type') == 'heading' for record in records)
+        ordered_counts = {}
+        fallback_title = os.path.splitext(source)[0] or '需求内容'
+        for record in records:
+            record_type = record.get('type')
+            if record_type == 'heading':
+                level = max(1, min(8, int(record.get('level') or 1)))
+                if ignored_level and level > ignored_level:
+                    continue
+                if ignored_level and level <= ignored_level:
+                    ignored_level = 0
+                heading = _clean_heading_title(record.get('text'))
+                heading_path = heading_path[:level - 1]
+                if not heading:
+                    continue
+                if heading in DOCUMENT_META_HEADINGS:
+                    ignored_level = level
+                    continue
+                while len(heading_path) < level - 1:
+                    heading_path.append('需求内容')
+                heading_path.append(heading)
+                _append_tree_path(tree, heading_path)
+                continue
+            if ignored_level:
+                continue
+            parent = heading_path if heading_path else ([] if has_headings else [fallback_title])
+            if not parent:
+                continue
+            paths = []
+            if record_type == 'table':
+                paths = _table_rule_paths(record.get('rows'))
+            elif record_type == 'list' and record.get('ordered'):
+                key = (tuple(parent), int(record.get('level') or 0))
+                ordered_counts[key] = ordered_counts.get(key, 0) + 1
+                text = _clean_rule_text(record.get('text'))
+                if text:
+                    paths = [['流程步骤', f'步骤 {ordered_counts[key]}', text]]
+            else:
+                path = _paragraph_rule_path(record.get('text'), ' / '.join(parent))
+                if path:
+                    paths = [path]
+            for path in paths:
+                _append_tree_path(tree, [*parent, *path], notes=f'来源：{source}')
+    return tree
+
+
+def apply_qa_document_hierarchy(design, attachments):
+    documents, warnings = extract_qa_documents(attachments)
+    tree = build_document_xmind_tree(documents)
+    if tree:
+        design['xmind_tree'] = tree
+    existing_warnings = _list_value(design.get('warnings'))
+    design['warnings'] = list(dict.fromkeys([*existing_warnings, *warnings]))
+    return design
 
 
 def _normalize_xmind_tree(nodes, depth=0):
@@ -714,6 +1092,7 @@ def build_rule_design(requirement, documents, mode, domain, depth, title, warnin
             'coverage': '已覆盖' if req_points else '未覆盖',
         })
 
+    document_tree = build_document_xmind_tree(documents)
     return {
         'schema_version': '1.0',
         'title': title or '未命名需求',
@@ -735,7 +1114,7 @@ def build_rule_design(requirement, documents, mode, domain, depth, title, warnin
         'questions': questions,
         'requirements': requirements,
         'risks': risks,
-        'xmind_tree': _points_to_xmind_tree(content_points),
+        'xmind_tree': document_tree or _points_to_xmind_tree(content_points),
         'test_points': points,
         'test_cases': cases,
         'traceability': traceability,
@@ -939,7 +1318,7 @@ def _repair_links(data):
     data['traceability'] = traceability
 
 
-def merge_model_design(model, rules, mode):
+def merge_model_design(model, rules, mode, prefer_rule_tree=False):
     merged = dict(rules)
     for key in ('summary',):
         if isinstance(model.get(key), dict):
@@ -948,10 +1327,16 @@ def merge_model_design(model, rules, mode):
         if isinstance(model.get(key), list) and model[key]:
             merged[key] = _merge_items(model[key], rules.get(key, []), ('content', 'description'))
     merged['requirements'] = _merge_items(model.get('requirements', []), rules['requirements'], ('behavior',))
-    merged['xmind_tree'] = (
-        _normalize_xmind_tree(model.get('xmind_tree'))
-        or _normalize_xmind_tree(rules.get('xmind_tree'))
-    )
+    if prefer_rule_tree:
+        merged['xmind_tree'] = (
+            _normalize_xmind_tree(rules.get('xmind_tree'))
+            or _normalize_xmind_tree(model.get('xmind_tree'))
+        )
+    else:
+        merged['xmind_tree'] = (
+            _normalize_xmind_tree(model.get('xmind_tree'))
+            or _normalize_xmind_tree(rules.get('xmind_tree'))
+        )
     model_points = [
         _normalize_test_point(item) for item in model.get('test_points', []) if isinstance(item, dict)
     ]
@@ -1016,7 +1401,12 @@ test_cases 项包含 requirement_ids、test_point_ids、module、title、precond
     response = _ollama_request('/api/chat', payload=payload, timeout=OLLAMA_TIMEOUT)
     content = response.get('message', {}).get('content', '')
     model_design = _extract_json_content(content)
-    return merge_model_design(model_design, rules, mode)
+    return merge_model_design(
+        model_design,
+        rules,
+        mode,
+        prefer_rule_tree=any(item.get('structure') for item in documents),
+    )
 
 
 def _cell(value):
