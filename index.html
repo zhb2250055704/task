@@ -4737,70 +4737,166 @@
     .qa-artifact-head { flex-wrap: wrap; }
     .qa-artifact-download { width: 100%; }
   }
-  .kongming-panel { display: grid; gap: 16px; }
-  .kongming-hero,
-  .kongming-config,
-  .kongming-paths,
-  .kongming-skills {
+  .kongming-page-heading { display: grid; gap: 4px; }
+  .kongming-page-heading p { margin: 0; color: var(--text-dim); font-size: 12px; }
+  .kongming-chat-page { display: grid; gap: 16px; }
+  .kongming-chat-shell {
+    display: grid;
+    grid-template-columns: 250px minmax(0, 1fr);
+    min-height: 640px;
+    height: calc(100vh - 190px);
+    max-height: 860px;
+    overflow: hidden;
     border: 1px solid var(--border);
-    border-radius: 14px;
+    border-radius: 8px;
     background: var(--panel-solid);
     box-shadow: var(--shadow-soft);
   }
-  .kongming-hero {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: center;
-    gap: 24px;
-    padding: 24px;
+  .kongming-conversation-rail {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    padding: 14px;
+    border-right: 1px solid var(--border);
+    background: #f5f7fa;
   }
-  .kongming-kicker { display: block; margin-bottom: 8px; color: var(--accent); font-size: 11px; font-weight: 800; }
-  .kongming-hero h2 { margin: 0 0 8px; font-size: 20px; }
-  .kongming-hero p { max-width: 720px; margin: 0; color: var(--text-dim); line-height: 1.65; }
-  .kongming-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; }
-  .kongming-config,
-  .kongming-skills { padding: 20px; }
-  .kongming-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
-  .kongming-section-heading > div { display: grid; gap: 4px; }
-  .kongming-section-heading strong { color: var(--text); font-size: 14px; }
-  .kongming-section-heading span { color: var(--text-dim); font-size: 12px; }
-  .kongming-state-chip,
-  .kongming-list-summary { flex: 0 0 auto; padding: 5px 9px; border-radius: 999px; background: rgba(210,145,31,.14); color: #b7791f !important; font-size: 12px; font-weight: 800; }
-  .kongming-state-chip.ready { background: rgba(16,185,129,.12); color: #10b981 !important; }
-  .kongming-state-chip.error { background: rgba(239,68,68,.12); color: #ef4444 !important; }
-  .kongming-config-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; }
-  .kongming-path-input { display: flex; align-items: center; min-width: 0; height: 48px; padding: 0 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--input-bg); color: var(--text-dim); }
-  .kongming-path-input:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
-  .kongming-path-input input { width: 100%; min-width: 0; height: 100%; padding: 0 0 0 10px; border: 0; outline: 0; background: transparent; color: var(--text); font: 12px/1.4 Consolas, monospace; }
+  .kongming-new-chat {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 42px;
+    border: 1px solid #d8e0e7;
+    border-radius: 8px;
+    background: #fff;
+    color: var(--text);
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .kongming-new-chat:hover { border-color: var(--accent); color: var(--accent); }
+  .kongming-new-chat .material-symbols-outlined { font-size: 18px; }
+  .kongming-rail-heading { display: flex; justify-content: space-between; margin: 22px 4px 9px; color: var(--text-dim); font-size: 11px; font-weight: 800; }
+  .kongming-conversation-list { display: grid; align-content: start; gap: 5px; min-height: 0; overflow-y: auto; }
+  .kongming-conversation-item { display: grid; min-width: 0; gap: 3px; padding: 10px 11px; border: 0; border-radius: 7px; background: transparent; color: var(--text-dim); text-align: left; cursor: pointer; }
+  .kongming-conversation-item:hover { background: #e9edf2; color: var(--text); }
+  .kongming-conversation-item.active { background: #e5f0ec; color: #12634b; }
+  .kongming-conversation-item strong { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+  .kongming-conversation-item span { font-size: 10px; opacity: .72; }
+  .kongming-rail-empty { padding: 22px 8px; color: var(--text-dim); font-size: 11px; text-align: center; }
+  .kongming-engine-card { display: flex; align-items: center; gap: 10px; margin-top: auto; padding: 12px 10px 4px; border-top: 1px solid var(--border); }
+  .kongming-engine-dot { width: 8px; height: 8px; flex: 0 0 8px; border-radius: 50%; background: #a1a9b3; }
+  .kongming-engine-dot.ready { background: #16805b; box-shadow: 0 0 0 3px rgba(22,128,91,.12); }
+  .kongming-engine-card div { display: grid; min-width: 0; gap: 2px; }
+  .kongming-engine-card strong { color: var(--text); font-size: 11px; }
+  .kongming-engine-card span { overflow: hidden; color: var(--text-dim); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+  .kongming-chat-main { display: grid; min-width: 0; min-height: 0; grid-template-rows: auto minmax(0, 1fr) auto; background: #fff; }
+  .kongming-chat-toolbar { display: flex; align-items: center; justify-content: space-between; min-height: 62px; padding: 10px 18px; border-bottom: 1px solid var(--border); }
+  .kongming-chat-toolbar > div { display: grid; min-width: 0; gap: 3px; }
+  .kongming-chat-toolbar strong { overflow: hidden; color: var(--text); font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
+  .kongming-chat-toolbar span { color: var(--text-dim); font-size: 10px; }
+  .kongming-icon-btn { display: grid; place-items: center; width: 36px; height: 36px; border: 1px solid var(--border); border-radius: 7px; background: #fff; color: var(--text-dim); cursor: pointer; }
+  .kongming-icon-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .kongming-icon-btn:disabled { opacity: .35; cursor: not-allowed; }
+  .kongming-icon-btn .material-symbols-outlined { font-size: 18px; }
+  .kongming-messages { min-height: 0; overflow-y: auto; padding: 26px clamp(20px, 5vw, 68px); scrollbar-gutter: stable; }
+  .kongming-welcome { display: grid; place-items: center; max-width: 680px; min-height: 100%; margin: 0 auto; align-content: center; text-align: center; }
+  .kongming-avatar { display: grid; place-items: center; width: 48px; height: 48px; margin-bottom: 16px; border-radius: 50%; background: #e4f1ed; color: #14684f; }
+  .kongming-avatar .material-symbols-outlined { font-size: 25px; }
+  .kongming-welcome h2 { margin: 0 0 8px; color: var(--text); font-size: 22px; }
+  .kongming-welcome p { margin: 0; color: var(--text-dim); font-size: 13px; line-height: 1.7; }
+  .kongming-starters { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 22px; }
+  .kongming-starters button { padding: 8px 11px; border: 1px solid #dce3ea; border-radius: 8px; background: #fff; color: var(--text-dim); font-size: 11px; cursor: pointer; }
+  .kongming-starters button:hover { border-color: #aac9bf; background: #f2f8f6; color: #14684f; }
+  .kongming-message { display: flex; align-items: flex-start; gap: 11px; max-width: 920px; margin: 0 auto 22px; }
+  .kongming-message.user { justify-content: flex-end; }
+  .kongming-message-avatar { display: grid; place-items: center; width: 30px; height: 30px; flex: 0 0 30px; border-radius: 50%; background: #e4f1ed; color: #14684f; }
+  .kongming-message-avatar .material-symbols-outlined { font-size: 17px; }
+  .kongming-user-bubble { max-width: min(72%, 680px); padding: 11px 14px; border-radius: 8px 8px 3px 8px; background: #e8f2ef; color: #173d32; font-size: 13px; line-height: 1.65; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .kongming-assistant-content { min-width: 0; flex: 1; }
+  .kongming-answer { color: var(--text); font-size: 13px; line-height: 1.75; }
+  .kongming-answer h1, .kongming-answer h2, .kongming-answer h3, .kongming-answer h4 { margin: 18px 0 8px; color: var(--text); font-size: 14px; }
+  .kongming-answer h1:first-child, .kongming-answer h2:first-child, .kongming-answer h3:first-child { margin-top: 2px; }
+  .kongming-answer p { margin: 0 0 10px; }
+  .kongming-answer ul, .kongming-answer ol { margin: 6px 0 12px 20px; }
+  .kongming-answer code { padding: 2px 5px; border-radius: 4px; background: #f0f2f5; color: #6f3bb4; font-size: 11px; }
+  .kongming-answer .qa-table-wrap { margin: 10px 0 14px; border-radius: 7px; }
+  .kongming-answer table { font-size: 11px; }
+  .kongming-answer th, .kongming-answer td { padding: 8px 9px; }
+  .kongming-message-tools { display: flex; align-items: center; gap: 4px; margin-top: 7px; color: var(--text-dim); font-size: 10px; }
+  .kongming-message-tools button { display: grid; place-items: center; width: 28px; height: 28px; border: 0; border-radius: 6px; background: transparent; color: var(--text-dim); cursor: pointer; }
+  .kongming-message-tools button:hover { background: #f0f2f5; color: var(--text); }
+  .kongming-message-tools .material-symbols-outlined { font-size: 16px; }
+  .kongming-loading { display: inline-flex; align-items: center; gap: 5px; min-height: 28px; color: var(--text-dim); font-size: 11px; }
+  .kongming-loading i { width: 5px; height: 5px; border-radius: 50%; background: #6f8d83; animation: kongming-pulse 1.2s infinite ease-in-out; }
+  .kongming-loading i:nth-child(2) { animation-delay: .15s; }
+  .kongming-loading i:nth-child(3) { animation-delay: .3s; }
+  @keyframes kongming-pulse { 0%, 70%, 100% { opacity: .25; transform: translateY(0); } 35% { opacity: 1; transform: translateY(-3px); } }
+  .kongming-composer { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) 42px; align-items: end; gap: 10px; margin: 0 clamp(18px, 5vw, 64px) 22px; padding: 10px 10px 10px 14px; border: 1px solid #d8e0e7; border-radius: 8px; background: #fff; box-shadow: 0 8px 24px rgba(31,49,65,.08); }
+  .kongming-composer:focus-within { border-color: #90b7aa; box-shadow: 0 8px 28px rgba(31,85,67,.12); }
+  .kongming-composer textarea { width: 100%; max-height: 150px; min-height: 38px; padding: 8px 0 15px; resize: none; overflow-y: auto; border: 0; outline: 0; background: transparent; color: var(--text); font: 13px/1.55 inherit; }
+  .kongming-composer > button { display: grid; place-items: center; width: 42px; height: 42px; border: 0; border-radius: 50%; background: #176f55; color: #fff; cursor: pointer; }
+  .kongming-composer > button:hover { background: #115d47; }
+  .kongming-composer > button:disabled { background: #b5c2bd; cursor: wait; }
+  .kongming-composer > button .material-symbols-outlined { font-size: 19px; }
+  #kongmingComposerHint { position: absolute; bottom: 8px; left: 14px; color: #929da6; font-size: 9px; pointer-events: none; }
+  .kongming-settings { display: none; gap: 14px; padding: 20px; border: 1px solid var(--border); border-radius: 8px; background: #fff; box-shadow: var(--shadow-soft); }
+  .kongming-settings.open { display: grid; }
+  .kongming-settings-head { display: flex; align-items: center; justify-content: space-between; gap: 18px; }
+  .kongming-settings-head h2 { margin: 0 0 5px; color: var(--text); font-size: 17px; }
+  .kongming-settings-head p { margin: 0; color: var(--text-dim); font-size: 12px; }
+  .kongming-settings-body { display: grid; gap: 12px; }
+  .kongming-kicker { display: block; margin-bottom: 6px; color: var(--accent); font-size: 10px; font-weight: 800; }
+  .kongming-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+  .kongming-config, .kongming-paths, .kongming-skills { border: 1px solid var(--border); border-radius: 8px; background: #fbfcfd; }
+  .kongming-config, .kongming-skills { padding: 16px; }
+  .kongming-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 12px; }
+  .kongming-section-heading > div { display: grid; gap: 3px; }
+  .kongming-section-heading strong { color: var(--text); font-size: 13px; }
+  .kongming-section-heading span { color: var(--text-dim); font-size: 11px; }
+  .kongming-state-chip, .kongming-list-summary { flex: 0 0 auto; padding: 5px 9px; border-radius: 999px; background: rgba(210,145,31,.12); color: #9a6200 !important; font-weight: 800; }
+  .kongming-state-chip.ready { background: rgba(22,128,91,.12); color: #167052 !important; }
+  .kongming-state-chip.error { background: rgba(180,35,45,.1); color: #a11f29 !important; }
+  .kongming-config-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; }
+  .kongming-path-input { display: flex; align-items: center; min-width: 0; height: 46px; padding: 0 13px; border: 1px solid var(--border); border-radius: 8px; background: #fff; color: var(--text-dim); }
+  .kongming-path-input:focus-within { border-color: var(--accent); box-shadow: var(--shadow-soft); }
+  .kongming-path-input input { width: 100%; min-width: 0; height: 100%; padding: 0 0 0 9px; border: 0; outline: 0; background: transparent; color: var(--text); font: 11px/1.4 Consolas, monospace; }
   .kongming-path-input input:read-only { cursor: not-allowed; opacity: .7; }
-  .kongming-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
-  .kongming-metric { display: grid; gap: 8px; min-width: 0; padding: 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--panel-solid); box-shadow: var(--shadow-soft); }
-  .kongming-metric span { color: var(--text-dim); font-size: 12px; }
-  .kongming-metric strong { overflow-wrap: anywhere; color: var(--text); font-size: 16px; }
+  .kongming-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+  .kongming-metric { display: grid; gap: 6px; min-width: 0; padding: 13px; border: 1px solid var(--border); border-radius: 8px; background: #fbfcfd; }
+  .kongming-metric span { color: var(--text-dim); font-size: 10px; }
+  .kongming-metric strong { overflow-wrap: anywhere; color: var(--text); font-size: 14px; }
   .kongming-paths { display: grid; overflow: hidden; }
-  .kongming-paths > div { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 16px; padding: 14px 18px; border-bottom: 1px solid var(--border); }
+  .kongming-paths > div { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 14px; padding: 12px 15px; border-bottom: 1px solid var(--border); }
   .kongming-paths > div:last-child { border-bottom: 0; }
-  .kongming-paths span { color: var(--text-dim); font-size: 12px; font-weight: 700; }
-  .kongming-paths code { overflow-wrap: anywhere; color: var(--text); font-size: 12px; }
-  .kongming-skill-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
-  .kongming-skill-item { display: flex; align-items: center; min-width: 0; gap: 10px; padding: 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--input-bg); }
-  .kongming-skill-icon { display: grid; place-items: center; width: 34px; height: 34px; flex: 0 0 34px; border-radius: 8px; background: var(--accent-soft); color: var(--accent); }
-  .kongming-skill-copy { min-width: 0; display: grid; gap: 3px; }
-  .kongming-skill-copy strong { overflow: hidden; color: var(--text); font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
-  .kongming-skill-copy span { color: var(--text-dim); font-size: 11px; }
-  .kongming-skill-item > .material-symbols-outlined { margin-left: auto; color: #10b981; font-size: 18px; }
-  .kongming-skill-item.pending > .material-symbols-outlined { color: #d2911f; }
-  .kongming-empty { grid-column: 1 / -1; padding: 30px; color: var(--text-dim); text-align: center; }
+  .kongming-paths span { color: var(--text-dim); font-size: 10px; font-weight: 700; }
+  .kongming-paths code { overflow-wrap: anywhere; color: var(--text); font-size: 10px; }
+  .kongming-skill-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 8px; }
+  .kongming-skill-item { display: flex; align-items: center; min-width: 0; gap: 9px; padding: 10px; border: 1px solid var(--border); border-radius: 8px; background: #fff; }
+  .kongming-skill-icon { display: grid; place-items: center; width: 31px; height: 31px; flex: 0 0 31px; border-radius: 7px; background: var(--accent-soft); color: var(--accent); }
+  .kongming-skill-copy { min-width: 0; display: grid; gap: 2px; }
+  .kongming-skill-copy strong { overflow: hidden; color: var(--text); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+  .kongming-skill-copy span { color: var(--text-dim); font-size: 9px; }
+  .kongming-skill-item > .material-symbols-outlined { margin-left: auto; color: #16805b; font-size: 17px; }
+  .kongming-skill-item.pending > .material-symbols-outlined { color: #b9780c; }
+  .kongming-empty { grid-column: 1 / -1; padding: 24px; color: var(--text-dim); text-align: center; }
   @media (max-width: 980px) {
-    .kongming-hero { grid-template-columns: 1fr; }
+    .kongming-chat-shell { grid-template-columns: 210px minmax(0, 1fr); }
+    .kongming-settings-head { align-items: flex-start; flex-direction: column; }
     .kongming-actions { justify-content: flex-start; }
     .kongming-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   }
-  @media (max-width: 640px) {
-    .kongming-config-row,
-    .kongming-metrics { grid-template-columns: 1fr; }
+  @media (max-width: 700px) {
+    .kongming-chat-shell { height: auto; min-height: 720px; grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+    .kongming-conversation-rail { max-height: 190px; border-right: 0; border-bottom: 1px solid var(--border); }
+    .kongming-conversation-list { display: flex; overflow-x: auto; }
+    .kongming-conversation-item { min-width: 170px; }
+    .kongming-engine-card { display: none; }
+    .kongming-messages { padding: 20px 14px; }
+    .kongming-composer { margin: 0 12px 14px; }
+    .kongming-user-bubble { max-width: 88%; }
+    .kongming-config-row, .kongming-metrics { grid-template-columns: 1fr; }
     .kongming-config-row .btn { width: 100%; }
-    .kongming-paths > div { grid-template-columns: 1fr; gap: 6px; }
+    .kongming-paths > div { grid-template-columns: 1fr; gap: 5px; }
   }
 </style>
 </head>
@@ -4812,7 +4908,7 @@
       <div class="nav-item active" data-view="commands" onclick="switchView('commands')" data-mark="CMD">命令管理</div>
       <div class="nav-item" data-view="scripts" onclick="switchView('scripts')" data-mark="SCR">脚本管理</div>
       <div class="nav-item" data-view="qa" onclick="switchView('qa')" data-mark="QA">测试设计</div>
-      <div class="nav-item admin-only" data-view="kongming" onclick="switchView('kongming')" style="display:none" data-mark="KM">孔明接入</div>
+      <div class="nav-item" data-view="kongming" onclick="switchView('kongming')" data-mark="KM">孔明助手</div>
       <div class="nav-item" data-view="formulas" onclick="switchView('formulas')" data-mark="CAL">计算公式</div>
       <div class="nav-item" data-view="items" onclick="switchView('items')" data-mark="ITM">道具表</div>
       <div class="nav-item admin-only" data-view="git" onclick="switchView('git')" style="display:none" data-mark="GIT">Git 拉取</div>
@@ -5146,57 +5242,110 @@
       </div>
     </div>
 
-    <!-- ============ 孔明 Skill 接入视图 ============ -->
+    <!-- ============ 孔明对话助手视图 ============ -->
     <div class="view" id="view-kongming">
       <header>
-        <h1>孔明接入</h1>
-        <div class="header-right"><span id="kongmingBadge" class="count-badge">检测中</span></div>
+        <div class="kongming-page-heading">
+          <h1>孔明助手</h1>
+          <p>检索活动配置、关键字段与客户端引用。</p>
+        </div>
+        <div class="header-right">
+          <span id="kongmingBadge" class="count-badge">连接中</span>
+          <button class="kongming-icon-btn admin-only" id="kongmingSettingsButton" type="button" onclick="toggleKongmingSettings()" title="孔明设置" aria-label="孔明设置" style="display:none"><span class="material-symbols-outlined">settings</span></button>
+        </div>
       </header>
       <div class="container">
-        <div class="kongming-panel">
-          <section class="kongming-hero" aria-labelledby="kongmingBridgeTitle">
-            <div class="kongming-hero-copy">
-              <span class="kongming-kicker">CODEX SKILL BRIDGE</span>
-              <h2 id="kongmingBridgeTitle">孔明 Skill 工作区桥接</h2>
-              <p id="kongmingMessage">正在检查孔明 Skill 源目录与 Codex 发现目录。</p>
-            </div>
-            <div class="kongming-actions">
-              <button class="btn btn-ghost" type="button" onclick="loadKongmingStatus()">刷新状态</button>
-              <button class="btn btn-ghost" type="button" onclick="openKongmingFolder('source')">打开源目录</button>
-              <button class="btn btn-ghost" type="button" onclick="openKongmingFolder('discovery')">打开发现目录</button>
-            </div>
-          </section>
-          <section class="kongming-config" aria-label="孔明 Skill 源目录配置">
-            <div class="kongming-section-heading">
-              <div><strong>Skill 源目录</strong><span id="kongmingSourceMeta">默认读取当前工作区的 .claude/skills</span></div>
-              <span id="kongmingSourceState" class="kongming-state-chip">待检测</span>
-            </div>
-            <div class="kongming-config-row">
-              <label class="kongming-path-input" for="kongmingSourceInput">
-                <span class="material-symbols-outlined">folder_managed</span>
-                <input id="kongmingSourceInput" type="text" spellcheck="false" autocomplete="off" placeholder="例如 C:\公司孔明项目\.claude\skills">
-              </label>
-              <button id="kongmingBridgeButton" class="btn btn-primary" type="button" onclick="bridgeKongmingSkills()">保存并建立桥接</button>
-            </div>
-          </section>
-          <div class="kongming-metrics" aria-label="孔明桥接摘要">
-            <div class="kongming-metric"><span>桥接状态</span><strong id="kongmingBridgeState">-</strong></div>
-            <div class="kongming-metric"><span>源 Skill</span><strong id="kongmingSkillCount">-</strong></div>
-            <div class="kongming-metric"><span>Codex 已发现</span><strong id="kongmingExposedCount">-</strong></div>
-            <div class="kongming-metric"><span>配置来源</span><strong id="kongmingSourceOrigin">-</strong></div>
+        <div class="kongming-chat-page">
+          <div class="kongming-chat-shell">
+            <aside class="kongming-conversation-rail" aria-label="孔明会话记录">
+              <button class="kongming-new-chat" type="button" onclick="newKongmingConversation()">
+                <span class="material-symbols-outlined">edit_square</span><span>新建对话</span>
+              </button>
+              <div class="kongming-rail-heading"><span>最近对话</span><span id="kongmingConversationCount">0</span></div>
+              <div id="kongmingConversationList" class="kongming-conversation-list">
+                <div class="kongming-rail-empty">暂无对话记录</div>
+              </div>
+              <div class="kongming-engine-card">
+                <span class="kongming-engine-dot" id="kongmingEngineDot"></span>
+                <div><strong id="kongmingEngineState">正在连接</strong><span id="kongmingEngineMeta">Codex + 孔明 Skill</span></div>
+              </div>
+            </aside>
+
+            <section class="kongming-chat-main" aria-labelledby="kongmingChatTitle">
+              <div class="kongming-chat-toolbar">
+                <div>
+                  <strong id="kongmingChatTitle">新对话</strong>
+                  <span id="kongmingChatMeta">配置检索助手</span>
+                </div>
+                <button id="kongmingDeleteChat" class="kongming-icon-btn" type="button" onclick="deleteKongmingConversation()" title="删除当前对话" aria-label="删除当前对话" disabled><span class="material-symbols-outlined">delete</span></button>
+              </div>
+
+              <div id="kongmingMessages" class="kongming-messages" aria-live="polite">
+                <div class="kongming-welcome">
+                  <span class="kongming-avatar"><span class="material-symbols-outlined">psychology</span></span>
+                  <h2>今天要查哪个活动？</h2>
+                  <p>我会从配置表数据、表头字段和客户端引用中整理关联关系。</p>
+                  <div class="kongming-starters">
+                    <button type="button" onclick="askKongmingStarter('九州风采活动关联哪些配置表？')">九州风采关联表</button>
+                    <button type="button" onclick="askKongmingStarter('帮我查奇兵突袭的配置入口和关键字段')">奇兵突袭配置入口</button>
+                    <button type="button" onclick="askKongmingStarter('帮我查鉴宝活动关联的配置表和客户端入口')">鉴宝活动关联配置</button>
+                  </div>
+                </div>
+              </div>
+
+              <form class="kongming-composer" onsubmit="sendKongmingMessage(event)">
+                <textarea id="kongmingInput" rows="1" maxlength="4000" placeholder="询问活动、配置表、字段或客户端入口" oninput="resizeKongmingInput()" onkeydown="handleKongmingInputKey(event)"></textarea>
+                <button id="kongmingSendButton" type="submit" title="发送" aria-label="发送"><span class="material-symbols-outlined">arrow_upward</span></button>
+                <span id="kongmingComposerHint">只读检索</span>
+              </form>
+            </section>
           </div>
-          <section class="kongming-paths" aria-label="孔明桥接路径">
-            <div><span>当前工作区</span><code id="kongmingWorkspace">-</code></div>
-            <div><span>孔明 Skill 源目录</span><code id="kongmingSourcePath">-</code></div>
-            <div><span>Codex 发现目录</span><code id="kongmingDiscoveryPath">-</code></div>
-          </section>
-          <section class="kongming-skills" aria-labelledby="kongmingSkillsTitle">
-            <div class="kongming-section-heading">
-              <div><strong id="kongmingSkillsTitle">已识别的孔明 Skills</strong><span>仅统计包含 SKILL.md 的有效目录</span></div>
-              <span id="kongmingSkillsSummary" class="kongming-list-summary">0 个</span>
+
+          <section id="kongmingSettings" class="kongming-settings" aria-labelledby="kongmingBridgeTitle">
+            <div class="kongming-settings-head">
+              <div>
+                <span class="kongming-kicker">CODEX SKILL BRIDGE</span>
+                <h2 id="kongmingBridgeTitle">孔明 Skill 桥接设置</h2>
+                <p id="kongmingBridgeMessage">正在检查孔明 Skill 源目录与 Codex 发现目录。</p>
+              </div>
+              <div class="kongming-actions">
+                <button class="btn btn-ghost" type="button" onclick="loadKongmingStatus()"><span class="material-symbols-outlined">refresh</span><span>刷新</span></button>
+                <button class="btn btn-ghost" type="button" onclick="openKongmingFolder('source')"><span class="material-symbols-outlined">folder_open</span><span>源目录</span></button>
+                <button class="btn btn-ghost" type="button" onclick="openKongmingFolder('discovery')"><span class="material-symbols-outlined">account_tree</span><span>发现目录</span></button>
+              </div>
             </div>
-            <div id="kongmingSkillList" class="kongming-skill-list" aria-live="polite">
-              <div class="kongming-empty">正在读取 Skill 清单</div>
+            <div class="kongming-settings-body">
+              <section class="kongming-config" aria-label="孔明 Skill 源目录配置">
+                <div class="kongming-section-heading">
+                  <div><strong>Skill 源目录</strong><span id="kongmingSourceMeta">默认读取当前工作区的 .claude/skills</span></div>
+                  <span id="kongmingSourceState" class="kongming-state-chip">待检测</span>
+                </div>
+                <div class="kongming-config-row">
+                  <label class="kongming-path-input" for="kongmingSourceInput">
+                    <span class="material-symbols-outlined">folder_managed</span>
+                    <input id="kongmingSourceInput" type="text" spellcheck="false" autocomplete="off" placeholder="例如 C:\公司孔明项目\.claude\skills">
+                  </label>
+                  <button id="kongmingBridgeButton" class="btn btn-primary" type="button" onclick="bridgeKongmingSkills()"><span class="material-symbols-outlined">link</span><span>保存并桥接</span></button>
+                </div>
+              </section>
+              <div class="kongming-metrics" aria-label="孔明桥接摘要">
+                <div class="kongming-metric"><span>桥接状态</span><strong id="kongmingBridgeState">-</strong></div>
+                <div class="kongming-metric"><span>源 Skill</span><strong id="kongmingSkillCount">-</strong></div>
+                <div class="kongming-metric"><span>Codex 已发现</span><strong id="kongmingExposedCount">-</strong></div>
+                <div class="kongming-metric"><span>配置来源</span><strong id="kongmingSourceOrigin">-</strong></div>
+              </div>
+              <section class="kongming-paths" aria-label="孔明桥接路径">
+                <div><span>当前工作区</span><code id="kongmingWorkspace">-</code></div>
+                <div><span>孔明 Skill 源目录</span><code id="kongmingSourcePath">-</code></div>
+                <div><span>Codex 发现目录</span><code id="kongmingDiscoveryPath">-</code></div>
+              </section>
+              <section class="kongming-skills" aria-labelledby="kongmingSkillsTitle">
+                <div class="kongming-section-heading">
+                  <div><strong id="kongmingSkillsTitle">已识别的孔明 Skills</strong><span>包含 SKILL.md 的有效目录</span></div>
+                  <span id="kongmingSkillsSummary" class="kongming-list-summary">0 个</span>
+                </div>
+                <div id="kongmingSkillList" class="kongming-skill-list" aria-live="polite"><div class="kongming-empty">正在读取 Skill 清单</div></div>
+              </section>
             </div>
           </section>
         </div>
@@ -5584,6 +5733,11 @@ let cmdCache = {};
 let scriptCache = {};
 let formulaCache = {};
 let currentCalcFormula = null;
+let kongmingConversationId = '';
+let kongmingConversations = [];
+let kongmingMessagesCache = [];
+let kongmingSending = false;
+let kongmingChatAvailable = false;
 let gitBusy = false;
 let gitRepoCache = [];
 let gitProgressTimer = null;
@@ -5738,7 +5892,7 @@ function startLoginAutofillGuard() {
 }
 
 function switchView(view) {
-  if (['users', 'kongming', 'git'].includes(view) && !isAdmin()) return;
+  if (['users', 'git'].includes(view) && !isAdmin()) return;
   currentView = view;
   document.querySelectorAll('.nav-item').forEach(el =>
     el.classList.toggle('active', el.dataset.view === view));
@@ -5758,7 +5912,7 @@ function switchView(view) {
     loadQaTestDesignStatus();
     loadQaHistory({ restoreLatest: !qaHistoryLoaded });
   }
-  else if (view === 'kongming') loadKongmingStatus();
+  else if (view === 'kongming') loadKongmingWorkspace();
   else if (view === 'formulas') loadFormulas();
   else if (view === 'items') loadItems();
   else if (view === 'git') loadGitRepos();
@@ -5800,13 +5954,23 @@ function renderKongmingStatus(data) {
   const linkLabels = { symlink: '符号链接', junction: '目录联接', merged: '逐项链接' };
   const originLabels = { environment: '环境变量', saved: '已保存配置', default: '工作区默认' };
   const linkLabel = linkLabels[data.link_kind] || '';
+  const badge = document.getElementById('kongmingBadge');
   const sourceState = document.getElementById('kongmingSourceState');
   const sourceInput = document.getElementById('kongmingSourceInput');
-  document.getElementById('kongmingBadge').textContent = stateLabel;
+  kongmingChatAvailable = !!data.chat_available;
+  badge.textContent = kongmingChatAvailable ? '服务可用' : '服务不可用';
+  const engineDot = document.getElementById('kongmingEngineDot');
+  const engineState = document.getElementById('kongmingEngineState');
+  const engineMeta = document.getElementById('kongmingEngineMeta');
+  if (engineDot) engineDot.classList.toggle('ready', kongmingChatAvailable);
+  if (engineState) engineState.textContent = kongmingChatAvailable ? '孔明已连接' : '孔明未就绪';
+  if (engineMeta) engineMeta.textContent = data.chat_engine || 'Codex + 孔明 Skill';
+  const sendButton = document.getElementById('kongmingSendButton');
+  if (sendButton) sendButton.disabled = !kongmingChatAvailable || kongmingSending;
   sourceState.textContent = data.source_exists ? '源目录有效' : '源目录缺失';
   sourceState.classList.toggle('ready', !!data.source_exists);
   sourceState.classList.toggle('error', !data.source_exists);
-  document.getElementById('kongmingMessage').textContent = data.message || '孔明 Skill 桥接状态已更新。';
+  document.getElementById('kongmingBridgeMessage').textContent = data.message || '孔明 Skill 桥接状态已更新。';
   document.getElementById('kongmingBridgeState').textContent = linkLabel ? `${stateLabel} · ${linkLabel}` : stateLabel;
   document.getElementById('kongmingSkillCount').textContent = `${data.skill_count || 0} 个`;
   document.getElementById('kongmingExposedCount').textContent = `${data.exposed_count || 0} 个`;
@@ -5844,13 +6008,16 @@ async function loadKongmingStatus() {
     renderKongmingStatus(data);
   } catch (error) {
     document.getElementById('kongmingBadge').textContent = '读取异常';
-    document.getElementById('kongmingMessage').textContent = error.message || '孔明 Skill 状态读取失败';
+    document.getElementById('kongmingBridgeMessage').textContent = error.message || '孔明 Skill 状态读取失败';
+    const engineState = document.getElementById('kongmingEngineState');
+    if (engineState) engineState.textContent = '连接失败';
   }
 }
 
 async function bridgeKongmingSkills() {
   const button = document.getElementById('kongmingBridgeButton');
-  const sourceDir = document.getElementById('kongmingSourceInput').value.trim();
+  const sourceInput = document.getElementById('kongmingSourceInput');
+  const sourceDir = sourceInput.value.trim();
   if (!sourceDir) { toast('请填写孔明 Skill 源目录'); return; }
   button.disabled = true;
   document.getElementById('kongmingBadge').textContent = '正在桥接';
@@ -5881,6 +6048,203 @@ async function openKongmingFolder(target) {
   } catch (error) {
     toast(error.message || '孔明目录打开失败');
   }
+}
+
+async function loadKongmingWorkspace() {
+  await Promise.all([loadKongmingStatus(), loadKongmingConversations()]);
+}
+
+async function loadKongmingConversations(conversationId = kongmingConversationId) {
+  try {
+    const query = conversationId ? `?conversation_id=${encodeURIComponent(conversationId)}` : '';
+    const res = await fetch(`${KONGMING_API}/chat${query}`, { cache: 'no-store' });
+    if (res.status === 401) { location.href = 'login.html'; return; }
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) throw new Error(data.msg || '孔明会话记录读取失败');
+    applyKongmingConversationPayload(data);
+  } catch (error) {
+    toast(error.message || '孔明会话记录读取失败');
+  }
+}
+
+function applyKongmingConversationPayload(data) {
+  kongmingConversations = Array.isArray(data.conversations) ? data.conversations : [];
+  const conversation = data.conversation && typeof data.conversation === 'object' ? data.conversation : null;
+  kongmingConversationId = conversation ? String(conversation.id || '') : '';
+  kongmingMessagesCache = conversation && Array.isArray(conversation.messages) ? conversation.messages : [];
+  renderKongmingConversationList();
+  renderKongmingMessages();
+  const title = document.getElementById('kongmingChatTitle');
+  const meta = document.getElementById('kongmingChatMeta');
+  const deleteButton = document.getElementById('kongmingDeleteChat');
+  if (title) title.textContent = conversation ? (conversation.title || '孔明对话') : '新对话';
+  if (meta) meta.textContent = conversation
+    ? `${kongmingMessagesCache.length} 条消息 · ${conversation.updated_at || ''}`
+    : '配置检索助手';
+  if (deleteButton) deleteButton.disabled = !kongmingConversationId || kongmingSending;
+}
+
+function renderKongmingConversationList() {
+  const list = document.getElementById('kongmingConversationList');
+  const count = document.getElementById('kongmingConversationCount');
+  if (count) count.textContent = String(kongmingConversations.length);
+  if (!list) return;
+  list.innerHTML = kongmingConversations.length
+    ? kongmingConversations.map(item => `<button class="kongming-conversation-item ${item.id === kongmingConversationId ? 'active' : ''}" type="button" onclick="selectKongmingConversation('${esc(item.id || '')}')">
+        <strong>${esc(item.title || '新对话')}</strong>
+        <span>${esc(item.updated_at || '')}</span>
+      </button>`).join('')
+    : '<div class="kongming-rail-empty">暂无对话记录</div>';
+}
+
+function renderKongmingMessages({ loading = false } = {}) {
+  const container = document.getElementById('kongmingMessages');
+  if (!container) return;
+  if (!kongmingMessagesCache.length && !loading) {
+    container.innerHTML = `<div class="kongming-welcome">
+      <span class="kongming-avatar"><span class="material-symbols-outlined">psychology</span></span>
+      <h2>今天要查哪个活动？</h2>
+      <p>我会从配置表数据、表头字段和客户端引用中整理关联关系。</p>
+      <div class="kongming-starters">
+        <button type="button" onclick="askKongmingStarter('九州风采活动关联哪些配置表？')">九州风采关联表</button>
+        <button type="button" onclick="askKongmingStarter('帮我查奇兵突袭的配置入口和关键字段')">奇兵突袭配置入口</button>
+        <button type="button" onclick="askKongmingStarter('帮我查鉴宝活动关联的配置表和客户端入口')">鉴宝活动关联配置</button>
+      </div>
+    </div>`;
+    return;
+  }
+
+  const messagesHtml = kongmingMessagesCache.map((message, index) => {
+    if (message.role === 'user') {
+      return `<article class="kongming-message user"><div class="kongming-user-bubble">${esc(message.content || '')}</div></article>`;
+    }
+    const metadata = message.metadata || {};
+    const duration = Number(metadata.duration_ms || 0);
+    return `<article class="kongming-message assistant">
+      <span class="kongming-message-avatar"><span class="material-symbols-outlined">psychology</span></span>
+      <div class="kongming-assistant-content">
+        <div class="kongming-answer qa-markdown">${renderQaMarkdown(message.content || '')}</div>
+        <div class="kongming-message-tools">
+          <button type="button" onclick="copyKongmingMessage(${index})" title="复制回答" aria-label="复制回答"><span class="material-symbols-outlined">content_copy</span></button>
+          ${duration ? `<span>${Math.max(1, Math.round(duration / 1000))} 秒</span>` : ''}
+        </div>
+      </div>
+    </article>`;
+  }).join('');
+  const loadingHtml = loading ? `<article class="kongming-message assistant">
+    <span class="kongming-message-avatar"><span class="material-symbols-outlined">psychology</span></span>
+    <div class="kongming-loading"><span>正在检索配置与代码</span><i></i><i></i><i></i></div>
+  </article>` : '';
+  container.innerHTML = messagesHtml + loadingHtml;
+  requestAnimationFrame(() => { container.scrollTop = container.scrollHeight; });
+}
+
+async function selectKongmingConversation(conversationId) {
+  if (kongmingSending || !conversationId || conversationId === kongmingConversationId) return;
+  await loadKongmingConversations(conversationId);
+}
+
+function newKongmingConversation() {
+  if (kongmingSending) return;
+  kongmingConversationId = '';
+  kongmingMessagesCache = [];
+  renderKongmingConversationList();
+  renderKongmingMessages();
+  document.getElementById('kongmingChatTitle').textContent = '新对话';
+  document.getElementById('kongmingChatMeta').textContent = '配置检索助手';
+  document.getElementById('kongmingDeleteChat').disabled = true;
+  document.getElementById('kongmingInput').focus();
+}
+
+async function sendKongmingMessage(event) {
+  if (event) event.preventDefault();
+  if (kongmingSending || !kongmingChatAvailable) return;
+  const input = document.getElementById('kongmingInput');
+  const message = input.value.trim();
+  if (!message) return;
+  const previousMessages = kongmingMessagesCache.slice();
+  kongmingSending = true;
+  input.value = '';
+  resizeKongmingInput();
+  document.getElementById('kongmingSendButton').disabled = true;
+  document.getElementById('kongmingDeleteChat').disabled = true;
+  document.getElementById('kongmingComposerHint').textContent = '正在检索';
+  kongmingMessagesCache = [...previousMessages, { role: 'user', content: message, created_at: new Date().toLocaleString() }];
+  renderKongmingMessages({ loading: true });
+  try {
+    const res = await fetch(`${KONGMING_API}/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message, conversation_id: kongmingConversationId })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) throw new Error(data.msg || '孔明分析失败');
+    applyKongmingConversationPayload(data);
+  } catch (error) {
+    kongmingMessagesCache = previousMessages;
+    renderKongmingMessages();
+    input.value = message;
+    resizeKongmingInput();
+    toast(error.message || '孔明分析失败');
+  } finally {
+    kongmingSending = false;
+    document.getElementById('kongmingSendButton').disabled = !kongmingChatAvailable;
+    document.getElementById('kongmingDeleteChat').disabled = !kongmingConversationId;
+    document.getElementById('kongmingComposerHint').textContent = '只读检索';
+  }
+}
+
+function askKongmingStarter(message) {
+  const input = document.getElementById('kongmingInput');
+  input.value = message;
+  resizeKongmingInput();
+  input.form.requestSubmit();
+}
+
+function handleKongmingInputKey(event) {
+  if (event.key === 'Enter' && !event.shiftKey) {
+    event.preventDefault();
+    event.currentTarget.form.requestSubmit();
+  }
+}
+
+function resizeKongmingInput() {
+  const input = document.getElementById('kongmingInput');
+  if (!input) return;
+  input.style.height = 'auto';
+  input.style.height = `${Math.min(input.scrollHeight, 150)}px`;
+}
+
+async function copyKongmingMessage(index) {
+  const message = kongmingMessagesCache[index];
+  if (!message || message.role !== 'assistant') return;
+  try {
+    await navigator.clipboard.writeText(message.content || '');
+    toast('回答已复制');
+  } catch (error) {
+    toast('复制失败');
+  }
+}
+
+async function deleteKongmingConversation() {
+  if (!kongmingConversationId || kongmingSending) return;
+  if (!confirm('确定删除当前孔明对话吗？')) return;
+  try {
+    const res = await fetch(`${KONGMING_API}/chat?conversation_id=${encodeURIComponent(kongmingConversationId)}`, { method: 'DELETE' });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) throw new Error(data.msg || '孔明会话删除失败');
+    applyKongmingConversationPayload(data);
+    toast('对话已删除');
+  } catch (error) {
+    toast(error.message || '孔明会话删除失败');
+  }
+}
+
+function toggleKongmingSettings() {
+  if (!isAdmin()) return;
+  const settings = document.getElementById('kongmingSettings');
+  settings.classList.toggle('open');
+  if (settings.classList.contains('open')) settings.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 async function loadCategories() {

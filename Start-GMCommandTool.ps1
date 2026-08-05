@@ -7,7 +7,9 @@ $BuildFiles = @(
     $ServerFile,
     (Join-Path $ToolDir 'qa_local_engine.py'),
     (Join-Path $ToolDir 'qa_artifacts.py'),
-    (Join-Path $ToolDir 'skillhub_translation.py')
+    (Join-Path $ToolDir 'skillhub_translation.py'),
+    (Join-Path $ToolDir 'kongming_bridge.py'),
+    (Join-Path $ToolDir 'kongming_chat.py')
 ) | Where-Object { Test-Path -LiteralPath $_ }
 $BuildBytes = [byte[]]($BuildFiles | ForEach-Object { [IO.File]::ReadAllBytes($_) })
 $ExpectedBuild = ([BitConverter]::ToString(

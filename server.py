@@ -51,6 +51,16 @@ from kongming_bridge import (
     load_kongming_source,
     save_kongming_source,
 )
+from kongming_chat import (
+    append_kongming_message,
+    build_kongming_prompt,
+    create_kongming_conversation,
+    delete_kongming_conversation,
+    list_kongming_conversations,
+    load_kongming_conversation,
+    normalize_kongming_question,
+    save_kongming_conversation,
+)
 
 if os.name == 'nt':
     try:
@@ -77,6 +87,8 @@ try:
         os.path.join(TOOL_DIR, 'qa_local_engine.py'),
         os.path.join(TOOL_DIR, 'qa_artifacts.py'),
         os.path.join(TOOL_DIR, 'skillhub_translation.py'),
+        os.path.join(TOOL_DIR, 'kongming_bridge.py'),
+        os.path.join(TOOL_DIR, 'kongming_chat.py'),
     ):
         with open(build_file, 'rb') as source_file:
             build_hash.update(source_file.read())
@@ -104,6 +116,21 @@ GIT_REPOS = {
     },
 }
 GIT_TIMEOUT = 180
+KONGMING_CHAT_TIMEOUT = int(os.environ.get('GM_KONGMING_CHAT_TIMEOUT', '240'))
+KONGMING_MODEL_PROVIDER = os.environ.get('GM_KONGMING_MODEL_PROVIDER', 'taishi')
+KONGMING_MODEL = os.environ.get('GM_KONGMING_MODEL', 'gpt-5.5')
+KONGMING_PROVIDER_BASE_URL = os.environ.get(
+    'GM_KONGMING_PROVIDER_BASE_URL',
+    'https://relay.tuyoo.com/v1',
+)
+KONGMING_CLIENT_ROOT = os.path.abspath(GIT_REPOS['client']['path'])
+KONGMING_EXCEL_ROOT = os.path.abspath(GIT_REPOS['excel']['path'])
+KONGMING_JSON_ROOT = os.path.join(KONGMING_EXCEL_ROOT, 'json')
+KONGMING_CHAT_WORKSPACE = os.environ.get(
+    'GM_KONGMING_WORKSPACE',
+    os.path.commonpath((KONGMING_CLIENT_ROOT, KONGMING_EXCEL_ROOT)),
+)
+KONGMING_CHAT_DIR = os.path.join(TOOL_DIR, 'runtime', 'kongming', 'conversations')
 
 # item 源表（游戏配表项目内的 COA_Item.xlsx）
 ITEM_XLSX = os.environ.get(
@@ -148,6 +175,7 @@ _cocos_bridge_lock = threading.Lock()
 _cocos_connections = {}
 _cocos_bridge_error = ''
 _ks_cache_lock = threading.Lock()
+_kongming_chat_lock = threading.Lock()
 
 QA_SKILL_NAME = 'qa-test-design'
 QA_CODEX_TIMEOUT = int(os.environ.get('GM_QA_CODEX_TIMEOUT', '300'))
@@ -189,6 +217,24 @@ def _kongming_source():
     return load_kongming_source(TOOL_DIR, KONGMING_CONFIG_FILE)
 
 
+def _kongming_chat_runtime_status():
+    cli_path = find_kongming_cli()
+    roots_ready = os.path.isdir(KONGMING_CLIENT_ROOT) and os.path.isdir(KONGMING_EXCEL_ROOT)
+    source_dir, _source_origin = _kongming_source()
+    skill_ready = os.path.isdir(source_dir)
+    return {
+        'chat_available': bool(cli_path) and roots_ready,
+        'chat_engine': 'Codex + 孔明 Skill' if skill_ready else 'Codex 本地只读检索',
+        'chat_workspace': os.path.abspath(KONGMING_CHAT_WORKSPACE),
+        'client_root': KONGMING_CLIENT_ROOT,
+        'excel_root': KONGMING_EXCEL_ROOT,
+        'json_root': KONGMING_JSON_ROOT,
+        'codex_ready': bool(cli_path),
+        'roots_ready': roots_ready,
+        'kongming_skill_ready': skill_ready,
+    }
+
+
 def kongming_status():
     source_dir, source_origin = _kongming_source()
     status = get_kongming_bridge_status(TOOL_DIR, source_dir)
@@ -196,6 +242,7 @@ def kongming_status():
         'ok': True,
         'source_origin': source_origin,
         'source_locked': source_origin == 'environment',
+        **_kongming_chat_runtime_status(),
     })
     return status
 
@@ -212,6 +259,7 @@ def bridge_kongming_skills(source_dir=''):
         'ok': bool(status.get('ready')),
         'source_origin': source_origin,
         'source_locked': source_origin == 'environment',
+        **_kongming_chat_runtime_status(),
     })
     return status
 
@@ -3594,6 +3642,36 @@ def find_codex_cli():
     return ''
 
 
+def find_kongming_cli():
+    configured = str(os.environ.get('GM_KONGMING_CODEX_CLI') or '').strip()
+    candidates = [configured]
+    desktop_bin = os.path.join(os.environ.get('LOCALAPPDATA', ''), 'OpenAI', 'Codex', 'bin')
+    if os.path.isdir(desktop_bin):
+        desktop_candidates = []
+        for name in os.listdir(desktop_bin):
+            candidate = os.path.join(desktop_bin, name, 'codex.exe')
+            if os.path.isfile(candidate):
+                desktop_candidates.append(candidate)
+        candidates.extend(sorted(
+            desktop_candidates,
+            key=lambda path: os.path.getmtime(path),
+            reverse=True,
+        ))
+    candidates.extend([
+        os.path.join(
+            os.environ.get('APPDATA', ''),
+            'npm', 'node_modules', '@openai', 'codex', 'node_modules',
+            '@openai', 'codex-win32-x64', 'vendor', 'x86_64-pc-windows-msvc',
+            'bin', 'codex.exe',
+        ),
+        find_codex_cli(),
+    ])
+    for candidate in candidates:
+        if candidate and os.path.isfile(candidate):
+            return os.path.abspath(candidate)
+    return ''
+
+
 def qa_codex_task_status():
     with _qa_codex_state_lock:
         state = dict(_qa_codex_state)
@@ -4138,6 +4216,146 @@ def _codex_exec_args(cli_path, workdir):
     return args
 
 
+def _kongming_codex_exec_args(cli_path, workdir):
+    args = [
+        cli_path,
+        'exec',
+        '--ignore-user-config',
+        '-c',
+        f'model_provider={json.dumps(KONGMING_MODEL_PROVIDER)}',
+        '-c',
+        f'model={json.dumps(KONGMING_MODEL)}',
+        '-c',
+        'model_reasoning_effort="low"',
+        '-c',
+        f'model_providers.{KONGMING_MODEL_PROVIDER}.name={json.dumps(KONGMING_MODEL_PROVIDER)}',
+        '-c',
+        f'model_providers.{KONGMING_MODEL_PROVIDER}.base_url={json.dumps(KONGMING_PROVIDER_BASE_URL)}',
+        '-c',
+        f'model_providers.{KONGMING_MODEL_PROVIDER}.wire_api="responses"',
+        '-c',
+        f'model_providers.{KONGMING_MODEL_PROVIDER}.requires_openai_auth=true',
+        '--skip-git-repo-check',
+        '--ephemeral',
+        '--sandbox',
+        'read-only',
+        '--color',
+        'never',
+        '-C',
+        workdir,
+        '-',
+    ]
+    if os.name == 'nt' and os.path.splitext(cli_path)[1].lower() in ('.cmd', '.bat'):
+        command_line = subprocess.list2cmdline(args)
+        return [os.environ.get('COMSPEC', 'cmd.exe'), '/d', '/s', '/c', command_line]
+    return args
+
+
+def get_kongming_chat_payload(owner_id, conversation_id=''):
+    conversations = list_kongming_conversations(KONGMING_CHAT_DIR, owner_id)
+    selected_id = str(conversation_id or '').strip()
+    if not selected_id and conversations:
+        selected_id = conversations[0].get('id', '')
+    conversation = (
+        load_kongming_conversation(KONGMING_CHAT_DIR, owner_id, selected_id)
+        if selected_id else None
+    )
+    return {
+        'ok': True,
+        'conversations': conversations,
+        'conversation': conversation,
+        **_kongming_chat_runtime_status(),
+    }
+
+
+def run_kongming_chat(owner_id, question, conversation_id=''):
+    question = normalize_kongming_question(question)
+    runtime_status = _kongming_chat_runtime_status()
+    if not runtime_status.get('chat_available'):
+        if not runtime_status.get('codex_ready'):
+            raise RuntimeError('未找到 Codex 命令行工具，孔明对话服务暂不可用')
+        raise RuntimeError('客户端或配置表目录不存在，孔明无法进行项目检索')
+    if not _kongming_chat_lock.acquire(blocking=False):
+        raise BlockingIOError('孔明正在分析上一条问题，请稍后再试')
+
+    try:
+        conversation_id = str(conversation_id or '').strip()
+        conversation = (
+            load_kongming_conversation(KONGMING_CHAT_DIR, owner_id, conversation_id)
+            if conversation_id else None
+        )
+        if conversation_id and conversation is None:
+            raise ValueError('孔明会话不存在或无权访问')
+        if conversation is None:
+            conversation = create_kongming_conversation(owner_id, question)
+
+        started_at = time.time()
+        bridge_status = {}
+        try:
+            bridge_status = prepare_kongming_bridge(KONGMING_CHAT_WORKSPACE)
+            if bridge_status.get('source_exists') and not bridge_status.get('ready'):
+                print(f'[KONGMING] chat workspace bridge not ready: {bridge_status.get("message", "")}')
+        except Exception as exc:
+            print(f'[KONGMING] chat workspace bridge failed: {exc}')
+
+        prompt = build_kongming_prompt(
+            question,
+            conversation,
+            KONGMING_CLIENT_ROOT,
+            KONGMING_EXCEL_ROOT,
+            KONGMING_JSON_ROOT,
+        )
+        cli_path = find_kongming_cli()
+        env = os.environ.copy()
+        env['NO_COLOR'] = '1'
+        env['PYTHONUTF8'] = '1'
+        kwargs = {
+            'input': prompt,
+            'text': True,
+            'encoding': 'utf-8',
+            'errors': 'replace',
+            'stdout': subprocess.PIPE,
+            'stderr': subprocess.PIPE,
+            'timeout': KONGMING_CHAT_TIMEOUT,
+            'cwd': KONGMING_CHAT_WORKSPACE,
+            'env': env,
+        }
+        if os.name == 'nt':
+            kwargs['creationflags'] = subprocess.CREATE_NO_WINDOW
+        proc = subprocess.run(_kongming_codex_exec_args(cli_path, KONGMING_CHAT_WORKSPACE), **kwargs)
+        answer = str(proc.stdout or '').strip()
+        if proc.returncode != 0:
+            diagnostic = str(proc.stderr or '').strip()
+            print(f'[KONGMING] Codex failed({proc.returncode}): {diagnostic[-3000:]}')
+            lowered = diagnostic.lower()
+            if 'authentication' in lowered or 'not logged in' in lowered or 'unauthorized' in lowered:
+                raise RuntimeError('Codex 尚未登录，请先在本机完成 Codex 登录')
+            raise RuntimeError('孔明分析失败，请查看 GM 工具服务日志')
+        if not answer:
+            raise RuntimeError('孔明未返回分析结果')
+
+        duration_ms = int((time.time() - started_at) * 1000)
+        append_kongming_message(conversation, 'user', question)
+        assistant_message = append_kongming_message(conversation, 'assistant', answer, {
+            'engine': runtime_status.get('chat_engine'),
+            'duration_ms': duration_ms,
+            'bridge_state': bridge_status.get('state', ''),
+        })
+        save_kongming_conversation(KONGMING_CHAT_DIR, conversation)
+        return {
+            'ok': True,
+            'answer': answer,
+            'message': assistant_message,
+            'conversation': conversation,
+            'conversations': list_kongming_conversations(KONGMING_CHAT_DIR, owner_id),
+            'engine': runtime_status.get('chat_engine'),
+            'duration_ms': duration_ms,
+            'bridge': bridge_status,
+        }
+    finally:
+        _kongming_chat_lock.release()
+
+
 def run_qa_test_design(
     requirement, mode='full', domain='auto', depth='standard', title='', attachments=None
 ):
@@ -4307,9 +4525,11 @@ class GMHandler(SimpleHTTPRequestHandler):
                 sess = self._require_login()
                 if sess is not None:
                     self._qa_test_design_history(sess, parse_qs(parsed.query))
+            elif path == '/api/kongming/chat':
+                sess = self._require_login()
+                if sess is not None:
+                    self._kongming_chat_history(sess, parse_qs(parsed.query))
             elif path == '/api/kongming/status':
-                if self._require_admin() is None:
-                    return
                 self._send_json(kongming_status())
             elif path == '/api/git/repos':
                 if self._require_admin() is None:
@@ -4349,6 +4569,11 @@ class GMHandler(SimpleHTTPRequestHandler):
             if sess is None:
                 return
             self._qa_test_design_generate(sess)
+            return
+        if path == '/api/kongming/chat':
+            sess = self._require_login()
+            if sess is not None:
+                self._kongming_chat_send(sess)
             return
         if path == '/api/users':
             if self._require_admin() is None:
@@ -4420,6 +4645,11 @@ class GMHandler(SimpleHTTPRequestHandler):
             sess = self._require_login()
             if sess is not None:
                 self._qa_test_design_delete_history(sess, parse_qs(parsed.query))
+            return
+        if path == '/api/kongming/chat':
+            sess = self._require_login()
+            if sess is not None:
+                self._kongming_chat_delete(sess, parse_qs(parsed.query))
             return
         if path.startswith('/api/users/'):
             if self._require_admin() is None:
@@ -5156,6 +5386,52 @@ class GMHandler(SimpleHTTPRequestHandler):
             self._send_json(status, status=409)
             return
         self._send_json(status)
+
+    def _kongming_chat_history(self, sess, params):
+        conversation_id = str((params.get('conversation_id') or [''])[0]).strip()
+        self._send_json(get_kongming_chat_payload(sess.get('id'), conversation_id))
+
+    def _kongming_chat_send(self, sess):
+        data = self._read_json()
+        if data is None:
+            return
+        try:
+            result = run_kongming_chat(
+                sess.get('id'),
+                data.get('message'),
+                data.get('conversation_id'),
+            )
+        except ValueError as exc:
+            self._send_json({'ok': False, 'code': 'invalid_request', 'msg': str(exc)}, status=400)
+            return
+        except BlockingIOError as exc:
+            self._send_json({'ok': False, 'code': 'busy', 'msg': str(exc)}, status=429)
+            return
+        except subprocess.TimeoutExpired:
+            self._send_json({
+                'ok': False,
+                'code': 'timeout',
+                'msg': f'孔明分析超过 {KONGMING_CHAT_TIMEOUT} 秒，已自动停止',
+            }, status=504)
+            return
+        except RuntimeError as exc:
+            self._send_json({'ok': False, 'code': 'unavailable', 'msg': str(exc)}, status=503)
+            return
+        except Exception as exc:
+            print(f'[KONGMING] chat failed: {exc}')
+            self._send_json({'ok': False, 'code': 'failed', 'msg': '孔明对话服务执行失败'}, status=500)
+            return
+        self._send_json(result)
+
+    def _kongming_chat_delete(self, sess, params):
+        conversation_id = str((params.get('conversation_id') or [''])[0]).strip()
+        if not conversation_id:
+            self._send_json({'ok': False, 'msg': '缺少孔明会话编号'}, status=400)
+            return
+        if not delete_kongming_conversation(KONGMING_CHAT_DIR, sess.get('id'), conversation_id):
+            self._send_json({'ok': False, 'msg': '孔明会话不存在或无权访问'}, status=404)
+            return
+        self._send_json(get_kongming_chat_payload(sess.get('id')))
 
     def _kongming_open_folder(self):
         data = self._read_json()
