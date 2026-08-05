@@ -44,6 +44,13 @@ from skillhub_translation import (
     start_skillhub_translation_watcher,
     sync_skillhub_chinese_usage,
 )
+from kongming_bridge import (
+    KongmingBridgeError,
+    ensure_agents_skills_link,
+    get_kongming_bridge_status,
+    load_kongming_source,
+    save_kongming_source,
+)
 
 if os.name == 'nt':
     try:
@@ -84,6 +91,7 @@ USER_FILE = os.path.join(TOOL_DIR, 'gm_users.json')
 ITEM_FILE = os.path.join(TOOL_DIR, 'gm_items.json')
 KS_CONFIG_FILE = os.path.join(TOOL_DIR, 'gm_ks_config.json')
 KS_ACCOUNT_CACHE_FILE = os.path.join(TOOL_DIR, 'gm_account_cache.json')
+KONGMING_CONFIG_FILE = os.path.join(TOOL_DIR, 'runtime', 'kongming', 'config.json')
 
 GIT_REPOS = {
     'client': {
@@ -175,6 +183,61 @@ _qa_codex_state = {
 _qa_upload_lock = threading.Lock()
 _qa_uploads = {}
 _qa_artifact_lock = threading.Lock()
+
+
+def _kongming_source():
+    return load_kongming_source(TOOL_DIR, KONGMING_CONFIG_FILE)
+
+
+def kongming_status():
+    source_dir, source_origin = _kongming_source()
+    status = get_kongming_bridge_status(TOOL_DIR, source_dir)
+    status.update({
+        'ok': True,
+        'source_origin': source_origin,
+        'source_locked': source_origin == 'environment',
+    })
+    return status
+
+
+def bridge_kongming_skills(source_dir=''):
+    source_dir = str(source_dir or '').strip()
+    if source_dir:
+        if str(os.environ.get('GM_KONGMING_SKILLS_DIR') or '').strip():
+            raise ValueError('源目录已由 GM_KONGMING_SKILLS_DIR 环境变量锁定')
+        save_kongming_source(KONGMING_CONFIG_FILE, source_dir, TOOL_DIR)
+    configured_source, source_origin = _kongming_source()
+    status = ensure_agents_skills_link(TOOL_DIR, configured_source)
+    status.update({
+        'ok': bool(status.get('ready')),
+        'source_origin': source_origin,
+        'source_locked': source_origin == 'environment',
+    })
+    return status
+
+
+def prepare_kongming_bridge(workspace):
+    source_dir, source_origin = _kongming_source()
+    status = ensure_agents_skills_link(workspace, source_dir)
+    status['source_origin'] = source_origin
+    return status
+
+
+def open_kongming_folder(target='source'):
+    status = kongming_status()
+    targets = {
+        'source': status.get('source_dir'),
+        'discovery': status.get('discovery_dir'),
+        'workspace': status.get('workspace'),
+    }
+    path = targets.get(str(target or '').strip())
+    if not path or not os.path.isdir(path):
+        raise FileNotFoundError('目标目录尚不存在，请先确认源目录并建立桥接')
+    if os.name == 'nt':
+        subprocess.Popen(['explorer.exe', os.path.normpath(path)])
+    else:
+        webbrowser.open(path)
+    return status
 
 
 def load_data():
@@ -4099,6 +4162,12 @@ def run_qa_test_design(
     run_dir = os.path.join(QA_RUNTIME_DIR, 'runs', uuid.uuid4().hex)
     try:
         os.makedirs(run_dir, exist_ok=True)
+        try:
+            bridge_status = prepare_kongming_bridge(run_dir)
+            if bridge_status.get('source_exists') and not bridge_status.get('ready'):
+                print(f'[KONGMING] Codex 运行目录桥接未就绪: {bridge_status.get("message", "")}')
+        except Exception as exc:
+            print(f'[KONGMING] Codex 运行目录桥接失败: {exc}')
         prompt = build_qa_test_design_prompt(requirement, mode, domain, depth, title, attachments)
         env = os.environ.copy()
         env['NO_COLOR'] = '1'
@@ -4238,6 +4307,10 @@ class GMHandler(SimpleHTTPRequestHandler):
                 sess = self._require_login()
                 if sess is not None:
                     self._qa_test_design_history(sess, parse_qs(parsed.query))
+            elif path == '/api/kongming/status':
+                if self._require_admin() is None:
+                    return
+                self._send_json(kongming_status())
             elif path == '/api/git/repos':
                 if self._require_admin() is None:
                     return
@@ -4302,6 +4375,10 @@ class GMHandler(SimpleHTTPRequestHandler):
             self._git_resolve_excel_pull()
         elif path == '/api/ls/token-envs':
             self._ls_token_envs()
+        elif path == '/api/kongming/bridge':
+            self._kongming_bridge()
+        elif path == '/api/kongming/open-folder':
+            self._kongming_open_folder()
         else:
             self.send_error(404)
 
@@ -5062,6 +5139,39 @@ class GMHandler(SimpleHTTPRequestHandler):
             return
         self._send_json(result)
 
+    def _kongming_bridge(self):
+        data = self._read_json()
+        if data is None:
+            return
+        try:
+            status = bridge_kongming_skills(data.get('source_dir'))
+        except (ValueError, KongmingBridgeError) as exc:
+            self._send_json({'ok': False, 'code': 'bridge_failed', 'msg': str(exc)}, status=409)
+            return
+        except Exception as exc:
+            print(f'[KONGMING] bridge failed: {exc}')
+            self._send_json({'ok': False, 'code': 'failed', 'msg': '孔明 Skill 桥接失败'}, status=500)
+            return
+        if not status.get('ready'):
+            self._send_json(status, status=409)
+            return
+        self._send_json(status)
+
+    def _kongming_open_folder(self):
+        data = self._read_json()
+        if data is None:
+            return
+        try:
+            status = open_kongming_folder(data.get('target'))
+        except FileNotFoundError as exc:
+            self._send_json({'ok': False, 'code': 'not_found', 'msg': str(exc)}, status=404)
+            return
+        except Exception as exc:
+            print(f'[KONGMING] open folder failed: {exc}')
+            self._send_json({'ok': False, 'code': 'failed', 'msg': '孔明目录打开失败'}, status=500)
+            return
+        self._send_json({'ok': True, 'msg': '目录已打开', **status})
+
     def _read_json(self):
         length = int(self.headers.get('Content-Length', 0))
         raw = self.rfile.read(length) if length else b''
@@ -5109,6 +5219,14 @@ if __name__ == '__main__':
             save_items({'fields': [], 'items': [], 'updated_at': '', 'source': ITEM_XLSX})
             print(f'  道具表: 初始化失败({e})，可在工具内点“自动更新”重试')
     ensure_default_admin()
+    try:
+        startup_bridge = prepare_kongming_bridge(TOOL_DIR)
+        if startup_bridge.get('ready'):
+            print(f'  孔明 Skill: 已接入 {startup_bridge.get("skill_count", 0)} 个')
+        elif startup_bridge.get('source_exists'):
+            print(f'  孔明 Skill: {startup_bridge.get("message", "尚未就绪")}')
+    except Exception as exc:
+        print(f'  孔明 Skill: 自动桥接失败({exc})')
 
     print('==============================')
     print('  GM 命令管理工具 v1.0.0')

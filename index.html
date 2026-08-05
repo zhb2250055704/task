@@ -4737,6 +4737,71 @@
     .qa-artifact-head { flex-wrap: wrap; }
     .qa-artifact-download { width: 100%; }
   }
+  .kongming-panel { display: grid; gap: 16px; }
+  .kongming-hero,
+  .kongming-config,
+  .kongming-paths,
+  .kongming-skills {
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: var(--panel-solid);
+    box-shadow: var(--shadow-soft);
+  }
+  .kongming-hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 24px;
+    padding: 24px;
+  }
+  .kongming-kicker { display: block; margin-bottom: 8px; color: var(--accent); font-size: 11px; font-weight: 800; }
+  .kongming-hero h2 { margin: 0 0 8px; font-size: 20px; }
+  .kongming-hero p { max-width: 720px; margin: 0; color: var(--text-dim); line-height: 1.65; }
+  .kongming-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; }
+  .kongming-config,
+  .kongming-skills { padding: 20px; }
+  .kongming-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
+  .kongming-section-heading > div { display: grid; gap: 4px; }
+  .kongming-section-heading strong { color: var(--text); font-size: 14px; }
+  .kongming-section-heading span { color: var(--text-dim); font-size: 12px; }
+  .kongming-state-chip,
+  .kongming-list-summary { flex: 0 0 auto; padding: 5px 9px; border-radius: 999px; background: rgba(210,145,31,.14); color: #b7791f !important; font-size: 12px; font-weight: 800; }
+  .kongming-state-chip.ready { background: rgba(16,185,129,.12); color: #10b981 !important; }
+  .kongming-state-chip.error { background: rgba(239,68,68,.12); color: #ef4444 !important; }
+  .kongming-config-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; }
+  .kongming-path-input { display: flex; align-items: center; min-width: 0; height: 48px; padding: 0 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--input-bg); color: var(--text-dim); }
+  .kongming-path-input:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .kongming-path-input input { width: 100%; min-width: 0; height: 100%; padding: 0 0 0 10px; border: 0; outline: 0; background: transparent; color: var(--text); font: 12px/1.4 Consolas, monospace; }
+  .kongming-path-input input:read-only { cursor: not-allowed; opacity: .7; }
+  .kongming-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+  .kongming-metric { display: grid; gap: 8px; min-width: 0; padding: 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--panel-solid); box-shadow: var(--shadow-soft); }
+  .kongming-metric span { color: var(--text-dim); font-size: 12px; }
+  .kongming-metric strong { overflow-wrap: anywhere; color: var(--text); font-size: 16px; }
+  .kongming-paths { display: grid; overflow: hidden; }
+  .kongming-paths > div { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 16px; padding: 14px 18px; border-bottom: 1px solid var(--border); }
+  .kongming-paths > div:last-child { border-bottom: 0; }
+  .kongming-paths span { color: var(--text-dim); font-size: 12px; font-weight: 700; }
+  .kongming-paths code { overflow-wrap: anywhere; color: var(--text); font-size: 12px; }
+  .kongming-skill-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+  .kongming-skill-item { display: flex; align-items: center; min-width: 0; gap: 10px; padding: 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--input-bg); }
+  .kongming-skill-icon { display: grid; place-items: center; width: 34px; height: 34px; flex: 0 0 34px; border-radius: 8px; background: var(--accent-soft); color: var(--accent); }
+  .kongming-skill-copy { min-width: 0; display: grid; gap: 3px; }
+  .kongming-skill-copy strong { overflow: hidden; color: var(--text); font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+  .kongming-skill-copy span { color: var(--text-dim); font-size: 11px; }
+  .kongming-skill-item > .material-symbols-outlined { margin-left: auto; color: #10b981; font-size: 18px; }
+  .kongming-skill-item.pending > .material-symbols-outlined { color: #d2911f; }
+  .kongming-empty { grid-column: 1 / -1; padding: 30px; color: var(--text-dim); text-align: center; }
+  @media (max-width: 980px) {
+    .kongming-hero { grid-template-columns: 1fr; }
+    .kongming-actions { justify-content: flex-start; }
+    .kongming-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+  @media (max-width: 640px) {
+    .kongming-config-row,
+    .kongming-metrics { grid-template-columns: 1fr; }
+    .kongming-config-row .btn { width: 100%; }
+    .kongming-paths > div { grid-template-columns: 1fr; gap: 6px; }
+  }
 </style>
 </head>
 <body>
@@ -4747,6 +4812,7 @@
       <div class="nav-item active" data-view="commands" onclick="switchView('commands')" data-mark="CMD">命令管理</div>
       <div class="nav-item" data-view="scripts" onclick="switchView('scripts')" data-mark="SCR">脚本管理</div>
       <div class="nav-item" data-view="qa" onclick="switchView('qa')" data-mark="QA">测试设计</div>
+      <div class="nav-item admin-only" data-view="kongming" onclick="switchView('kongming')" style="display:none" data-mark="KM">孔明接入</div>
       <div class="nav-item" data-view="formulas" onclick="switchView('formulas')" data-mark="CAL">计算公式</div>
       <div class="nav-item" data-view="items" onclick="switchView('items')" data-mark="ITM">道具表</div>
       <div class="nav-item admin-only" data-view="git" onclick="switchView('git')" style="display:none" data-mark="GIT">Git 拉取</div>
@@ -5077,6 +5143,63 @@
             <div class="qa-history-empty">正在读取生成记录</div>
           </div>
         </section>
+      </div>
+    </div>
+
+    <!-- ============ 孔明 Skill 接入视图 ============ -->
+    <div class="view" id="view-kongming">
+      <header>
+        <h1>孔明接入</h1>
+        <div class="header-right"><span id="kongmingBadge" class="count-badge">检测中</span></div>
+      </header>
+      <div class="container">
+        <div class="kongming-panel">
+          <section class="kongming-hero" aria-labelledby="kongmingBridgeTitle">
+            <div class="kongming-hero-copy">
+              <span class="kongming-kicker">CODEX SKILL BRIDGE</span>
+              <h2 id="kongmingBridgeTitle">孔明 Skill 工作区桥接</h2>
+              <p id="kongmingMessage">正在检查孔明 Skill 源目录与 Codex 发现目录。</p>
+            </div>
+            <div class="kongming-actions">
+              <button class="btn btn-ghost" type="button" onclick="loadKongmingStatus()">刷新状态</button>
+              <button class="btn btn-ghost" type="button" onclick="openKongmingFolder('source')">打开源目录</button>
+              <button class="btn btn-ghost" type="button" onclick="openKongmingFolder('discovery')">打开发现目录</button>
+            </div>
+          </section>
+          <section class="kongming-config" aria-label="孔明 Skill 源目录配置">
+            <div class="kongming-section-heading">
+              <div><strong>Skill 源目录</strong><span id="kongmingSourceMeta">默认读取当前工作区的 .claude/skills</span></div>
+              <span id="kongmingSourceState" class="kongming-state-chip">待检测</span>
+            </div>
+            <div class="kongming-config-row">
+              <label class="kongming-path-input" for="kongmingSourceInput">
+                <span class="material-symbols-outlined">folder_managed</span>
+                <input id="kongmingSourceInput" type="text" spellcheck="false" autocomplete="off" placeholder="例如 C:\公司孔明项目\.claude\skills">
+              </label>
+              <button id="kongmingBridgeButton" class="btn btn-primary" type="button" onclick="bridgeKongmingSkills()">保存并建立桥接</button>
+            </div>
+          </section>
+          <div class="kongming-metrics" aria-label="孔明桥接摘要">
+            <div class="kongming-metric"><span>桥接状态</span><strong id="kongmingBridgeState">-</strong></div>
+            <div class="kongming-metric"><span>源 Skill</span><strong id="kongmingSkillCount">-</strong></div>
+            <div class="kongming-metric"><span>Codex 已发现</span><strong id="kongmingExposedCount">-</strong></div>
+            <div class="kongming-metric"><span>配置来源</span><strong id="kongmingSourceOrigin">-</strong></div>
+          </div>
+          <section class="kongming-paths" aria-label="孔明桥接路径">
+            <div><span>当前工作区</span><code id="kongmingWorkspace">-</code></div>
+            <div><span>孔明 Skill 源目录</span><code id="kongmingSourcePath">-</code></div>
+            <div><span>Codex 发现目录</span><code id="kongmingDiscoveryPath">-</code></div>
+          </section>
+          <section class="kongming-skills" aria-labelledby="kongmingSkillsTitle">
+            <div class="kongming-section-heading">
+              <div><strong id="kongmingSkillsTitle">已识别的孔明 Skills</strong><span>仅统计包含 SKILL.md 的有效目录</span></div>
+              <span id="kongmingSkillsSummary" class="kongming-list-summary">0 个</span>
+            </div>
+            <div id="kongmingSkillList" class="kongming-skill-list" aria-live="polite">
+              <div class="kongming-empty">正在读取 Skill 清单</div>
+            </div>
+          </section>
+        </div>
       </div>
     </div>
 
@@ -5452,6 +5575,7 @@ const GIT_API = '/api/git';
 const KS_CATALOG_API = '/api/ks/catalog';
 const KS_SYNC_API = '/api/ks/sync';
 const QA_TEST_DESIGN_API = '/api/qa-test-design';
+const KONGMING_API = '/api/kongming';
 let categoryCache = [];
 let currentView = 'commands';
 let currentUser = null;
@@ -5614,7 +5738,7 @@ function startLoginAutofillGuard() {
 }
 
 function switchView(view) {
-  if (view === 'users' && !isAdmin()) return;
+  if (['users', 'kongming', 'git'].includes(view) && !isAdmin()) return;
   currentView = view;
   document.querySelectorAll('.nav-item').forEach(el =>
     el.classList.toggle('active', el.dataset.view === view));
@@ -5634,6 +5758,7 @@ function switchView(view) {
     loadQaTestDesignStatus();
     loadQaHistory({ restoreLatest: !qaHistoryLoaded });
   }
+  else if (view === 'kongming') loadKongmingStatus();
   else if (view === 'formulas') loadFormulas();
   else if (view === 'items') loadItems();
   else if (view === 'git') loadGitRepos();
@@ -5663,6 +5788,99 @@ async function checkAuth() {
 async function doLogout() {
   await fetch('/api/auth/logout', { method: 'POST' });
   location.href = 'login.html';
+}
+
+const KONGMING_STATE_LABELS = {
+  linked: '已建立链接', merged: '已合并接入', unlinked: '等待桥接', merge_pending: '等待合并',
+  source_missing: '源目录缺失', source_empty: '未发现 Skill', conflict: '目录冲突'
+};
+
+function renderKongmingStatus(data) {
+  const stateLabel = KONGMING_STATE_LABELS[data.state] || '状态未知';
+  const linkLabels = { symlink: '符号链接', junction: '目录联接', merged: '逐项链接' };
+  const originLabels = { environment: '环境变量', saved: '已保存配置', default: '工作区默认' };
+  const linkLabel = linkLabels[data.link_kind] || '';
+  const sourceState = document.getElementById('kongmingSourceState');
+  const sourceInput = document.getElementById('kongmingSourceInput');
+  document.getElementById('kongmingBadge').textContent = stateLabel;
+  sourceState.textContent = data.source_exists ? '源目录有效' : '源目录缺失';
+  sourceState.classList.toggle('ready', !!data.source_exists);
+  sourceState.classList.toggle('error', !data.source_exists);
+  document.getElementById('kongmingMessage').textContent = data.message || '孔明 Skill 桥接状态已更新。';
+  document.getElementById('kongmingBridgeState').textContent = linkLabel ? `${stateLabel} · ${linkLabel}` : stateLabel;
+  document.getElementById('kongmingSkillCount').textContent = `${data.skill_count || 0} 个`;
+  document.getElementById('kongmingExposedCount').textContent = `${data.exposed_count || 0} 个`;
+  document.getElementById('kongmingSourceOrigin').textContent = originLabels[data.source_origin] || '-';
+  document.getElementById('kongmingWorkspace').textContent = data.workspace || '-';
+  document.getElementById('kongmingSourcePath').textContent = data.source_dir || '-';
+  document.getElementById('kongmingDiscoveryPath').textContent = data.discovery_dir || '-';
+  document.getElementById('kongmingSourceMeta').textContent = data.source_locked
+    ? '由 GM_KONGMING_SKILLS_DIR 环境变量管理'
+    : '保存后会在 Codex 每次启动任务前自动桥接';
+  if (document.activeElement !== sourceInput) sourceInput.value = data.source_dir || '';
+  sourceInput.readOnly = !!data.source_locked;
+  const skills = Array.isArray(data.skills) ? data.skills : [];
+  document.getElementById('kongmingSkillsSummary').textContent = `${skills.length} 个`;
+  document.getElementById('kongmingSkillList').innerHTML = skills.length
+    ? skills.map(skill => {
+        const exposed = !!skill.exposed;
+        const exposureText = skill.exposure === 'linked' ? '已链接' : (skill.exposure === 'existing' ? '同名目录保留' : '等待接入');
+        return `<div class="kongming-skill-item ${exposed ? '' : 'pending'}" title="${esc(skill.source_path || '')}">
+          <span class="kongming-skill-icon"><span class="material-symbols-outlined">extension</span></span>
+          <span class="kongming-skill-copy"><strong>${esc(skill.name || '未命名 Skill')}</strong><span>${exposureText}</span></span>
+          <span class="material-symbols-outlined">${exposed ? 'check_circle' : 'pending'}</span>
+        </div>`;
+      }).join('')
+    : '<div class="kongming-empty">源目录中暂未发现包含 SKILL.md 的有效 Skill</div>';
+}
+
+async function loadKongmingStatus() {
+  document.getElementById('kongmingBadge').textContent = '检测中';
+  try {
+    const res = await fetch(`${KONGMING_API}/status`, { cache: 'no-store' });
+    if (res.status === 401) { location.href = 'login.html'; return; }
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) throw new Error(data.msg || '孔明 Skill 状态读取失败');
+    renderKongmingStatus(data);
+  } catch (error) {
+    document.getElementById('kongmingBadge').textContent = '读取异常';
+    document.getElementById('kongmingMessage').textContent = error.message || '孔明 Skill 状态读取失败';
+  }
+}
+
+async function bridgeKongmingSkills() {
+  const button = document.getElementById('kongmingBridgeButton');
+  const sourceDir = document.getElementById('kongmingSourceInput').value.trim();
+  if (!sourceDir) { toast('请填写孔明 Skill 源目录'); return; }
+  button.disabled = true;
+  document.getElementById('kongmingBadge').textContent = '正在桥接';
+  try {
+    const res = await fetch(`${KONGMING_API}/bridge`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ source_dir: sourceDir })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (data.source_dir) renderKongmingStatus(data);
+    if (!res.ok || !data.ok) throw new Error(data.msg || data.message || '孔明 Skill 桥接失败');
+    toast(data.message || '孔明 Skill 已接入 Codex');
+  } catch (error) {
+    toast(error.message || '孔明 Skill 桥接失败');
+    await loadKongmingStatus();
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function openKongmingFolder(target) {
+  try {
+    const res = await fetch(`${KONGMING_API}/open-folder`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) throw new Error(data.msg || '孔明目录打开失败');
+    toast(data.msg || '目录已打开');
+  } catch (error) {
+    toast(error.message || '孔明目录打开失败');
+  }
 }
 
 async function loadCategories() {
