@@ -10,6 +10,7 @@ $BuildFiles = @(
     (Join-Path $ToolDir 'skillhub_translation.py'),
     (Join-Path $ToolDir 'kongming_bridge.py'),
     (Join-Path $ToolDir 'kongming_chat.py'),
+    (Join-Path $ToolDir 'kongming_index.py'),
     (Join-Path $ToolDir 'kongming_search.py')
 ) | Where-Object { Test-Path -LiteralPath $_ }
 $BuildBytes = [byte[]]($BuildFiles | ForEach-Object { [IO.File]::ReadAllBytes($_) })

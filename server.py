@@ -61,6 +61,11 @@ from kongming_chat import (
     normalize_kongming_question,
     save_kongming_conversation,
 )
+from kongming_index import (
+    get_kongming_index_status,
+    request_kongming_index_sync,
+    start_kongming_index_watcher,
+)
 from kongming_search import build_kongming_evidence
 
 if os.name == 'nt':
@@ -90,6 +95,7 @@ try:
         os.path.join(TOOL_DIR, 'skillhub_translation.py'),
         os.path.join(TOOL_DIR, 'kongming_bridge.py'),
         os.path.join(TOOL_DIR, 'kongming_chat.py'),
+        os.path.join(TOOL_DIR, 'kongming_index.py'),
         os.path.join(TOOL_DIR, 'kongming_search.py'),
     ):
         with open(build_file, 'rb') as source_file:
@@ -121,6 +127,7 @@ GIT_TIMEOUT = 180
 KONGMING_CHAT_TIMEOUT = int(os.environ.get('GM_KONGMING_CHAT_TIMEOUT', '240'))
 KONGMING_CACHE_TTL = int(os.environ.get('GM_KONGMING_CACHE_TTL', '600'))
 KONGMING_CACHE_MAX_ITEMS = int(os.environ.get('GM_KONGMING_CACHE_MAX_ITEMS', '100'))
+KONGMING_INDEX_INTERVAL = int(os.environ.get('GM_KONGMING_INDEX_INTERVAL', '60'))
 KONGMING_MODEL_PROVIDER = os.environ.get('GM_KONGMING_MODEL_PROVIDER', 'taishi')
 KONGMING_MODEL = os.environ.get('GM_KONGMING_MODEL', 'gpt-5.5')
 KONGMING_PROVIDER_BASE_URL = os.environ.get(
@@ -135,6 +142,7 @@ KONGMING_CHAT_WORKSPACE = os.environ.get(
     os.path.commonpath((KONGMING_CLIENT_ROOT, KONGMING_EXCEL_ROOT)),
 )
 KONGMING_CHAT_DIR = os.path.join(TOOL_DIR, 'runtime', 'kongming', 'conversations')
+KONGMING_INDEX_FILE = os.path.join(TOOL_DIR, 'runtime', 'kongming', 'search-index.sqlite3')
 
 # item 源表（游戏配表项目内的 COA_Item.xlsx）
 ITEM_XLSX = os.environ.get(
@@ -223,6 +231,27 @@ def _kongming_source():
     return load_kongming_source(TOOL_DIR, KONGMING_CONFIG_FILE)
 
 
+def _kongming_index_updated(result):
+    if result.get('changed_count') or result.get('removed_count'):
+        with _kongming_cache_lock:
+            _kongming_answer_cache.clear()
+    print(
+        '[KONGMING-INDEX] '
+        f'{result.get("file_count", 0)} files, '
+        f'{result.get("changed_count", 0)} changed, '
+        f'{result.get("duration_ms", 0)} ms'
+    )
+
+
+def start_kongming_index_service():
+    return start_kongming_index_watcher(
+        KONGMING_JSON_ROOT,
+        KONGMING_INDEX_FILE,
+        on_updated=_kongming_index_updated,
+        interval=KONGMING_INDEX_INTERVAL,
+    )
+
+
 def _kongming_chat_runtime_status():
     cli_path = find_kongming_cli()
     roots_ready = os.path.isdir(KONGMING_CLIENT_ROOT) and os.path.isdir(KONGMING_EXCEL_ROOT)
@@ -240,6 +269,7 @@ def _kongming_chat_runtime_status():
         'kongming_skill_ready': skill_ready,
         'search_acceleration': True,
         'answer_cache_ttl': KONGMING_CACHE_TTL,
+        'search_index': get_kongming_index_status(KONGMING_INDEX_FILE),
     }
 
 
@@ -1497,6 +1527,10 @@ def start_git_pull_job(repo_ids, resolve_excel=False):
                     resolver = {'closed': closed, 'locks': locks}
 
                 result = git_pull_repo_result(rid, progress=report)
+                if rid == 'excel' and result.get('ok'):
+                    with _kongming_cache_lock:
+                        _kongming_answer_cache.clear()
+                    request_kongming_index_sync('git_pull')
                 if resolver is not None:
                     prefix = [
                         '处理：已尝试关闭 WPS/Excel/ET 进程，并清理配置表锁文件。',
@@ -4284,6 +4318,10 @@ def _kongming_cache_key(question):
 def _kongming_cached_answer(question):
     if KONGMING_CACHE_TTL <= 0:
         return None
+    if get_kongming_index_status(KONGMING_INDEX_FILE).get('state') in (
+        'queued', 'building', 'updating'
+    ):
+        return None
     now = time.time()
     key = _kongming_cache_key(question)
     with _kongming_cache_lock:
@@ -4390,6 +4428,7 @@ def run_kongming_chat(owner_id, question, conversation_id=''):
                 KONGMING_EXCEL_ROOT,
                 KONGMING_JSON_ROOT,
                 context=_kongming_search_context(conversation),
+                index_path=KONGMING_INDEX_FILE,
             )
         except Exception as exc:
             print(f'[KONGMING] local evidence search failed: {exc}')
@@ -4449,6 +4488,8 @@ def run_kongming_chat(owner_id, question, conversation_id=''):
             'model_duration_ms': model_duration_ms,
             'table_candidate_count': len(evidence.get('table_candidates') or []),
             'client_candidate_count': len(evidence.get('client_candidates') or []),
+            'table_search_source': (evidence.get('table_search') or {}).get('source', 'rg'),
+            'index_generation': int((evidence.get('table_search') or {}).get('index_generation') or 0),
             'cache_hit': False,
             'bridge_state': bridge_status.get('state', ''),
         }
@@ -5637,6 +5678,7 @@ if __name__ == '__main__':
         print(f'  局域网访问(发给同事): http://{lan_ip}:{port}')
     start_cocos_bridge()
     start_skillhub_translation_watcher()
+    start_kongming_index_service()
     print('  Ctrl+C 停止')
     print()
 

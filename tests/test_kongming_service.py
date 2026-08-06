@@ -27,6 +27,11 @@ class KongmingServiceTests(unittest.TestCase):
             mock.patch.object(server, 'prepare_kongming_bridge', return_value={'state': 'linked', 'ready': True}),
             mock.patch.object(
                 server,
+                'get_kongming_index_status',
+                return_value={'ready': True, 'state': 'ready', 'generation': 7},
+            ),
+            mock.patch.object(
+                server,
                 'build_kongming_evidence',
                 return_value={
                     'keywords': ['九州风采'],
@@ -35,6 +40,7 @@ class KongmingServiceTests(unittest.TestCase):
                         'matched_rows': [],
                     }],
                     'client_candidates': [],
+                    'table_search': {'source': 'index', 'index_generation': 7},
                 },
             ),
             mock.patch.object(
@@ -69,6 +75,12 @@ class KongmingServiceTests(unittest.TestCase):
         self.assertIn('search_duration_ms', result)
         self.assertIn('model_duration_ms', result)
         self.assertEqual(result['evidence']['table_candidate_count'], 1)
+        self.assertEqual(result['message']['metadata']['table_search_source'], 'index')
+        self.assertEqual(result['message']['metadata']['index_generation'], 7)
+        self.assertEqual(
+            server.build_kongming_evidence.call_args.kwargs['index_path'],
+            server.KONGMING_INDEX_FILE,
+        )
 
         history = server.get_kongming_chat_payload('user-a', result['conversation']['id'])
         self.assertEqual(history['conversation']['messages'][1]['role'], 'assistant')
@@ -91,6 +103,18 @@ class KongmingServiceTests(unittest.TestCase):
         self.assertTrue(second['message']['metadata']['cache_hit'])
         self.assertEqual(server.subprocess.run.call_count, 1)
         self.assertEqual(server.build_kongming_evidence.call_count, 1)
+
+    def test_index_update_invalidates_answer_cache(self):
+        server._kongming_answer_cache['cached'] = {'answer': 'old'}
+
+        server._kongming_index_updated({
+            'file_count': 2,
+            'changed_count': 1,
+            'removed_count': 0,
+            'duration_ms': 10,
+        })
+
+        self.assertEqual(server._kongming_answer_cache, {})
 
 
 if __name__ == '__main__':

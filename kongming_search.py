@@ -6,8 +6,11 @@ import subprocess
 import time
 import unicodedata
 
+from kongming_index import search_kongming_index
+
 
 KONGMING_MAX_SEARCH_TERMS = 8
+KONGMING_MAX_SEARCH_TERM_LENGTH = 80
 KONGMING_MAX_TABLE_CANDIDATES = 12
 KONGMING_MAX_CLIENT_CANDIDATES = 18
 KONGMING_MAX_MATCHED_ROWS = 10
@@ -42,7 +45,7 @@ def extract_kongming_search_terms(text):
     terms = []
 
     for value in _IDENTIFIER_PATTERN.findall(normalized):
-        clean = value.strip('._-')
+        clean = value.strip('._-')[:KONGMING_MAX_SEARCH_TERM_LENGTH]
         if len(clean) < 2 or clean.lower() in _GENERIC_IDENTIFIERS:
             continue
         if clean not in terms:
@@ -53,7 +56,7 @@ def extract_kongming_search_terms(text):
         for phrase in _STOP_PHRASES:
             parts = [piece for part in parts for piece in part.split(phrase)]
         for part in parts:
-            clean = part.strip()
+            clean = part.strip()[:KONGMING_MAX_SEARCH_TERM_LENGTH]
             if len(clean) >= 2 and clean not in terms:
                 terms.append(clean)
 
@@ -326,7 +329,9 @@ def _fit_evidence(evidence):
             return evidence
 
 
-def build_kongming_evidence(question, client_root, excel_root, json_root, context=''):
+def build_kongming_evidence(
+    question, client_root, excel_root, json_root, context='', index_path=''
+):
     started_at = time.time()
     terms = extract_kongming_search_terms('\n'.join((str(question or ''), str(context or ''))))
     if not terms:
@@ -338,7 +343,26 @@ def build_kongming_evidence(question, client_root, excel_root, json_root, contex
             'message': '未能提取有效检索词，需要孔明进行定向分析。',
         }
 
-    table_paths = _run_rg_files(json_root, terms, ('*.json',), 100)
+    table_paths = {}
+    index_status = {}
+    table_search_source = 'rg'
+    if index_path:
+        table_paths, index_status = search_kongming_index(
+            index_path,
+            json_root,
+            terms,
+            limit=500,
+        )
+        if table_paths:
+            table_search_source = 'index'
+    index_state = index_status.get('state', '')
+    needs_fallback = not table_paths or index_state in ('queued', 'building', 'updating', 'failed')
+    if needs_fallback:
+        fallback_paths = _run_rg_files(json_root, terms, ('*.json',), 100)
+        for path, matched_terms in fallback_paths.items():
+            table_paths.setdefault(path, set()).update(matched_terms)
+        if table_search_source == 'index' and fallback_paths:
+            table_search_source = 'hybrid'
     prioritized_table_paths = sorted(
         table_paths.items(),
         key=lambda item: (-_table_path_score(item[0], item[1]), item[0]),
@@ -370,11 +394,16 @@ def build_kongming_evidence(question, client_root, excel_root, json_root, contex
     clients = clients[:KONGMING_MAX_CLIENT_CANDIDATES]
 
     evidence = {
-        'version': 1,
+        'version': 2,
         'keywords': terms,
         'table_candidates': tables,
         'client_candidates': clients,
         'duration_ms': int((time.time() - started_at) * 1000),
+        'table_search': {
+            'source': table_search_source,
+            'index_state': index_state or 'disabled',
+            'index_generation': int(index_status.get('generation') or 0),
+        },
         'search_roots': {
             'client': os.path.abspath(client_root),
             'excel': os.path.abspath(excel_root),
