@@ -61,6 +61,7 @@ from kongming_chat import (
     normalize_kongming_question,
     save_kongming_conversation,
 )
+from kongming_search import build_kongming_evidence
 
 if os.name == 'nt':
     try:
@@ -89,6 +90,7 @@ try:
         os.path.join(TOOL_DIR, 'skillhub_translation.py'),
         os.path.join(TOOL_DIR, 'kongming_bridge.py'),
         os.path.join(TOOL_DIR, 'kongming_chat.py'),
+        os.path.join(TOOL_DIR, 'kongming_search.py'),
     ):
         with open(build_file, 'rb') as source_file:
             build_hash.update(source_file.read())
@@ -117,6 +119,8 @@ GIT_REPOS = {
 }
 GIT_TIMEOUT = 180
 KONGMING_CHAT_TIMEOUT = int(os.environ.get('GM_KONGMING_CHAT_TIMEOUT', '240'))
+KONGMING_CACHE_TTL = int(os.environ.get('GM_KONGMING_CACHE_TTL', '600'))
+KONGMING_CACHE_MAX_ITEMS = int(os.environ.get('GM_KONGMING_CACHE_MAX_ITEMS', '100'))
 KONGMING_MODEL_PROVIDER = os.environ.get('GM_KONGMING_MODEL_PROVIDER', 'taishi')
 KONGMING_MODEL = os.environ.get('GM_KONGMING_MODEL', 'gpt-5.5')
 KONGMING_PROVIDER_BASE_URL = os.environ.get(
@@ -176,6 +180,8 @@ _cocos_connections = {}
 _cocos_bridge_error = ''
 _ks_cache_lock = threading.Lock()
 _kongming_chat_lock = threading.Lock()
+_kongming_cache_lock = threading.Lock()
+_kongming_answer_cache = {}
 
 QA_SKILL_NAME = 'qa-test-design'
 QA_CODEX_TIMEOUT = int(os.environ.get('GM_QA_CODEX_TIMEOUT', '300'))
@@ -232,6 +238,8 @@ def _kongming_chat_runtime_status():
         'codex_ready': bool(cli_path),
         'roots_ready': roots_ready,
         'kongming_skill_ready': skill_ready,
+        'search_acceleration': True,
+        'answer_cache_ttl': KONGMING_CACHE_TTL,
     }
 
 
@@ -4268,6 +4276,56 @@ def get_kongming_chat_payload(owner_id, conversation_id=''):
     }
 
 
+def _kongming_cache_key(question):
+    normalized = re.sub(r'\s+', ' ', str(question or '').strip()).lower()
+    return hashlib.sha256(normalized.encode('utf-8')).hexdigest()
+
+
+def _kongming_cached_answer(question):
+    if KONGMING_CACHE_TTL <= 0:
+        return None
+    now = time.time()
+    key = _kongming_cache_key(question)
+    with _kongming_cache_lock:
+        expired = [
+            cache_key for cache_key, value in _kongming_answer_cache.items()
+            if now - float(value.get('created_at') or 0) > KONGMING_CACHE_TTL
+        ]
+        for cache_key in expired:
+            _kongming_answer_cache.pop(cache_key, None)
+        cached = _kongming_answer_cache.get(key)
+        return dict(cached) if cached else None
+
+
+def _cache_kongming_answer(question, answer, metadata):
+    if KONGMING_CACHE_TTL <= 0:
+        return
+    key = _kongming_cache_key(question)
+    with _kongming_cache_lock:
+        if len(_kongming_answer_cache) >= max(1, KONGMING_CACHE_MAX_ITEMS):
+            oldest_key = min(
+                _kongming_answer_cache,
+                key=lambda cache_key: _kongming_answer_cache[cache_key].get('created_at', 0),
+            )
+            _kongming_answer_cache.pop(oldest_key, None)
+        _kongming_answer_cache[key] = {
+            'answer': str(answer or ''),
+            'metadata': dict(metadata or {}),
+            'created_at': time.time(),
+        }
+
+
+def _kongming_search_context(conversation):
+    messages = conversation.get('messages') if isinstance(conversation, dict) else []
+    context = []
+    for message in (messages or [])[-4:]:
+        role = message.get('role')
+        content = str(message.get('content') or '').strip()
+        if role in ('user', 'assistant') and content:
+            context.append(content[:4000])
+    return '\n'.join(context)
+
+
 def run_kongming_chat(owner_id, question, conversation_id=''):
     question = normalize_kongming_question(question)
     runtime_status = _kongming_chat_runtime_status()
@@ -4275,11 +4333,37 @@ def run_kongming_chat(owner_id, question, conversation_id=''):
         if not runtime_status.get('codex_ready'):
             raise RuntimeError('未找到 Codex 命令行工具，孔明对话服务暂不可用')
         raise RuntimeError('客户端或配置表目录不存在，孔明无法进行项目检索')
+    requested_conversation_id = str(conversation_id or '').strip()
+    if not requested_conversation_id:
+        cached = _kongming_cached_answer(question)
+        if cached and cached.get('answer'):
+            conversation = create_kongming_conversation(owner_id, question)
+            append_kongming_message(conversation, 'user', question)
+            cached_metadata = dict(cached.get('metadata') or {})
+            cached_metadata.update({'cache_hit': True, 'duration_ms': 0})
+            assistant_message = append_kongming_message(
+                conversation,
+                'assistant',
+                cached['answer'],
+                cached_metadata,
+            )
+            save_kongming_conversation(KONGMING_CHAT_DIR, conversation)
+            return {
+                'ok': True,
+                'answer': cached['answer'],
+                'message': assistant_message,
+                'conversation': conversation,
+                'conversations': list_kongming_conversations(KONGMING_CHAT_DIR, owner_id),
+                'engine': runtime_status.get('chat_engine'),
+                'duration_ms': 0,
+                'cached': True,
+            }
+
     if not _kongming_chat_lock.acquire(blocking=False):
         raise BlockingIOError('孔明正在分析上一条问题，请稍后再试')
 
     try:
-        conversation_id = str(conversation_id or '').strip()
+        conversation_id = requested_conversation_id
         conversation = (
             load_kongming_conversation(KONGMING_CHAT_DIR, owner_id, conversation_id)
             if conversation_id else None
@@ -4298,12 +4382,32 @@ def run_kongming_chat(owner_id, question, conversation_id=''):
         except Exception as exc:
             print(f'[KONGMING] chat workspace bridge failed: {exc}')
 
+        evidence_started_at = time.time()
+        try:
+            evidence = build_kongming_evidence(
+                question,
+                KONGMING_CLIENT_ROOT,
+                KONGMING_EXCEL_ROOT,
+                KONGMING_JSON_ROOT,
+                context=_kongming_search_context(conversation),
+            )
+        except Exception as exc:
+            print(f'[KONGMING] local evidence search failed: {exc}')
+            evidence = {
+                'keywords': [],
+                'table_candidates': [],
+                'client_candidates': [],
+                'message': '本地预检索失败，请进行定向只读检索。',
+            }
+        search_duration_ms = int((time.time() - evidence_started_at) * 1000)
+
         prompt = build_kongming_prompt(
             question,
             conversation,
             KONGMING_CLIENT_ROOT,
             KONGMING_EXCEL_ROOT,
             KONGMING_JSON_ROOT,
+            evidence=evidence,
         )
         cli_path = find_kongming_cli()
         env = os.environ.copy()
@@ -4322,7 +4426,9 @@ def run_kongming_chat(owner_id, question, conversation_id=''):
         }
         if os.name == 'nt':
             kwargs['creationflags'] = subprocess.CREATE_NO_WINDOW
+        model_started_at = time.time()
         proc = subprocess.run(_kongming_codex_exec_args(cli_path, KONGMING_CHAT_WORKSPACE), **kwargs)
+        model_duration_ms = int((time.time() - model_started_at) * 1000)
         answer = str(proc.stdout or '').strip()
         if proc.returncode != 0:
             diagnostic = str(proc.stderr or '').strip()
@@ -4336,12 +4442,20 @@ def run_kongming_chat(owner_id, question, conversation_id=''):
 
         duration_ms = int((time.time() - started_at) * 1000)
         append_kongming_message(conversation, 'user', question)
-        assistant_message = append_kongming_message(conversation, 'assistant', answer, {
+        metadata = {
             'engine': runtime_status.get('chat_engine'),
             'duration_ms': duration_ms,
+            'search_duration_ms': search_duration_ms,
+            'model_duration_ms': model_duration_ms,
+            'table_candidate_count': len(evidence.get('table_candidates') or []),
+            'client_candidate_count': len(evidence.get('client_candidates') or []),
+            'cache_hit': False,
             'bridge_state': bridge_status.get('state', ''),
-        })
+        }
+        assistant_message = append_kongming_message(conversation, 'assistant', answer, metadata)
         save_kongming_conversation(KONGMING_CHAT_DIR, conversation)
+        if not requested_conversation_id:
+            _cache_kongming_answer(question, answer, metadata)
         return {
             'ok': True,
             'answer': answer,
@@ -4350,6 +4464,14 @@ def run_kongming_chat(owner_id, question, conversation_id=''):
             'conversations': list_kongming_conversations(KONGMING_CHAT_DIR, owner_id),
             'engine': runtime_status.get('chat_engine'),
             'duration_ms': duration_ms,
+            'search_duration_ms': search_duration_ms,
+            'model_duration_ms': model_duration_ms,
+            'cached': False,
+            'evidence': {
+                'keywords': evidence.get('keywords') or [],
+                'table_candidate_count': len(evidence.get('table_candidates') or []),
+                'client_candidate_count': len(evidence.get('client_candidates') or []),
+            },
             'bridge': bridge_status,
         }
     finally:

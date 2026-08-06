@@ -59,6 +59,30 @@ class KongmingChatTests(unittest.TestCase):
         self.assertIn('再查关联配置表', prompt)
         self.assertIn('excel_json_mirror', prompt)
 
+    def test_prompt_uses_local_evidence_without_rescanning_roots(self):
+        conversation = create_kongming_conversation('user-a', '鉴宝活动')
+        evidence = {
+            'keywords': ['鉴宝'],
+            'table_candidates': [{
+                'xlsx_path': 'csv/common/COA_Antique.xlsx',
+                'matched_rows': [{'sheet': 'Antique', 'row': 3}],
+            }],
+            'client_candidates': [],
+        }
+
+        prompt = build_kongming_prompt(
+            '鉴宝活动关联哪些配置表',
+            conversation,
+            os.path.join(self.temp_dir.name, 'client'),
+            os.path.join(self.temp_dir.name, 'excel'),
+            os.path.join(self.temp_dir.name, 'excel', 'json'),
+            evidence=evidence,
+        )
+
+        self.assertIn('COA_Antique.xlsx', prompt)
+        self.assertIn('证据足够时直接回答', prompt)
+        self.assertIn('不得重新扫描整个 client_root 或 excel_root', prompt)
+
     def test_empty_and_oversized_questions_are_rejected(self):
         with self.assertRaises(ValueError):
             normalize_kongming_question('  ')

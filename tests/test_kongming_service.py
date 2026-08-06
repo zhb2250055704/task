@@ -10,6 +10,7 @@ import server
 class KongmingServiceTests(unittest.TestCase):
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
+        server._kongming_answer_cache.clear()
         self.client_root = os.path.join(self.temp_dir.name, 'client')
         self.excel_root = os.path.join(self.temp_dir.name, 'excel')
         self.json_root = os.path.join(self.excel_root, 'json')
@@ -25,6 +26,18 @@ class KongmingServiceTests(unittest.TestCase):
             mock.patch.object(server, 'find_kongming_cli', return_value=os.path.join(self.temp_dir.name, 'codex.exe')),
             mock.patch.object(server, 'prepare_kongming_bridge', return_value={'state': 'linked', 'ready': True}),
             mock.patch.object(
+                server,
+                'build_kongming_evidence',
+                return_value={
+                    'keywords': ['九州风采'],
+                    'table_candidates': [{
+                        'xlsx_path': 'csv/common/COA_Activity.xlsx',
+                        'matched_rows': [],
+                    }],
+                    'client_candidates': [],
+                },
+            ),
+            mock.patch.object(
                 server.subprocess,
                 'run',
                 return_value=SimpleNamespace(returncode=0, stdout='关联 COA_Activity.xlsx', stderr=''),
@@ -36,6 +49,7 @@ class KongmingServiceTests(unittest.TestCase):
     def tearDown(self):
         for patch in reversed(self.patches):
             patch.stop()
+        server._kongming_answer_cache.clear()
         self.temp_dir.cleanup()
 
     def test_chat_runs_in_read_only_mode_and_persists_answer(self):
@@ -49,7 +63,12 @@ class KongmingServiceTests(unittest.TestCase):
         self.assertIn('--ignore-user-config', call_args[0])
         self.assertIn('model_reasoning_effort="low"', call_args[0])
         self.assertIn('九州风采关联哪些配置表', call_kwargs['input'])
+        self.assertIn('COA_Activity.xlsx', call_kwargs['input'])
         self.assertEqual(call_kwargs['cwd'], self.temp_dir.name)
+        self.assertFalse(result['cached'])
+        self.assertIn('search_duration_ms', result)
+        self.assertIn('model_duration_ms', result)
+        self.assertEqual(result['evidence']['table_candidate_count'], 1)
 
         history = server.get_kongming_chat_payload('user-a', result['conversation']['id'])
         self.assertEqual(history['conversation']['messages'][1]['role'], 'assistant')
@@ -60,6 +79,18 @@ class KongmingServiceTests(unittest.TestCase):
 
         self.assertTrue(server._kongming_chat_lock.acquire(blocking=False))
         server._kongming_chat_lock.release()
+
+    def test_repeated_new_question_uses_cached_answer(self):
+        first = server.run_kongming_chat('user-a', '九州风采关联哪些配置表')
+        second = server.run_kongming_chat('user-a', '  九州风采关联哪些配置表  ')
+
+        self.assertFalse(first['cached'])
+        self.assertTrue(second['cached'])
+        self.assertEqual(second['answer'], first['answer'])
+        self.assertEqual(second['duration_ms'], 0)
+        self.assertTrue(second['message']['metadata']['cache_hit'])
+        self.assertEqual(server.subprocess.run.call_count, 1)
+        self.assertEqual(server.build_kongming_evidence.call_count, 1)
 
 
 if __name__ == '__main__':
