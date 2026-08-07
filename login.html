@@ -905,6 +905,8 @@ async function doLogin() {
     });
     const data = await res.json();
     if (data.ok) {
+      sessionStorage.removeItem('gm_ks_auto_sync');
+      sessionStorage.removeItem('gm_ks_token_bridge_attempted');
       location.href = 'index.html';
     } else {
       err.textContent = data.msg || '登录失败';

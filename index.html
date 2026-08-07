@@ -424,6 +424,21 @@
   .ls-token-table td { padding: 9px 10px; border-bottom: 1px solid var(--border); text-align: left; font-size: 12px; vertical-align: top; }
   .ls-token-table th { color: var(--text-dim); font-weight: 800; }
   .ls-token-muted { color: var(--text-dim); font-size: 12px; line-height: 1.6; }
+  .ks-token-auto-sync {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 10px;
+    padding: 9px 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--input-bg);
+  }
+  .ks-token-auto-sync .material-symbols-outlined { color: var(--accent); font-size: 18px; }
+  .ks-token-auto-sync span:nth-child(2) { min-width: 0; flex: 1; color: var(--text-dim); font-size: 11px; line-height: 1.5; }
+  .ks-token-auto-sync.is-success .material-symbols-outlined { color: var(--success); }
+  .ks-token-auto-sync.is-warning .material-symbols-outlined { color: var(--warning); }
+  .ks-token-auto-sync.is-error .material-symbols-outlined { color: var(--danger); }
   @media (max-width: 760px) {
     .ls-token-grid { grid-template-columns: 1fr; }
     .ks-catalog-toolbar { grid-template-columns: 1fr; }
@@ -5451,6 +5466,11 @@
                 <label for="lsBaseUrlInput">KS 地址（可选）</label>
                 <input id="lsBaseUrlInput" type="text" placeholder="例如：https://zxty.tuyoo.com">
                 <div class="ls-token-muted" style="margin-top:8px">留空时使用已保存的 KS 地址。同步后会更新环境、历史登录账号和当前在线状态。</div>
+                <div class="ks-token-auto-sync" id="ksTokenAutoSyncStatus">
+                  <span class="material-symbols-outlined">extension</span>
+                  <span id="ksTokenAutoSyncText">登录后自动检测 KS Token 浏览器桥接</span>
+                  <button class="btn btn-ghost" type="button" onclick="openKsTokenBridgeFolder()">安装桥接</button>
+                </div>
               </div>
             </div>
             <div class="ls-token-actions">
@@ -5723,6 +5743,9 @@ const USER_API = '/api/users';
 const GIT_API = '/api/git';
 const KS_CATALOG_API = '/api/ks/catalog';
 const KS_SYNC_API = '/api/ks/sync';
+const KS_TOKEN_BRIDGE_REQUEST = 'GM_KS_TOKEN_BRIDGE_REQUEST';
+const KS_TOKEN_BRIDGE_PROGRESS = 'GM_KS_TOKEN_BRIDGE_PROGRESS';
+const KS_TOKEN_BRIDGE_RESULT = 'GM_KS_TOKEN_BRIDGE_RESULT';
 const QA_TEST_DESIGN_API = '/api/qa-test-design';
 const KONGMING_API = '/api/kongming';
 let categoryCache = [];
@@ -5940,6 +5963,8 @@ async function checkAuth() {
 }
 
 async function doLogout() {
+  sessionStorage.removeItem('gm_ks_auto_sync');
+  sessionStorage.removeItem('gm_ks_token_bridge_attempted');
   await fetch('/api/auth/logout', { method: 'POST' });
   location.href = 'login.html';
 }
@@ -6409,10 +6434,109 @@ async function initializeKsCatalog() {
   loadKsCatalogFromStorage();
   renderKsCatalogFilters();
   const data = await loadKsCatalogStatus();
+  if (!data || !isAdmin()) return;
+  const bridgeAttempted = sessionStorage.getItem('gm_ks_token_bridge_attempted') === '1';
+  if (!bridgeAttempted) {
+    sessionStorage.setItem('gm_ks_token_bridge_attempted', '1');
+    void autoRefreshKsTokenAndSync(data);
+    return;
+  }
   const alreadySynced = sessionStorage.getItem('gm_ks_auto_sync') === '1';
-  if (data && isAdmin() && data.configured && !data.expired && !alreadySynced) {
+  if (data.configured && !data.expired && !alreadySynced) {
     sessionStorage.setItem('gm_ks_auto_sync', '1');
     void syncKsCatalog(false);
+  }
+}
+
+function setKsTokenAutoSyncStatus(message, state, icon) {
+  const box = document.getElementById('ksTokenAutoSyncStatus');
+  const text = document.getElementById('ksTokenAutoSyncText');
+  if (!box || !text) return;
+  box.className = 'ks-token-auto-sync' + (state ? ` is-${state}` : '');
+  const iconElement = box.querySelector('.material-symbols-outlined');
+  if (iconElement) iconElement.textContent = icon || 'extension';
+  text.textContent = message;
+}
+
+function requestKsSyncFromBrowserBridge() {
+  return new Promise((resolve, reject) => {
+    const requestId = `ks-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    let acknowledged = false;
+    let finished = false;
+    const cleanup = () => {
+      window.removeEventListener('message', onMessage);
+      clearTimeout(detectionTimer);
+      clearTimeout(operationTimer);
+    };
+    const fail = message => {
+      if (finished) return;
+      finished = true;
+      cleanup();
+      reject(new Error(message));
+    };
+    const onMessage = event => {
+      if (event.source !== window || event.origin !== window.location.origin) return;
+      const payload = event.data || {};
+      if (payload.requestId !== requestId) return;
+      if (payload.type === KS_TOKEN_BRIDGE_PROGRESS) {
+        acknowledged = true;
+        clearTimeout(detectionTimer);
+        setKsTokenAutoSyncStatus(payload.message || '正在从 KS 当前登录会话读取 Token...', '', 'sync');
+        return;
+      }
+      if (payload.type !== KS_TOKEN_BRIDGE_RESULT) return;
+      finished = true;
+      cleanup();
+      if (payload.ok && payload.data) resolve(payload.data);
+      else reject(new Error(payload.error || '没有从 KS 页面读取到 Token'));
+    };
+    window.addEventListener('message', onMessage);
+    const detectionTimer = setTimeout(() => {
+      if (!acknowledged) fail('未检测到浏览器桥接，请先完成一次安装');
+    }, 1500);
+    const operationTimer = setTimeout(() => fail('读取 KS Token 超时，请确认当前浏览器已登录 KS'), 30000);
+    window.postMessage({ type: KS_TOKEN_BRIDGE_REQUEST, requestId }, window.location.origin);
+  });
+}
+
+async function autoRefreshKsTokenAndSync(savedStatus) {
+  setKsTokenAutoSyncStatus('正在检测 KS Token 浏览器桥接...', '', 'extension');
+  try {
+    const data = await requestKsSyncFromBrowserBridge();
+    renderLsTokenResult(data);
+    if (!data.ok) throw new Error(data.msg || 'KS 环境与账号同步失败');
+    ksConfigured = true;
+    ksTokenExpired = false;
+    saveKsCatalog(data.catalog || {});
+    sessionStorage.setItem('gm_ks_auto_sync', '1');
+    await loadCocosStatus({ forceRefresh: true });
+    const catalog = data.catalog || {};
+    const envCount = Number(catalog.environment_count) || (catalog.environments || []).length;
+    const accountCount = Number(catalog.account_count) || 0;
+    setKsTokenAutoSyncStatus(`自动同步完成：${envCount} 个环境 · ${accountCount} 个账号`, 'success', 'check_circle');
+    toast('KS Token 已自动更新，环境与账号同步完成');
+  } catch (error) {
+    if (savedStatus && savedStatus.configured && !savedStatus.expired) {
+      setKsTokenAutoSyncStatus('浏览器桥接不可用，正在使用服务端已保存的有效 Token 同步', 'warning', 'info');
+      sessionStorage.setItem('gm_ks_auto_sync', '1');
+      const fallback = await syncKsCatalog(false);
+      if (fallback) {
+        setKsTokenAutoSyncStatus('已使用服务端保存的 Token 完成同步', 'success', 'check_circle');
+      }
+      return;
+    }
+    setKsTokenAutoSyncStatus(error.message || 'KS Token 自动同步失败', 'error', 'error');
+  }
+}
+
+async function openKsTokenBridgeFolder() {
+  try {
+    const res = await fetch('/api/ks/token-bridge/open-folder', { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok || !data.ok) throw new Error(data.msg || '桥接目录打开失败');
+    toast('已打开桥接目录，请按 README 完成一次安装');
+  } catch (error) {
+    toast(error.message || '桥接目录打开失败');
   }
 }
 

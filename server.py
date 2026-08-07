@@ -111,6 +111,7 @@ USER_FILE = os.path.join(TOOL_DIR, 'gm_users.json')
 ITEM_FILE = os.path.join(TOOL_DIR, 'gm_items.json')
 KS_CONFIG_FILE = os.path.join(TOOL_DIR, 'gm_ks_config.json')
 KS_ACCOUNT_CACHE_FILE = os.path.join(TOOL_DIR, 'gm_account_cache.json')
+KS_TOKEN_BRIDGE_DIR = os.path.join(TOOL_DIR, 'browser-extension', 'ks-token-auto-sync')
 KONGMING_CONFIG_FILE = os.path.join(TOOL_DIR, 'runtime', 'kongming', 'config.json')
 
 GIT_REPOS = {
@@ -324,6 +325,20 @@ def open_kongming_folder(target='source'):
     else:
         webbrowser.open(path)
     return status
+
+
+def open_ks_token_bridge_folder():
+    if not os.path.isfile(os.path.join(KS_TOKEN_BRIDGE_DIR, 'manifest.json')):
+        raise FileNotFoundError('未找到 KS Token 浏览器桥接目录')
+    if os.name == 'nt':
+        subprocess.Popen(['explorer.exe', KS_TOKEN_BRIDGE_DIR])
+    else:
+        webbrowser.open(KS_TOKEN_BRIDGE_DIR)
+    return {
+        'ok': True,
+        'path': KS_TOKEN_BRIDGE_DIR,
+        'msg': '已打开 KS Token 浏览器桥接目录',
+    }
 
 
 def load_data():
@@ -3479,7 +3494,8 @@ def execute_gm_commands(commands, target_id='', target_ids=None, target_specs=No
     if offline_specs:
         results.append(('ks', execute_ks_commands(commands, offline_specs)))
     if len(results) == 1:
-        return results[0][1]
+        channel, result = results[0]
+        return {**result, 'channels': [channel]}
 
     batch_results = []
     for channel, result in results:
@@ -3498,6 +3514,7 @@ def execute_gm_commands(commands, target_id='', target_ids=None, target_specs=No
         'failure_count': failure_count,
         'batch_results': batch_results,
         'channel_results': {channel: result for channel, result in results},
+        'channels': [channel for channel, _ in results],
     }
     if ok:
         response['msg'] = f'已投递 {success_count} 个账号'
@@ -4757,6 +4774,8 @@ class GMHandler(SimpleHTTPRequestHandler):
             self._cocos_execute()
         elif path == '/api/ks/sync':
             self._ks_sync()
+        elif path == '/api/ks/token-bridge/open-folder':
+            self._ks_token_bridge_open_folder()
         elif path == '/api/git/pull':
             self._git_pull()
         elif path == '/api/git/resolve-excel-pull':
@@ -5385,6 +5404,16 @@ class GMHandler(SimpleHTTPRequestHandler):
             print(f'[KS] sync failed: {exc}')
             result = {'ok': False, 'code': 'ks_sync_failed', 'msg': 'KS 环境同步失败'}
         self._send_json(result, status=200 if result.get('ok') else 400)
+
+    def _ks_token_bridge_open_folder(self):
+        try:
+            result = open_ks_token_bridge_folder()
+        except FileNotFoundError as exc:
+            result = {'ok': False, 'code': 'ks_token_bridge_missing', 'msg': str(exc)}
+        except Exception as exc:
+            print(f'[KS-TOKEN-BRIDGE] open folder failed: {exc}')
+            result = {'ok': False, 'code': 'ks_token_bridge_failed', 'msg': '浏览器桥接目录打开失败'}
+        self._send_json(result, status=200 if result.get('ok') else 404)
 
     def _read_qa_multipart_files(self):
         content_type = str(self.headers.get('Content-Type') or '')

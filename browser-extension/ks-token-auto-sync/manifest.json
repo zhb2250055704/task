@@ -1,0 +1,30 @@
+{
+  "manifest_version": 3,
+  "name": "GM KS Token Auto Sync",
+  "version": "1.0.0",
+  "description": "登录 GM 工具时，从当前 KS 浏览器会话读取 Token 并自动同步个人环境与账号。",
+  "permissions": [
+    "scripting",
+    "tabs"
+  ],
+  "host_permissions": [
+    "https://zxty.tuyoo.com/keystone/*",
+    "http://localhost:9092/*",
+    "http://127.0.0.1:9092/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://localhost:9092/*",
+        "http://127.0.0.1:9092/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_start"
+    }
+  ]
+}
