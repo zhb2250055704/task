@@ -1770,6 +1770,9 @@ class CocosBridgeConnection:
             'roleId', 'roleName', 'playerId', 'serverId', 'clientId', 'ready',
         }
         normalized = {key: info.get(key) for key in allowed if key in info}
+        # The game does not know the bridge-side connection id. Fill it here so
+        # an identity hello can be used immediately after the socket opens.
+        normalized.setdefault('clientId', self.connection_id)
         with self.info_lock:
             self.target_info = normalized
             self.target_info_updated_at = time.time()
