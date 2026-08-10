@@ -12699,7 +12699,7 @@ const KONGMING_STEP_STATE = {
 
 function renderKongmingWorkflow(workflow) {
   if (!workflow || !workflow.id) return '';
-  const state = KONGMING_WORKFLOW_STATE[workflow.state] || { label: '状态未知', icon: 'help' };
+  let state = KONGMING_WORKFLOW_STATE[workflow.state] || { label: '状态未知', icon: 'help' };
   const environment = workflow.environment || {};
   const accountServers = Array.isArray(workflow.account_servers) ? workflow.account_servers : [];
   const scriptServers = Array.isArray(workflow.script_servers) ? workflow.script_servers : [];
@@ -12716,6 +12716,9 @@ function renderKongmingWorkflow(workflow) {
   const executionStep = steps.find(step => ['execute_account_command', 'execute_reward_command'].includes(step.id)) || {};
   const executionResult = executionStep.result || {};
   const gameResultVerified = executionResult.verification_status === 'verified';
+  const deliveredOnly = isAccountTargetWorkflow && workflow.state === 'completed' && !gameResultVerified;
+  if (deliveredOnly) state = { label: '已投递', icon: 'outbox' };
+  const workflowStateClass = deliveredOnly ? 'queued' : (workflow.state || '');
   const workflowId = esc(workflow.id);
   const commandText = String(command.command || command.name || '');
   const canEditCommand = isRewardWorkflow && workflow.state === 'pending_confirmation' && isAdmin();
@@ -12768,7 +12771,7 @@ function renderKongmingWorkflow(workflow) {
     <div class="kongming-workflow-preview-label"><span class="material-symbols-outlined">fact_check</span><span>任务预览</span><small>${state.label}</small></div>
     <div class="kongming-workflow-head">
       <div class="kongming-workflow-title"><strong>${esc(workflow.title || defaultTitle)}</strong><span>${esc(environment.name || environment.app_id || '')}${headExtra}</span></div>
-      <span class="kongming-workflow-state ${esc(workflow.state || '')}"><span class="material-symbols-outlined">${state.icon}</span>${state.label}</span>
+      <span class="kongming-workflow-state ${esc(workflowStateClass)}"><span class="material-symbols-outlined">${state.icon}</span>${state.label}</span>
     </div>
     <div class="kongming-workflow-scope">${scopeHtml}</div>
     <div class="kongming-workflow-steps">${stepsHtml}</div>
