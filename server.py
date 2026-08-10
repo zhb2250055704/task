@@ -182,11 +182,15 @@ GIT_JOB_TTL = 30 * 60
 
 COCOS_WS_PORT = int(os.environ.get('GM_COCOS_WS_PORT', '5101'))
 COCOS_RPC_TIMEOUT = 15
+COCOS_HEARTBEAT_LEASE_SECONDS = max(
+    20, int(os.environ.get('GM_COCOS_HEARTBEAT_LEASE_SECONDS', '45'))
+)
 COCOS_PROXY_HTTP_PORT = int(os.environ.get('GM_COCOS_PROXY_HTTP_PORT', '5200'))
 COCOS_PROXY_TIMEOUT = 8
 _cocos_bridge_lock = threading.Lock()
 _cocos_connections = {}
 _cocos_bridge_error = ''
+_cocos_bridge_last_disconnect = {'reason': '', 'at': 0}
 _ks_cache_lock = threading.Lock()
 _kongming_chat_lock = threading.Lock()
 _kongming_cache_lock = threading.Lock()
@@ -1672,6 +1676,26 @@ class CocosBridgeConnection:
         self.next_id = 1
         self.target_info = {}
         self.target_info_updated_at = 0
+        self.connected_at = time.time()
+        self.last_seen_at = self.connected_at
+        self.last_heartbeat_at = 0
+        self.close_reason = ''
+
+    def mark_seen(self, heartbeat=False):
+        now = time.time()
+        with self.info_lock:
+            self.last_seen_at = now
+            if heartbeat:
+                self.last_heartbeat_at = now
+
+    def lease_expired(self, now=None):
+        if not self.alive:
+            return True
+        with self.info_lock:
+            last_seen_at = getattr(self, 'last_seen_at', 0)
+        if not last_seen_at:
+            return False
+        return (now or time.time()) - last_seen_at > COCOS_HEARTBEAT_LEASE_SECONDS
 
     def send_frame(self, payload, opcode=1):
         with self.send_lock:
@@ -1708,11 +1732,13 @@ class CocosBridgeConnection:
 
     def read_loop(self):
         fragments = []
+        close_reason = 'client_closed'
         try:
             while self.alive:
                 opcode, payload = _websocket_read_frame(self.sock)
                 if opcode == 0x8:
                     break
+                self.mark_seen()
                 if opcode == 0x9:
                     self.send_frame(payload, opcode=0xA)
                     continue
@@ -1733,10 +1759,10 @@ class CocosBridgeConnection:
                     fragments = []
                     continue
                 fragments = []
-                if data.get('method') == 'gmClientHello':
+                if data.get('method') in ('gmClientHello', 'gmClientHeartbeat'):
                     params = data.get('params')
                     info = params[0] if isinstance(params, list) and params else {}
-                    self.set_target_info(info)
+                    self.set_target_info(info, heartbeat=True)
                     continue
                 request_id = data.get('id')
                 if request_id is None:
@@ -1751,9 +1777,9 @@ class CocosBridgeConnection:
                         box['result'] = data.get('result')
                     event.set()
         except (ConnectionError, OSError, ValueError):
-            pass
+            close_reason = 'network_error'
         finally:
-            self.close()
+            self.close(close_reason)
 
     def refresh_target_info(self):
         result = self.send_rpc('getGmTargetInfo', [])
@@ -1762,7 +1788,7 @@ class CocosBridgeConnection:
         self.set_target_info(result['result'])
         return True
 
-    def set_target_info(self, info):
+    def set_target_info(self, info, heartbeat=False):
         if not isinstance(info, dict):
             return False
         allowed = {
@@ -1773,15 +1799,22 @@ class CocosBridgeConnection:
         # The game does not know the bridge-side connection id. Fill it here so
         # an identity hello can be used immediately after the socket opens.
         normalized.setdefault('clientId', self.connection_id)
+        now = time.time()
         with self.info_lock:
             self.target_info = normalized
-            self.target_info_updated_at = time.time()
+            self.target_info_updated_at = now
+            self.last_seen_at = now
+            if heartbeat:
+                self.last_heartbeat_at = now
         return True
 
     def target_snapshot(self):
         with self.info_lock:
             info = dict(self.target_info)
             updated_at = self.target_info_updated_at
+            connected_at = getattr(self, 'connected_at', 0)
+            last_seen_at = getattr(self, 'last_seen_at', 0)
+            last_heartbeat_at = getattr(self, 'last_heartbeat_at', 0)
         environment_url = normalize_game_url(info.get('environmentUrl'))
         environment = str(info.get('environment') or '').strip()
         if not environment:
@@ -1795,7 +1828,7 @@ class CocosBridgeConnection:
         client_id = str(info.get('clientId') or '').strip()
         port = str(self.address[1])
         ready = bool(info.get('ready')) and bool(account_id or role_id or player_id)
-        dispatchable = all((client_id, port, account_id, role_id, server_id, environment_url))
+        dispatchable = all((client_id, port, role_id, server_id, environment_url))
         if role_name:
             label = role_name
         elif account_name and account_name not in ('TUGuest', 'Guest'):
@@ -1828,15 +1861,26 @@ class CocosBridgeConnection:
             'connected': True,
             'address': f'{self.address[0]}:{self.address[1]}',
             'updated_at': int(updated_at) if updated_at else 0,
+            'connected_at': int(connected_at) if connected_at else 0,
+            'last_seen_at': int(last_seen_at) if last_seen_at else 0,
+            'last_heartbeat_at': int(last_heartbeat_at) if last_heartbeat_at else 0,
+            'lease_seconds': COCOS_HEARTBEAT_LEASE_SECONDS,
+            'lease_remaining': max(
+                0, int(COCOS_HEARTBEAT_LEASE_SECONDS - (time.time() - last_seen_at))
+            ) if last_seen_at else COCOS_HEARTBEAT_LEASE_SECONDS,
         }
 
     def _is_final_frame(self, payload):
         # Cocos 的 RPC 响应均为单帧文本；保留此方法让读取逻辑对普通文本帧保持清晰。
         return True
 
-    def close(self):
-        was_alive = self.alive
-        self.alive = False
+    def close(self, reason='connection_closed'):
+        global _cocos_bridge_last_disconnect
+        with self.info_lock:
+            was_alive = self.alive
+            self.alive = False
+            if reason and not self.close_reason:
+                self.close_reason = reason
         try:
             self.sock.shutdown(socket.SHUT_RDWR)
         except OSError:
@@ -1854,6 +1898,36 @@ class CocosBridgeConnection:
         if was_alive:
             with _cocos_bridge_lock:
                 _cocos_connections.pop(self.connection_id, None)
+                _cocos_bridge_last_disconnect = {
+                    'reason': self.close_reason or reason or 'connection_closed',
+                    'at': int(time.time()),
+                    'connection_id': self.connection_id,
+                }
+
+
+def _cocos_disconnect_message(reason):
+    reason = str(reason or '').strip()
+    if reason == 'heartbeat_timeout':
+        return '游戏客户端心跳超时，连接已自动清理；客户端会自动重新连接'
+    if reason == 'client_closed':
+        return '游戏客户端已主动断开连接'
+    if reason == 'network_error':
+        return '游戏客户端连接发生网络错误'
+    if reason == 'server_stopped':
+        return '本机 GM 服务已停止'
+    if reason:
+        return '游戏客户端连接已断开'
+    return ''
+
+
+def _active_cocos_connections():
+    with _cocos_bridge_lock:
+        connections = [item for item in _cocos_connections.values() if item.alive]
+    now = time.time()
+    for connection in connections:
+        if connection.lease_expired(now):
+            connection.close('heartbeat_timeout')
+    return [item for item in connections if item.alive]
 
 
 def _cocos_environment_name(environment_url):
@@ -2097,9 +2171,20 @@ def _cocos_target_refresh_loop(connection):
             time.sleep(0.5)
 
 
+def _cocos_lease_loop(connection):
+    interval = min(5, max(1, COCOS_HEARTBEAT_LEASE_SECONDS // 3))
+    while connection.alive:
+        time.sleep(interval)
+        if connection.lease_expired():
+            print(f'[COCOS] heartbeat timeout: {connection.connection_id[:8]}')
+            connection.close('heartbeat_timeout')
+            return
+
+
 def _cocos_client_thread(sock, address):
     try:
         _cocos_handshake(sock)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
         connection = CocosBridgeConnection(sock, address)
         with _cocos_bridge_lock:
             _cocos_connections[connection.connection_id] = connection
@@ -2107,6 +2192,12 @@ def _cocos_client_thread(sock, address):
             target=_cocos_target_refresh_loop,
             args=(connection,),
             name=f'cocos-target-{connection.connection_id[:8]}',
+            daemon=True,
+        ).start()
+        threading.Thread(
+            target=_cocos_lease_loop,
+            args=(connection,),
+            name=f'cocos-lease-{connection.connection_id[:8]}',
             daemon=True,
         ).start()
         print(f'[COCOS] connected: {connection.connection_id[:8]} {address[0]}:{address[1]}')
@@ -2152,8 +2243,9 @@ def start_cocos_bridge():
 
 
 def cocos_bridge_status():
+    connections = _active_cocos_connections()
     with _cocos_bridge_lock:
-        connections = [item for item in _cocos_connections.values() if item.alive]
+        last_disconnect = dict(_cocos_bridge_last_disconnect)
     direct_targets = [item.target_snapshot() for item in connections]
     proxy_targets, proxy_error = _cocos_proxy_targets()
     targets = direct_targets + proxy_targets
@@ -2187,6 +2279,14 @@ def cocos_bridge_status():
         'port': COCOS_WS_PORT,
         'error': _cocos_bridge_error,
         'proxy_error': proxy_error if not direct_targets and not proxy_targets else '',
+        'connection_state': (
+            'direct_online' if direct_targets else
+            ('proxy_online' if proxy_targets else 'waiting_for_client')
+        ),
+        'heartbeat_lease_seconds': COCOS_HEARTBEAT_LEASE_SECONDS,
+        'last_disconnect_reason': last_disconnect.get('reason', ''),
+        'last_disconnect_message': _cocos_disconnect_message(last_disconnect.get('reason')),
+        'last_disconnected_at': last_disconnect.get('at', 0),
         'direct_instance_count': len(direct_targets),
         'proxy_instance_count': len(proxy_targets),
         'environment_count': len(environments),
@@ -2246,8 +2346,7 @@ def execute_cocos_commands(commands, target_id='', target_ids=None, target_specs
             'msg': '缺少目标客户端身份快照，本次命令未发送，请刷新账号状态后重新选择',
         }
 
-    with _cocos_bridge_lock:
-        connections = [item for item in _cocos_connections.values() if item.alive]
+    connections = _active_cocos_connections()
     proxy_targets, _proxy_error = _cocos_proxy_targets()
     connections.extend(CocosProxyConnection(item) for item in proxy_targets)
     connection_map = {item.connection_id: item for item in connections}
@@ -3673,8 +3772,7 @@ def ks_catalog_with_online(targets=None):
 def ks_catalog_status():
     config = load_ks_config()
     token_state = ks_token_status(config.get('token', ''))
-    with _cocos_bridge_lock:
-        connections = [item for item in _cocos_connections.values() if item.alive]
+    connections = _active_cocos_connections()
     targets = [item.target_snapshot() for item in connections]
     proxy_targets, _proxy_error = _cocos_proxy_targets()
     catalog = ks_catalog_with_online(targets + proxy_targets)

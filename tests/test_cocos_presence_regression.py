@@ -1,4 +1,5 @@
 import threading
+import time
 import unittest
 
 import server
@@ -54,6 +55,39 @@ class CocosPresenceRegressionTest(unittest.TestCase):
         }
 
         self.assertEqual(server._ks_display_account_match(account, target), -1)
+
+    def test_identity_heartbeat_renews_connection_lease(self):
+        connection = object.__new__(server.CocosBridgeConnection)
+        connection.connection_id = 'direct:5101:heartbeat'
+        connection.address = ('127.0.0.1', 5101)
+        connection.alive = True
+        connection.info_lock = threading.Lock()
+        connection.target_info = {}
+        connection.target_info_updated_at = 0
+        connection.connected_at = time.time() - 30
+        connection.last_seen_at = time.time() - 30
+        connection.last_heartbeat_at = 0
+
+        self.assertTrue(connection.set_target_info({
+            'environmentUrl': 'https://login-test-202.example.com',
+            'roleId': '10100000240322',
+            'serverId': '101',
+            'ready': True,
+        }, heartbeat=True))
+
+        target = connection.target_snapshot()
+        self.assertGreater(target['last_heartbeat_at'], 0)
+        self.assertGreater(target['lease_remaining'], 0)
+        self.assertFalse(connection.lease_expired())
+
+    def test_stale_connection_lease_expires(self):
+        connection = object.__new__(server.CocosBridgeConnection)
+        connection.alive = True
+        connection.info_lock = threading.Lock()
+        connection.last_seen_at = time.time() - server.COCOS_HEARTBEAT_LEASE_SECONDS - 1
+
+        self.assertTrue(connection.lease_expired())
+        self.assertIn('心跳超时', server._cocos_disconnect_message('heartbeat_timeout'))
 
 
 if __name__ == '__main__':

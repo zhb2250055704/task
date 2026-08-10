@@ -6592,15 +6592,21 @@ function renderCocosStatus(data) {
       : (remoteCatalog.configured && !remoteCatalog.expired)
   ));
   const anyConnected = clientConnected || ksConnected;
+  const clientDiagnostic = String(
+    (data && (data.error || data.last_disconnect_message || data.proxy_error)) ||
+    '等待游戏客户端连接本机 GM 服务'
+  ).trim();
   status.textContent = clientConnected && ksConnected
     ? '双通道已连接'
-    : (clientConnected ? '客户端已连接' : (ksConnected ? 'KS 已连接' : '未连接'));
+    : (clientConnected ? '客户端已连接' : (ksConnected ? 'KS 已连接 · Cocos 待连接' : '未连接'));
   status.className = 'cocos-status ' + (anyConnected ? 'connected' : 'disconnected');
   status.title = clientConnected && ksConnected
     ? 'KS 远程通道和本机游戏客户端均可用'
     : (clientConnected
       ? ('游戏端地址：' + (data.address || '本机'))
-      : (ksConnected ? 'KS Token 有效，可向已创建账号发送 GM 命令' : ((data && data.error) || 'KS 与游戏客户端均未连接')));
+      : (ksConnected
+        ? `KS Token 有效，可向已创建账号发送 GM 命令；Cocos：${clientDiagnostic}`
+        : clientDiagnostic));
   let catalogChanged = false;
   if (data && data.ks_catalog && Array.isArray(data.ks_catalog.environments)) {
     ksConfigured = data.ks_catalog.configured != null ? !!data.ks_catalog.configured : ksConfigured;
