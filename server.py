@@ -67,6 +67,16 @@ from kongming_index import (
     start_kongming_index_watcher,
 )
 from kongming_search import build_kongming_evidence
+from kongming_workflow import (
+    append_workflow_event,
+    build_kongming_workflow,
+    is_kongming_workflow_request,
+    load_kongming_workflow,
+    public_kongming_workflow,
+    save_kongming_workflow,
+    update_kongming_workflow_command,
+    workflow_preview_markdown,
+)
 
 if os.name == 'nt':
     try:
@@ -97,6 +107,7 @@ try:
         os.path.join(TOOL_DIR, 'kongming_chat.py'),
         os.path.join(TOOL_DIR, 'kongming_index.py'),
         os.path.join(TOOL_DIR, 'kongming_search.py'),
+        os.path.join(TOOL_DIR, 'kongming_workflow.py'),
     ):
         with open(build_file, 'rb') as source_file:
             build_hash.update(source_file.read())
@@ -112,7 +123,20 @@ ITEM_FILE = os.path.join(TOOL_DIR, 'gm_items.json')
 KS_CONFIG_FILE = os.path.join(TOOL_DIR, 'gm_ks_config.json')
 KS_ACCOUNT_CACHE_FILE = os.path.join(TOOL_DIR, 'gm_account_cache.json')
 KS_TOKEN_BRIDGE_DIR = os.path.join(TOOL_DIR, 'browser-extension', 'ks-token-auto-sync')
+GM_CONSOLE_CONFIG_FILE = os.path.join(TOOL_DIR, 'gm_console_config.json')
+SKILLHUB_VERSION = '3.0.7'
+SKILLHUB_REPO_URL = 'https://github.com/Francis-Zxp/AI-SkillHub'
+SKILLHUB_RELEASE_URL = 'https://github.com/Francis-Zxp/AI-SkillHub/releases/tag/v3.0.7'
+SKILLHUB_INSTALL_DIR = os.environ.get(
+    'GM_SKILLHUB_DIR',
+    os.path.join(os.path.dirname(TOOL_DIR), f'AI-SkillHub-{SKILLHUB_VERSION}'),
+)
+SKILLHUB_EXE = os.environ.get(
+    'GM_SKILLHUB_EXE',
+    os.path.join(SKILLHUB_INSTALL_DIR, 'AI SkillHub.exe'),
+)
 KONGMING_CONFIG_FILE = os.path.join(TOOL_DIR, 'runtime', 'kongming', 'config.json')
+KONGMING_WORKFLOW_DIR = os.path.join(TOOL_DIR, 'runtime', 'kongming', 'workflows')
 
 GIT_REPOS = {
     'client': {
@@ -128,6 +152,7 @@ GIT_TIMEOUT = 180
 KONGMING_CHAT_TIMEOUT = int(os.environ.get('GM_KONGMING_CHAT_TIMEOUT', '240'))
 KONGMING_CACHE_TTL = int(os.environ.get('GM_KONGMING_CACHE_TTL', '600'))
 KONGMING_CACHE_MAX_ITEMS = int(os.environ.get('GM_KONGMING_CACHE_MAX_ITEMS', '100'))
+KONGMING_ACCOUNT_REFRESH_INTERVAL = int(os.environ.get('GM_KONGMING_ACCOUNT_REFRESH_INTERVAL', '300'))
 KONGMING_INDEX_INTERVAL = int(os.environ.get('GM_KONGMING_INDEX_INTERVAL', '60'))
 KONGMING_MODEL_PROVIDER = os.environ.get('GM_KONGMING_MODEL_PROVIDER', 'taishi')
 KONGMING_MODEL = os.environ.get('GM_KONGMING_MODEL', 'gpt-5.5')
@@ -150,13 +175,19 @@ ITEM_XLSX = os.environ.get(
     'GM_ITEM_XLSX',
     r'C:\Users\TU\Documents\excel\csv\common\COA_Item.xlsx'
 )
+HANZHONG_SCORE_XLSX = os.environ.get(
+    'GM_HANZHONG_SCORE_XLSX',
+    r'C:\Users\TU\Documents\excel\csv\common\COA_DramaHanZhong.xlsx'
+)
+HANZHONG_SCORE_SHEET = 'HanZhongPersonalScore'
 # 表头字段名所在行（第2行）与数据起始行（第11行），遵循项目 AGENTS.md 约定
 ITEM_HEADER_ROW = 2
 ITEM_DATA_START_ROW = 11
 
 COMMAND_FIELDS = [
     'name', 'command', 'category', 'tags',
-    'params', 'example', 'permission', 'description'
+    'params', 'example', 'permission', 'description',
+    'usage_count', 'last_used_at'
 ]
 
 SCRIPT_FIELDS = [
@@ -178,6 +209,7 @@ _session_lock = threading.Lock()
 _sessions = {}
 _git_job_lock = threading.Lock()
 _git_jobs = {}
+_git_operation_lock = threading.Lock()
 GIT_JOB_TTL = 30 * 60
 
 COCOS_WS_PORT = int(os.environ.get('GM_COCOS_WS_PORT', '5101'))
@@ -191,9 +223,15 @@ _cocos_bridge_lock = threading.Lock()
 _cocos_connections = {}
 _cocos_bridge_error = ''
 _cocos_bridge_last_disconnect = {'reason': '', 'at': 0}
+_cocos_proxy_context_lock = threading.Lock()
+_cocos_proxy_context_cache = {}
 _ks_cache_lock = threading.Lock()
 _kongming_chat_lock = threading.Lock()
 _kongming_cache_lock = threading.Lock()
+_kongming_account_catalog_refresh_lock = threading.Lock()
+_kongming_workflow_run_lock = threading.Lock()
+_kongming_workflow_state_lock = threading.Lock()
+_kongming_workflow_running = set()
 _kongming_answer_cache = {}
 
 QA_SKILL_NAME = 'qa-test-design'
@@ -232,6 +270,89 @@ _qa_uploads = {}
 _qa_artifact_lock = threading.Lock()
 
 
+def _skillhub_exe_path():
+    candidates = [
+        SKILLHUB_EXE,
+        os.path.join(SKILLHUB_INSTALL_DIR, 'AI SkillHub.exe'),
+        os.path.join(os.path.dirname(TOOL_DIR), 'AI-SkillHub', 'AI SkillHub.exe'),
+        os.path.join(os.environ.get('LOCALAPPDATA', ''), 'Programs', 'AI SkillHub', 'AI SkillHub.exe'),
+    ]
+    for candidate in candidates:
+        if candidate and os.path.isfile(candidate):
+            return os.path.abspath(candidate)
+    return os.path.abspath(SKILLHUB_EXE)
+
+
+def _count_codex_skills():
+    skills_dir = os.path.join(QA_CODEX_HOME, 'skills')
+    total = 0
+    if os.path.isdir(skills_dir):
+        for name in os.listdir(skills_dir):
+            path = os.path.join(skills_dir, name)
+            if os.path.isdir(path) and os.path.isfile(os.path.join(path, 'SKILL.md')):
+                total += 1
+    return skills_dir, total
+
+
+def skillhub_status():
+    exe_path = _skillhub_exe_path()
+    install_dir = os.path.dirname(exe_path)
+    codex_skills_dir, codex_skill_count = _count_codex_skills()
+    user_data_dir = os.path.join(os.environ.get('LOCALAPPDATA', ''), 'AI SkillHub', 'UserData')
+    installed = os.path.isfile(exe_path)
+    return {
+        'ok': True,
+        'installed': installed,
+        'version': SKILLHUB_VERSION if installed else '',
+        'exe_path': exe_path if installed else '',
+        'install_dir': install_dir if installed else SKILLHUB_INSTALL_DIR,
+        'repo_url': SKILLHUB_REPO_URL,
+        'release_url': SKILLHUB_RELEASE_URL,
+        'codex_skills_dir': codex_skills_dir,
+        'codex_skill_count': codex_skill_count,
+        'user_data_dir': user_data_dir,
+        'user_data_ready': os.path.isdir(user_data_dir),
+        'msg': 'AI SkillHub 已安装' if installed else '未找到 AI SkillHub',
+    }
+
+
+def open_skillhub_app():
+    status = skillhub_status()
+    exe_path = status.get('exe_path') or ''
+    if not status.get('installed') or not exe_path:
+        raise FileNotFoundError('未找到 AI SkillHub，请先安装发布包')
+    translation = sync_skillhub_chinese_usage()
+    subprocess.Popen([exe_path], cwd=os.path.dirname(exe_path) or None)
+    status['translation'] = translation
+    return status
+
+
+def open_skillhub_folder():
+    status = skillhub_status()
+    target = status.get('install_dir') or SKILLHUB_INSTALL_DIR
+    if not os.path.isdir(target):
+        raise FileNotFoundError('未找到 AI SkillHub 安装目录')
+    if os.name == 'nt':
+        subprocess.Popen(['explorer.exe', target])
+    else:
+        webbrowser.open(target)
+    return status
+
+
+def open_ks_token_bridge_folder():
+    if not os.path.isfile(os.path.join(KS_TOKEN_BRIDGE_DIR, 'manifest.json')):
+        raise FileNotFoundError('未找到 KS Token 浏览器桥接目录')
+    if os.name == 'nt':
+        subprocess.Popen(['explorer.exe', KS_TOKEN_BRIDGE_DIR])
+    else:
+        webbrowser.open(KS_TOKEN_BRIDGE_DIR)
+    return {
+        'ok': True,
+        'path': KS_TOKEN_BRIDGE_DIR,
+        'msg': '已打开 KS Token 浏览器桥接目录',
+    }
+
+
 def _kongming_source():
     return load_kongming_source(TOOL_DIR, KONGMING_CONFIG_FILE)
 
@@ -264,6 +385,7 @@ def _kongming_chat_runtime_status():
     skill_ready = os.path.isdir(source_dir)
     return {
         'chat_available': bool(cli_path) and roots_ready,
+        'workflow_available': True,
         'chat_engine': 'Codex + 孔明 Skill' if skill_ready else 'Codex 本地只读检索',
         'chat_workspace': os.path.abspath(KONGMING_CHAT_WORKSPACE),
         'client_root': KONGMING_CLIENT_ROOT,
@@ -329,20 +451,6 @@ def open_kongming_folder(target='source'):
     else:
         webbrowser.open(path)
     return status
-
-
-def open_ks_token_bridge_folder():
-    if not os.path.isfile(os.path.join(KS_TOKEN_BRIDGE_DIR, 'manifest.json')):
-        raise FileNotFoundError('未找到 KS Token 浏览器桥接目录')
-    if os.name == 'nt':
-        subprocess.Popen(['explorer.exe', KS_TOKEN_BRIDGE_DIR])
-    else:
-        webbrowser.open(KS_TOKEN_BRIDGE_DIR)
-    return {
-        'ok': True,
-        'path': KS_TOKEN_BRIDGE_DIR,
-        'msg': '已打开 KS Token 浏览器桥接目录',
-    }
 
 
 def load_data():
@@ -593,6 +701,86 @@ def parse_xlsx_bytes(raw):
                             cells[(rnum, cnum)] = str(value)
             sheets.append({'name': title, 'cells': cells})
     return sheets
+
+
+_HANZHONG_SCORE_TYPE_META = {
+    1: ('高地攻占', '攻占山腰空地', '次'),
+    2: ('高地攻占', '协助攻占山腰空地', '次'),
+    3: ('高地攻占', '攻占敌方山腰地格', '次'),
+    4: ('高地攻占', '协助攻占敌方山腰地格', '次'),
+    5: ('高地攻占', '攻占山顶空地', '次'),
+    6: ('高地攻占', '协助攻占山顶空地', '次'),
+    7: ('高地攻占', '攻占敌方山顶地格', '次'),
+    8: ('高地攻占', '协助攻占敌方山顶地格', '次'),
+    9: ('士兵战斗', '击杀或重伤敌方士兵', '名士兵'),
+    10: ('士兵战斗', '己方士兵重伤或死亡', '名士兵'),
+    11: ('战场目标', '拆除敌方城墙耐久', '点耐久'),
+    12: ('战场目标', '斩杀敌人', '名敌人'),
+}
+
+
+def _xlsx_integer(value, field, row_number):
+    text = str(value or '').strip()
+    try:
+        number = float(text)
+    except ValueError as exc:
+        raise ValueError(f'{HANZHONG_SCORE_SHEET} 第 {row_number} 行的 {field} 不是有效数字') from exc
+    if not number.is_integer():
+        raise ValueError(f'{HANZHONG_SCORE_SHEET} 第 {row_number} 行的 {field} 必须是整数')
+    return int(number)
+
+
+def parse_hanzhong_personal_scores(path=HANZHONG_SCORE_XLSX):
+    if not os.path.exists(path):
+        raise FileNotFoundError(f'找不到汉中积分源表: {path}')
+    with open(path, 'rb') as source:
+        sheets = parse_xlsx_bytes(source.read())
+    sheet = next((item for item in sheets if item.get('name') == HANZHONG_SCORE_SHEET), None)
+    if not sheet:
+        raise ValueError(f'源表中找不到页签: {HANZHONG_SCORE_SHEET}')
+
+    cells = sheet.get('cells', {})
+    rows = []
+    max_row = max((row for row, _ in cells), default=0)
+    for row_number in range(11, max_row + 1):
+        raw_id = str(cells.get((row_number, 1), '')).strip()
+        raw_type = str(cells.get((row_number, 8), '')).strip()
+        raw_parameter = str(cells.get((row_number, 9), '')).strip()
+        raw_score = str(cells.get((row_number, 12), '')).strip()
+        description_template = str(cells.get((row_number, 15), '')).strip()
+        if not any((raw_id, raw_type, raw_parameter, raw_score, description_template)):
+            continue
+        if not all((raw_id, raw_type, raw_parameter, raw_score, description_template)):
+            raise ValueError(f'{HANZHONG_SCORE_SHEET} 第 {row_number} 行的 I/L/O 计分字段不完整')
+
+        item_id = _xlsx_integer(raw_id, 'A(id)', row_number)
+        task_type = _xlsx_integer(raw_type, 'H(type)', row_number)
+        parameter = _xlsx_integer(raw_parameter, 'I(para1)', row_number)
+        unit_score = _xlsx_integer(raw_score, 'L(score)', row_number)
+        category, type_label, quantity_unit = _HANZHONG_SCORE_TYPE_META.get(
+            task_type,
+            ('其他任务', f'任务类型 {task_type}', '次'),
+        )
+        parameter_note = str(cells.get((row_number, 13), '')).strip()
+        description = description_template.replace('{0}', str(parameter))
+        rows.append({
+            'id': item_id,
+            'row': row_number,
+            'type': task_type,
+            'category': category,
+            'type_label': type_label,
+            'parameter': parameter,
+            'parameter_note': parameter_note,
+            'parameter_display': f'{parameter}级' if task_type in (9, 10) else str(parameter),
+            'unit_score': unit_score,
+            'quantity_unit': quantity_unit,
+            'description_template': description_template,
+            'description': description,
+        })
+
+    if not rows:
+        raise ValueError(f'{HANZHONG_SCORE_SHEET} 中没有可用计分规则')
+    return rows
 
 
 def run_git_command_bytes(repo, args, timeout=60):
@@ -930,6 +1118,11 @@ def normalize(item):
         result[field] = item.get(field, '')
     if not isinstance(result['tags'], list):
         result['tags'] = [t.strip() for t in str(result['tags']).split(',') if t.strip()]
+    try:
+        result['usage_count'] = int(result.get('usage_count') or 0)
+    except (TypeError, ValueError):
+        result['usage_count'] = 0
+    result['last_used_at'] = str(result.get('last_used_at') or '')
     result['create_time'] = item.get('create_time') or now_str()
     result['update_time'] = item.get('update_time') or result['create_time']
     return result
@@ -945,6 +1138,13 @@ def matches(item, keyword):
               item.get('permission', '')]
     fields.append(' '.join(item.get('tags', [])))
     return any(kw in str(v).lower() for v in fields)
+
+
+def command_usage_count(item):
+    try:
+        return int(item.get('usage_count') or 0)
+    except (TypeError, ValueError):
+        return 0
 
 
 def normalize_script(item):
@@ -1046,28 +1246,6 @@ def run_git_command(repo, args, timeout=60):
             'stdout': proc.stdout, 'stderr': proc.stderr, 'output': output}
 
 
-def git_tracked_changes(repo):
-    worktree = run_git_command(repo, ['diff', '--quiet'], timeout=30)
-    staged = run_git_command(repo, ['diff', '--cached', '--quiet'], timeout=30)
-    for item in (worktree, staged):
-        if item.get('code') not in (0, 1):
-            return {'ok': False, 'changed': False, 'output': item.get('output', '检查本地改动失败')}
-    return {'ok': True, 'changed': worktree.get('code') == 1 or staged.get('code') == 1, 'output': ''}
-
-
-def git_changed_paths(repo):
-    paths = []
-    for args in (['diff', '--name-only'], ['diff', '--cached', '--name-only']):
-        result = run_git_command(repo, args, timeout=30)
-        if not result.get('ok'):
-            return {'ok': False, 'paths': [], 'output': result.get('output', '读取本地改动文件失败')}
-        for line in result.get('stdout', '').splitlines():
-            path = line.strip()
-            if path and path not in paths:
-                paths.append(path)
-    return {'ok': True, 'paths': paths, 'output': ''}
-
-
 def git_tool_repo_prefix(repo):
     try:
         repo_path = os.path.abspath(repo.get('path', ''))
@@ -1079,18 +1257,158 @@ def git_tool_repo_prefix(repo):
         return ''
 
 
-def git_filter_stash_paths(repo, paths):
+def git_path_is_protected(repo, path):
     prefix = git_tool_repo_prefix(repo)
-    filtered = []
-    for path in paths:
-        clean = str(path or '').strip().replace('\\', '/')
-        if not clean:
+    clean = str(path or '').strip().replace('\\', '/')
+    return bool(prefix and (clean == prefix.rstrip('/') or clean.startswith(prefix)))
+
+
+def git_worktree_snapshot(repo):
+    status = run_git_command(
+        repo,
+        ['status', '--porcelain=v1', '-z', '--untracked-files=normal'],
+        timeout=30,
+    )
+    if not status.get('ok'):
+        return {
+            'ok': False,
+            'entries': [],
+            'discardable': [],
+            'protected': [],
+            'output': status.get('output', '') or '无法读取工作区状态',
+        }
+
+    tokens = status.get('stdout', '').split('\0')
+    entries = []
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        index += 1
+        if not token:
             continue
-        if prefix and (clean == prefix.rstrip('/') or clean.startswith(prefix)):
-            continue
-        if clean not in filtered:
-            filtered.append(clean)
-    return filtered
+        code = token[:2]
+        path = token[3:] if len(token) > 3 and token[2] == ' ' else token[2:].lstrip()
+        original_path = ''
+        if ('R' in code or 'C' in code) and index < len(tokens):
+            original_path = tokens[index]
+            index += 1
+        paths = [item for item in (path, original_path) if item]
+        protected = any(git_path_is_protected(repo, item) for item in paths)
+        display_path = f'{original_path} -> {path}' if original_path else path
+        entries.append({
+            'code': code,
+            'path': path,
+            'original_path': original_path,
+            'paths': paths,
+            'protected': protected,
+            'display': f'{code} {display_path}'.rstrip(),
+        })
+
+    return {
+        'ok': True,
+        'entries': entries,
+        'discardable': [item for item in entries if not item['protected']],
+        'protected': [item for item in entries if item['protected']],
+        'output': '',
+    }
+
+
+def git_discard_worktree_changes(repo, repo_id=''):
+    before = git_worktree_snapshot(repo)
+    if not before.get('ok'):
+        return {
+            'ok': False,
+            'code': 'status_failed',
+            'count': 0,
+            'output': before.get('output', '') or '无法读取工作区状态',
+        }
+
+    entries = before.get('discardable', [])
+    protected_count = len(before.get('protected', []))
+    if not entries:
+        return {
+            'ok': True,
+            'skipped': True,
+            'count': 0,
+            'protected_count': protected_count,
+            'paths': [],
+            'output': '工作区无需清理',
+        }
+
+    prefix = git_tool_repo_prefix(repo)
+    pathspecs = ['.']
+    if prefix:
+        protected_dir = prefix.rstrip('/')
+        pathspecs.extend([
+            f':(exclude){protected_dir}',
+            f':(exclude){protected_dir}/**',
+        ])
+
+    command_results = []
+    if any(item.get('code') != '??' for item in entries):
+        restored = run_git_command(
+            repo,
+            ['restore', '--source=HEAD', '--staged', '--worktree', '--'] + pathspecs,
+            timeout=GIT_TIMEOUT,
+        )
+        command_results.append(restored)
+        if not restored.get('ok'):
+            reset = run_git_command(repo, ['reset', '--quiet', 'HEAD', '--'] + pathspecs, timeout=GIT_TIMEOUT)
+            checkout = run_git_command(repo, ['checkout', '--force', 'HEAD', '--'] + pathspecs, timeout=GIT_TIMEOUT)
+            command_results.extend([reset, checkout])
+            if not reset.get('ok') or not checkout.get('ok'):
+                output = '\n'.join(
+                    item.get('output', '') for item in command_results if item.get('output')
+                ).strip()
+                return {
+                    'ok': False,
+                    'code': 'discard_failed',
+                    'count': 0,
+                    'protected_count': protected_count,
+                    'paths': [item.get('display', '') for item in entries],
+                    'output': output or '还原已跟踪文件失败',
+                }
+
+    if any(item.get('code') == '??' for item in entries):
+        clean_args = ['clean', '-fd']
+        if prefix:
+            protected_dir = prefix.rstrip('/')
+            clean_args.extend(['-e', protected_dir + '/', '-e', protected_dir + '/**'])
+        clean_args.extend(['--', '.'])
+        cleaned = run_git_command(repo, clean_args, timeout=GIT_TIMEOUT)
+        command_results.append(cleaned)
+        if not cleaned.get('ok'):
+            return {
+                'ok': False,
+                'code': 'discard_failed',
+                'count': 0,
+                'protected_count': protected_count,
+                'paths': [item.get('display', '') for item in entries],
+                'output': cleaned.get('output', '') or '清理未跟踪文件失败',
+            }
+
+    after = git_worktree_snapshot(repo)
+    remaining = after.get('discardable', []) if after.get('ok') else entries
+    if not after.get('ok') or remaining:
+        return {
+            'ok': False,
+            'code': 'discard_incomplete',
+            'count': len(entries) - len(remaining),
+            'protected_count': protected_count,
+            'paths': [item.get('display', '') for item in remaining],
+            'output': after.get('output', '') or f'仍有 {len(remaining)} 项工作区改动未能清理',
+        }
+
+    label = GIT_REPOS.get(repo_id, {}).get('label') if repo_id else ''
+    subject = f'{label}工作区' if label else '工作区'
+    return {
+        'ok': True,
+        'skipped': False,
+        'count': len(entries),
+        'protected_count': protected_count,
+        'paths': [item.get('display', '') for item in entries],
+        'output': f'已丢弃{subject}的 {len(entries)} 项未提交改动',
+    }
 
 
 def git_office_lock_files(repo):
@@ -1123,34 +1441,6 @@ def git_office_lock_message(paths):
     return '检测到表格文件正在被 Excel/WPS 占用，请关闭这些表格后再拉取：\n' + body
 
 
-def git_stash_paths(repo, repo_id, paths, include_untracked=False, reason='local'):
-    paths = git_filter_stash_paths(repo, paths)
-    if not paths:
-        return {'ok': True, 'skipped': True, 'output': '没有需要暂存的文件'}
-    message = f'gm-tool-before-pull-{repo_id}-{reason}-{time.strftime("%Y%m%d-%H%M%S")}'
-    args = ['stash', 'push', '-m', message]
-    if include_untracked:
-        args.append('--include-untracked')
-    args.append('--')
-    args.extend(paths)
-    result = run_git_command(repo, args, timeout=GIT_TIMEOUT)
-    result['message'] = message
-    result['paths'] = paths
-    return result
-
-
-def git_stash_before_pull(repo, repo_id):
-    tracked = git_tracked_changes(repo)
-    if not tracked.get('ok'):
-        return tracked
-    if not tracked.get('changed'):
-        return {'ok': True, 'skipped': True, 'output': '没有需要暂存的已跟踪本地改动'}
-    changed = git_changed_paths(repo)
-    if not changed.get('ok'):
-        return changed
-    return git_stash_paths(repo, repo_id, changed.get('paths', []), reason='tracked')
-
-
 def git_parse_overwrite_paths(output):
     paths = []
     capture = False
@@ -1176,9 +1466,9 @@ def git_pull_failure_hint(output):
     if m:
         return '文件被占用，Git 无法覆盖：' + m.group(1) + '。在 Windows 下，Excel/WPS 打开的表格不能被 Git 更新；工具已尽量刷新远端信息，请关闭该表格后重试以应用到本地工作区。'
     if 'Your local changes to the following files would be overwritten by merge' in text:
-        return '本地改动会被远端覆盖，工具会尝试自动暂存后重试；如果仍失败，请检查这些文件是否被其他程序占用。'
+        return '本地改动会被远端覆盖，工具会自动丢弃 QA 工作区改动后重试；如果仍失败，请检查这些文件是否被其他程序占用。'
     if 'untracked working tree files would be overwritten by merge' in text:
-        return '未跟踪文件会被远端覆盖，工具会尝试自动暂存阻塞文件后重试。'
+        return '未跟踪文件会被远端覆盖，工具会自动清理 QA 工作区文件后重试。'
     return ''
 
 
@@ -1213,33 +1503,31 @@ def git_pull_repo_result(rid, progress=None):
         print(f'[GIT] pull {rid}: office lock')
         return result
 
-    report(28, '暂存本地改动', '如有已跟踪的本地改动，正在自动暂存')
-    stashed = git_stash_before_pull(repo, rid)
-    if not stashed.get('ok'):
+    report(28, '清理工作区', '如有 QA 本地改动，正在自动丢弃')
+    discarded = git_discard_worktree_changes(repo, rid)
+    if not discarded.get('ok'):
         after = git_repo_status(rid, fetch_remote=False, enrich=False)
-        output = '暂存失败，未执行拉取\n' + (stashed.get('output') or '')
+        output = '工作区清理失败，未执行拉取\n' + (discarded.get('output') or '')
         result = {'id': rid, 'label': repo['label'], 'path': repo['path'],
-                  'ok': False, 'code': stashed.get('code'),
-                  'failure_type': 'stash_failed', 'output': output,
-                  'stash': stashed, 'status': after}
+                  'ok': False, 'code': discarded.get('code'),
+                  'failure_type': 'discard_failed', 'output': output,
+                  'discard': discarded, 'status': after}
         report(100, '拉取失败', output)
-        print(f'[GIT] pull {rid}: stash failed')
+        print(f'[GIT] pull {rid}: discard failed')
         return result
 
     report(42, '拉取远端提交', '正在下载并合并可快进的远端提交')
     pulled = run_git_command(repo, ['pull', '--ff-only'], timeout=GIT_TIMEOUT)
-    retry_stash = None
+    retry_discard = None
     retry_output = ''
     fetch_fallback = None
     if not pulled.get('ok'):
         blocking_paths = git_parse_overwrite_paths(pulled.get('output', ''))
         if blocking_paths:
-            report(48, '处理阻塞文件', '正在暂存会被远端覆盖的本地文件并重试')
-            retry_stash = git_stash_paths(repo, rid, blocking_paths, include_untracked=True, reason='blocked')
-            retry_output = '阻塞文件暂存：' + (
-                retry_stash.get('output') or retry_stash.get('message', '已暂存阻塞文件')
-            )
-            if retry_stash.get('ok'):
+            report(48, '处理阻塞文件', '正在清理会被远端覆盖的本地文件并重试')
+            retry_discard = git_discard_worktree_changes(repo, rid)
+            retry_output = '阻塞文件清理：' + (retry_discard.get('output') or '已清理工作区')
+            if retry_discard.get('ok'):
                 pulled = run_git_command(repo, ['pull', '--ff-only'], timeout=GIT_TIMEOUT)
     if not pulled.get('ok') and git_pull_failure_hint(pulled.get('output', '')):
         report(58, '刷新远端信息', '本地文件被占用，正在刷新远端引用以保留远端提交记录')
@@ -1248,11 +1536,7 @@ def git_pull_repo_result(rid, progress=None):
     report(78, '刷新仓库状态', '正在读取拉取后的分支和提交记录')
     after = git_repo_status(rid, fetch_remote=False, enrich=False)
     output_parts = []
-    stash_output = stashed.get('output') or ''
-    if stashed.get('skipped'):
-        output_parts.append('暂存：没有需要暂存的已跟踪本地改动')
-    else:
-        output_parts.append('暂存：' + (stash_output or stashed.get('message', '已暂存本地改动')))
+    output_parts.append('清理：' + (discarded.get('output') or '工作区无需清理'))
     if retry_output:
         output_parts.append(retry_output)
     pull_output = pulled.get('output') or ('Already up to date.' if pulled.get('ok') else '')
@@ -1274,8 +1558,8 @@ def git_pull_repo_result(rid, progress=None):
             'ok': ok, 'code': pulled.get('code'),
             'failure_type': '' if ok else 'pull_failed',
             'output': output,
-            'stash': stashed,
-            'retry_stash': retry_stash,
+            'discard': discarded,
+            'retry_discard': retry_discard,
             'fetch_fallback': fetch_fallback,
             'status': after}
 
@@ -1415,6 +1699,143 @@ def enrich_git_commits(repo, commits):
     return commits
 
 
+def parse_git_branch_lines(output):
+    branches = []
+    for line in (output or '').splitlines():
+        parts = line.rstrip().split('\t')
+        name = parts[0].strip() if parts else ''
+        if not name:
+            continue
+        branches.append({
+            'name': name,
+            'upstream': parts[1].strip() if len(parts) > 1 else '',
+            'current': len(parts) > 2 and parts[2].strip() == '*',
+        })
+    return branches
+
+
+def git_branch_catalog(repo):
+    local = run_git_command(repo, [
+        'for-each-ref',
+        '--format=%(refname:short)%09%(upstream:short)%09%(HEAD)',
+        'refs/heads',
+    ], timeout=30)
+    remote = run_git_command(repo, [
+        'for-each-ref',
+        '--format=%(refname:short)',
+        'refs/remotes',
+    ], timeout=30)
+    remotes = run_git_command(repo, ['remote'], timeout=30)
+    current = run_git_command(repo, ['symbolic-ref', '--quiet', '--short', 'HEAD'], timeout=30)
+
+    local_branches = parse_git_branch_lines(local.get('stdout', '')) if local.get('ok') else []
+    upstreams = {item.get('upstream') for item in local_branches if item.get('upstream')}
+    remote_names = sorted(
+        [name.strip() for name in remotes.get('stdout', '').splitlines() if name.strip()],
+        key=len,
+        reverse=True,
+    ) if remotes.get('ok') else []
+    remote_branches = []
+    if remote.get('ok'):
+        for name in remote.get('stdout', '').splitlines():
+            name = name.strip()
+            if not name or name.endswith('/HEAD'):
+                continue
+            remote_name = next((candidate for candidate in remote_names if name.startswith(candidate + '/')), '')
+            branch_name = name[len(remote_name) + 1:] if remote_name else ''
+            if not remote_name or not branch_name:
+                continue
+            remote_branches.append({
+                'name': name,
+                'remote': remote_name,
+                'branch': branch_name,
+                'tracked': name in upstreams,
+            })
+
+    local_branches.sort(key=lambda item: (not item.get('current'), item.get('name', '').lower()))
+    remote_branches.sort(key=lambda item: item.get('name', '').lower())
+    ok = bool(local.get('ok') and remote.get('ok') and remotes.get('ok'))
+    errors = [result.get('output', '') for result in (local, remote, remotes) if not result.get('ok')]
+    return {
+        'ok': ok,
+        'current_branch': current.get('stdout', '').strip() if current.get('ok') else '',
+        'detached': not current.get('ok'),
+        'local_branches': local_branches,
+        'remote_branches': remote_branches,
+        'msg': '\n'.join(part for part in errors if part).strip(),
+    }
+
+
+def git_repository_operation_states(repo):
+    markers = [
+        ('merge', '正在合并', 'MERGE_HEAD'),
+        ('rebase', '正在变基', 'rebase-merge'),
+        ('rebase', '正在变基', 'rebase-apply'),
+        ('cherry_pick', '正在拣选提交', 'CHERRY_PICK_HEAD'),
+        ('revert', '正在回退提交', 'REVERT_HEAD'),
+    ]
+    states = []
+    for code, label, marker in markers:
+        result = run_git_command(repo, ['rev-parse', '--git-path', marker], timeout=15)
+        if not result.get('ok'):
+            continue
+        path = result.get('stdout', '').strip()
+        if path and not os.path.isabs(path):
+            path = os.path.join(repo.get('path', ''), path)
+        if path and os.path.exists(path) and code not in [item['code'] for item in states]:
+            states.append({'code': code, 'label': label})
+    return states
+
+
+def git_switch_safety(repo_id, known_changes=None, check_office_locks=True, auto_discard=False):
+    repo = GIT_REPOS[repo_id]
+    states = git_repository_operation_states(repo)
+    if states:
+        labels = '、'.join(item['label'] for item in states)
+        return {
+            'ok': False,
+            'code': 'operation_in_progress',
+            'reason': f'仓库{labels}，请先在 Git 客户端中完成或中止该操作',
+            'details': states,
+        }
+
+    if known_changes is None:
+        snapshot = git_worktree_snapshot(repo)
+        if not snapshot.get('ok'):
+            return {
+                'ok': False,
+                'code': 'status_failed',
+                'reason': snapshot.get('output', '') or '无法读取工作区状态',
+                'details': [],
+            }
+        changes = [item.get('display', '') for item in snapshot.get('discardable', [])]
+    else:
+        changes = [line for line in known_changes if str(line).strip()]
+    if changes and not auto_discard:
+        return {
+            'ok': False,
+            'code': 'dirty_worktree',
+            'reason': f'工作区有 {len(changes)} 项未提交改动，请先提交、暂存或还原后再切换',
+            'details': changes[:20],
+        }
+
+    office_locks = git_office_lock_files(repo) if check_office_locks and repo_id == 'excel' else []
+    if office_locks:
+        return {
+            'ok': False,
+            'code': 'office_lock',
+            'reason': f'检测到 {len(office_locks)} 个 Excel/WPS 锁文件，请关闭表格后再切换',
+            'details': office_locks,
+        }
+    return {
+        'ok': True,
+        'code': '',
+        'reason': '',
+        'details': [],
+        'auto_discard_count': len(changes),
+    }
+
+
 def git_repo_status(repo_id, fetch_remote=True, enrich=False):
     repo = GIT_REPOS[repo_id]
     item = {'id': repo_id, 'label': repo['label'], 'path': repo['path']}
@@ -1439,6 +1860,18 @@ def git_repo_status(repo_id, fetch_remote=True, enrich=False):
     commit = run_git_command(repo, ['rev-parse', '--short', 'HEAD'], timeout=30)
     upstream = run_git_command(repo, ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}'], timeout=30)
     lines = [line for line in status.get('stdout', '').splitlines() if line.strip()]
+    worktree = git_worktree_snapshot(repo)
+    changes = [item.get('display', '') for item in worktree.get('discardable', [])] if worktree.get('ok') else lines[1:]
+    protected_change_count = len(worktree.get('protected', [])) if worktree.get('ok') else 0
+    branch_catalog = git_branch_catalog(repo)
+    # 真正切换时会再次扫描 Office 锁文件；状态列表不遍历整个配置表仓库，
+    # 避免每次打开 Git 页面都产生额外的全目录扫描。
+    switch_safety = git_switch_safety(
+        repo_id,
+        known_changes=changes,
+        check_office_locks=False,
+        auto_discard=True,
+    )
 
     remote_commits = []
     local_commits = []
@@ -1458,12 +1891,22 @@ def git_repo_status(repo_id, fetch_remote=True, enrich=False):
 
     item.update({
         'ok': True,
-        'branch': branch.get('stdout', '').strip() if branch.get('ok') else '',
+        'branch': branch_catalog.get('current_branch') or (branch.get('stdout', '').strip() if branch.get('ok') else ''),
+        'current_branch': branch_catalog.get('current_branch', ''),
+        'detached': branch_catalog.get('detached', False),
+        'local_branches': branch_catalog.get('local_branches', []),
+        'remote_branches': branch_catalog.get('remote_branches', []),
+        'branch_list_ok': branch_catalog.get('ok', False),
+        'branch_list_msg': branch_catalog.get('msg', ''),
+        'switch_blocked_reason': switch_safety.get('reason', ''),
+        'switch_blocked_code': switch_safety.get('code', ''),
+        'auto_discard_count': len(changes),
+        'protected_change_count': protected_change_count,
         'commit': commit.get('stdout', '').strip() if commit.get('ok') else '',
         'upstream': upstream.get('stdout', '').strip() if upstream.get('ok') else '',
         'status_line': lines[0] if lines else '',
-        'changes': lines[1:],
-        'dirty': len(lines) > 1,
+        'changes': changes,
+        'dirty': bool(changes),
         'remote_commits': remote_commits,
         'remote_count': len(remote_commits),
         'local_commits': local_commits,
@@ -1504,12 +1947,205 @@ def git_job_snapshot(job_id):
         return dict(job) if job else None
 
 
+def _git_active_job_locked(repo_ids):
+    requested = set(repo_ids)
+    for job in _git_jobs.values():
+        if job.get('state') not in ('queued', 'running'):
+            continue
+        active_repos = set(job.get('repo_ids') or GIT_REPOS.keys())
+        if requested & active_repos:
+            return dict(job)
+    return None
+
+
+def git_active_pull_job(repo_ids):
+    git_cleanup_jobs()
+    with _git_job_lock:
+        return _git_active_job_locked(repo_ids)
+
+
+def git_fetch_repo_result(repo_id):
+    if repo_id not in GIT_REPOS:
+        return {'ok': False, 'id': repo_id, 'msg': '未知仓库', 'output': '未知仓库'}
+    if not _git_operation_lock.acquire(blocking=False):
+        return {
+            'ok': False,
+            'id': repo_id,
+            'label': GIT_REPOS[repo_id]['label'],
+            'code': 'git_busy',
+            'msg': '另一个 Git 操作正在执行，请稍后重试',
+            'output': '另一个 Git 操作正在执行，请稍后重试',
+        }
+    try:
+        active = git_active_pull_job([repo_id])
+        if active:
+            return {
+                'ok': False,
+                'id': repo_id,
+                'label': GIT_REPOS[repo_id]['label'],
+                'code': 'git_busy',
+                'msg': '该仓库正在执行拉取，请等待当前任务完成',
+                'output': '该仓库正在执行拉取，请等待当前任务完成',
+            }
+        repo = GIT_REPOS[repo_id]
+        fetched = run_git_command(repo, ['fetch', '--all', '--prune'], timeout=GIT_TIMEOUT)
+        status = git_repo_status(repo_id, fetch_remote=False, enrich=False)
+        output = fetched.get('output', '') or ('远端分支已刷新' if fetched.get('ok') else '远端分支刷新失败')
+        return {
+            'ok': bool(fetched.get('ok')),
+            'id': repo_id,
+            'label': repo['label'],
+            'code': '' if fetched.get('ok') else 'fetch_failed',
+            'msg': '' if fetched.get('ok') else output,
+            'output': output,
+            'status': status,
+        }
+    finally:
+        _git_operation_lock.release()
+
+
+def git_checkout_branch(repo_id, branch_name, source='local'):
+    if repo_id not in GIT_REPOS:
+        return {'ok': False, 'code': 'unknown_repo', 'msg': '未知仓库'}
+    source = str(source or 'local').strip().lower()
+    branch_name = str(branch_name or '').strip()
+    if source not in ('local', 'remote') or not branch_name:
+        return {'ok': False, 'code': 'invalid_branch', 'msg': '请选择有效分支'}
+
+    repo = GIT_REPOS[repo_id]
+    if not _git_operation_lock.acquire(blocking=False):
+        return {'ok': False, 'code': 'git_busy', 'msg': '另一个 Git 操作正在执行，请稍后重试'}
+    try:
+        active = git_active_pull_job([repo_id])
+        if active:
+            return {'ok': False, 'code': 'git_busy', 'msg': '该仓库正在执行拉取，请等待当前任务完成'}
+        safety = git_switch_safety(repo_id, auto_discard=True)
+        if not safety.get('ok'):
+            return {
+                'ok': False,
+                'code': safety.get('code'),
+                'msg': safety.get('reason'),
+                'details': safety.get('details', []),
+            }
+
+        catalog = git_branch_catalog(repo)
+        if not catalog.get('ok'):
+            return {'ok': False, 'code': 'branch_list_failed', 'msg': catalog.get('msg') or '分支列表读取失败'}
+        local_by_name = {item.get('name'): item for item in catalog.get('local_branches', [])}
+        remote_by_name = {item.get('name'): item for item in catalog.get('remote_branches', [])}
+        local_names = set(local_by_name)
+        remote_names = set(remote_by_name)
+        current_branch = catalog.get('current_branch', '')
+        created_tracking_branch = False
+
+        if source == 'local':
+            if branch_name not in local_names:
+                return {'ok': False, 'code': 'branch_not_found', 'msg': '本地分支不存在，请先刷新分支列表'}
+            target_branch = branch_name
+            switch_args = ['switch', target_branch]
+            fallback_args = ['checkout', target_branch]
+        else:
+            if branch_name not in remote_names:
+                return {'ok': False, 'code': 'branch_not_found', 'msg': '远端分支不存在，请先刷新远端分支'}
+            remote_item = remote_by_name[branch_name]
+            remote_name = remote_item.get('remote', '')
+            target_branch = remote_item.get('branch', '')
+            if not remote_name or not target_branch:
+                return {'ok': False, 'code': 'invalid_branch', 'msg': '远端分支格式无效'}
+            if target_branch in local_names:
+                local_upstream = local_by_name[target_branch].get('upstream', '')
+                if local_upstream != branch_name:
+                    return {
+                        'ok': False,
+                        'code': 'branch_conflict',
+                        'msg': f'同名本地分支 {target_branch} 已存在但未跟踪 {branch_name}，请从本地分支组选择',
+                    }
+                switch_args = ['switch', target_branch]
+                fallback_args = ['checkout', target_branch]
+            else:
+                validation = run_git_command(repo, ['check-ref-format', '--branch', target_branch], timeout=15)
+                if not validation.get('ok'):
+                    return {'ok': False, 'code': 'invalid_branch', 'msg': validation.get('output', '') or '分支名称无效'}
+                switch_args = ['switch', '-c', target_branch, '--track', branch_name]
+                fallback_args = ['checkout', '-b', target_branch, '--track', branch_name]
+                created_tracking_branch = True
+
+        discarded = git_discard_worktree_changes(repo, repo_id)
+        if not discarded.get('ok'):
+            status = git_repo_status(repo_id, fetch_remote=False, enrich=False)
+            return {
+                'ok': False,
+                'id': repo_id,
+                'label': repo['label'],
+                'code': discarded.get('code') or 'discard_failed',
+                'msg': discarded.get('output') or '工作区改动清理失败',
+                'output': discarded.get('output', ''),
+                'discard': discarded,
+                'status': status,
+            }
+
+        if current_branch == target_branch:
+            status = git_repo_status(repo_id, fetch_remote=False, enrich=False)
+            return {
+                'ok': True,
+                'id': repo_id,
+                'label': repo['label'],
+                'previous_branch': current_branch,
+                'current_branch': current_branch,
+                'created_tracking_branch': False,
+                'output': '\n'.join(filter(None, (
+                    discarded.get('output', ''),
+                    f'当前已在分支 {current_branch}',
+                ))),
+                'discard': discarded,
+                'status': status,
+            }
+
+        switched = run_git_command(repo, switch_args, timeout=GIT_TIMEOUT)
+        if not switched.get('ok') and ('not a git command' in switched.get('output', '') or 'unknown option' in switched.get('output', '')):
+            switched = run_git_command(repo, fallback_args, timeout=GIT_TIMEOUT)
+        if not switched.get('ok'):
+            return {
+                'ok': False,
+                'id': repo_id,
+                'label': repo['label'],
+                'code': 'checkout_failed',
+                'msg': switched.get('output', '') or '分支切换失败',
+                'output': switched.get('output', ''),
+                'discard': discarded,
+            }
+
+        status = git_repo_status(repo_id, fetch_remote=False, enrich=False)
+        return {
+            'ok': True,
+            'id': repo_id,
+            'label': repo['label'],
+            'previous_branch': current_branch,
+            'current_branch': status.get('current_branch') or status.get('branch') or target_branch,
+            'created_tracking_branch': created_tracking_branch,
+            'output': '\n'.join(filter(None, (
+                discarded.get('output', ''),
+                switched.get('output', '') or f'已切换到分支 {target_branch}',
+            ))),
+            'discard': discarded,
+            'status': status,
+        }
+    finally:
+        _git_operation_lock.release()
+
+
 def start_git_pull_job(repo_ids, resolve_excel=False):
     job_id = uuid.uuid4().hex
     label = '配置表占用处理' if resolve_excel else '远端提交拉取'
     with _git_job_lock:
+        active = _git_active_job_locked(repo_ids)
+        if active:
+            raise BlockingIOError('所选仓库已有 Git 拉取任务正在执行，请等待当前任务完成')
+        if _git_operation_lock.locked():
+            raise BlockingIOError('另一个 Git 操作正在执行，请稍后重试')
         _git_jobs[job_id] = {
             'job_id': job_id,
+            'repo_ids': list(repo_ids),
             'state': 'queued',
             'percent': 0,
             'stage': '任务排队',
@@ -1534,18 +2170,18 @@ def start_git_pull_job(repo_ids, resolve_excel=False):
                     git_job_update(job_id, state='running', percent=overall,
                                    stage=f'{label}：{stage}', detail=detail)
 
-                resolver = None
-                if resolve_excel and rid == 'excel':
-                    git_job_update(job_id, state='running', percent=3,
-                                   stage='处理配置表占用', detail='正在尝试关闭 WPS/Excel/ET 进程')
-                    closed = git_close_office_processes()
-                    time.sleep(0.5)
-                    git_job_update(job_id, state='running', percent=8,
-                                   stage='处理配置表占用', detail='正在清理 Excel/WPS 锁文件')
-                    locks = git_remove_office_locks(repo)
-                    resolver = {'closed': closed, 'locks': locks}
-
-                result = git_pull_repo_result(rid, progress=report)
+                with _git_operation_lock:
+                    resolver = None
+                    if resolve_excel and rid == 'excel':
+                        git_job_update(job_id, state='running', percent=3,
+                                       stage='处理配置表占用', detail='正在尝试关闭 WPS/Excel/ET 进程')
+                        closed = git_close_office_processes()
+                        time.sleep(0.5)
+                        git_job_update(job_id, state='running', percent=8,
+                                       stage='处理配置表占用', detail='正在清理 Excel/WPS 锁文件')
+                        locks = git_remove_office_locks(repo)
+                        resolver = {'closed': closed, 'locks': locks}
+                    result = git_pull_repo_result(rid, progress=report)
                 if rid == 'excel' and result.get('ok'):
                     with _kongming_cache_lock:
                         _kongming_answer_cache.clear()
@@ -1782,11 +2418,32 @@ class CocosBridgeConnection:
             self.close(close_reason)
 
     def refresh_target_info(self):
-        result = self.send_rpc('getGmTargetInfo', [])
-        if not result.get('ok') or not isinstance(result.get('result'), dict):
-            return False
-        self.set_target_info(result['result'])
-        return True
+        for method in ('getGMContext', 'getGmTargetInfo', 'roleInfo'):
+            result = self.send_rpc(method, [])
+            if not result.get('ok') or not isinstance(result.get('result'), dict):
+                continue
+            info = result['result']
+            if method == 'roleInfo':
+                if not info.get('ok'):
+                    continue
+                environment_url = str(info.get('gameServer') or '').strip()
+                role_id = str(info.get('roleId') or '').strip()
+                server_id = str(info.get('serverId') or '').strip()
+                ready = bool(environment_url and role_id and server_id)
+                info = {
+                    'environmentUrl': environment_url,
+                    'roleId': role_id,
+                    'roleName': str(info.get('roleName') or '').strip(),
+                    'playerId': role_id,
+                    'serverId': server_id,
+                    'clientId': self.connection_id,
+                    'ready': ready,
+                }
+            elif not info.get('clientId'):
+                info = {**info, 'clientId': self.connection_id}
+            self.set_target_info(info)
+            return True
+        return False
 
     def set_target_info(self, info, heartbeat=False):
         if not isinstance(info, dict):
@@ -2023,7 +2680,7 @@ def _cocos_proxy_target(raw_client, ws_port):
     server_id = str(context.get('serverId') or '').strip()
     client_id = str(context.get('clientId') or route_client_id).strip()
     port = str(ws_port or COCOS_WS_PORT)
-    identity_complete = all((client_id, port, account_id, role_id, server_id, environment_url))
+    identity_complete = all((client_id, port, role_id, server_id, environment_url))
     ready = bool(context.get('ready')) if 'ready' in context else bool(context.get('online'))
     dispatchable = identity_complete
     label = role_name or account_name
@@ -2064,7 +2721,61 @@ def _cocos_proxy_target(raw_client, ws_port):
     }
 
 
-def _cocos_proxy_targets():
+def _cocos_proxy_refresh_client(raw_client):
+    client_id = str(raw_client.get('clientId') or '').strip()
+    if not client_id:
+        return raw_client
+    for method in ('getGMContext', 'getGmTargetInfo'):
+        try:
+            response = _cocos_proxy_request_json('POST', f'/rpc/{method}', {
+                'clientId': client_id,
+                'params': [],
+            }, timeout=COCOS_PROXY_TIMEOUT)
+        except RuntimeError:
+            continue
+        context = response.get('result') if isinstance(response, dict) else None
+        if isinstance(context, dict) and context:
+            refreshed = dict(raw_client)
+            refreshed.update({
+                'context': context,
+                'contextReady': True,
+                'contextUpdatedAt': int(time.time() * 1000),
+            })
+            return refreshed
+    return raw_client
+
+
+def _cocos_proxy_apply_context_cache(raw_client):
+    client_id = str(raw_client.get('clientId') or '').strip()
+    connected_at = str(raw_client.get('connectedAt') or '')
+    context = raw_client.get('context') if isinstance(raw_client.get('context'), dict) else {}
+    try:
+        updated_at = int(raw_client.get('contextUpdatedAt') or 0)
+    except (TypeError, ValueError):
+        updated_at = 0
+    with _cocos_proxy_context_lock:
+        cached = _cocos_proxy_context_cache.get(client_id)
+        if cached and cached.get('connected_at') != connected_at:
+            _cocos_proxy_context_cache.pop(client_id, None)
+            cached = None
+        if cached and int(cached.get('updated_at') or 0) > updated_at:
+            merged = dict(raw_client)
+            merged.update({
+                'context': dict(cached.get('context') or {}),
+                'contextReady': True,
+                'contextUpdatedAt': cached['updated_at'],
+            })
+            return merged
+        if client_id and context:
+            _cocos_proxy_context_cache[client_id] = {
+                'connected_at': connected_at,
+                'context': dict(context),
+                'updated_at': updated_at,
+            }
+    return raw_client
+
+
+def _cocos_proxy_targets(force_refresh=False):
     if COCOS_PROXY_HTTP_PORT <= 0:
         return [], ''
     try:
@@ -2076,10 +2787,21 @@ def _cocos_proxy_targets():
     except (TypeError, ValueError):
         ws_port = COCOS_WS_PORT
     clients = data.get('clients') if isinstance(data.get('clients'), list) else []
+    clients = [item for item in clients if isinstance(item, dict)]
+    if force_refresh and clients:
+        with ThreadPoolExecutor(max_workers=min(8, len(clients))) as pool:
+            clients = list(pool.map(_cocos_proxy_refresh_client, clients))
+    active_client_ids = {
+        str(item.get('clientId') or '').strip() for item in clients
+        if str(item.get('clientId') or '').strip()
+    }
+    with _cocos_proxy_context_lock:
+        for client_id in list(_cocos_proxy_context_cache):
+            if client_id not in active_client_ids:
+                _cocos_proxy_context_cache.pop(client_id, None)
     targets = []
     for raw_client in clients:
-        if not isinstance(raw_client, dict):
-            continue
+        raw_client = _cocos_proxy_apply_context_cache(raw_client)
         target = _cocos_proxy_target(raw_client, ws_port)
         if target:
             targets.append(target)
@@ -2123,7 +2845,7 @@ class CocosProxyConnection:
 
 
 COCOS_IDENTITY_FIELDS = (
-    'port', 'client_id', 'account_id', 'role_id', 'server_id', 'environment_url',
+    'port', 'client_id', 'role_id', 'server_id', 'environment_url',
 )
 
 
@@ -2242,12 +2964,15 @@ def start_cocos_bridge():
     print(f'[COCOS] bridge listening: ws://127.0.0.1:{COCOS_WS_PORT}')
 
 
-def cocos_bridge_status():
+def cocos_bridge_status(force_refresh=False):
     connections = _active_cocos_connections()
     with _cocos_bridge_lock:
         last_disconnect = dict(_cocos_bridge_last_disconnect)
+    if force_refresh and connections:
+        with ThreadPoolExecutor(max_workers=min(8, len(connections))) as pool:
+            list(pool.map(lambda connection: connection.refresh_target_info(), connections))
     direct_targets = [item.target_snapshot() for item in connections]
-    proxy_targets, proxy_error = _cocos_proxy_targets()
+    proxy_targets, proxy_error = _cocos_proxy_targets(force_refresh=force_refresh)
     targets = direct_targets + proxy_targets
     grouped = {}
     for target in targets:
@@ -2292,9 +3017,21 @@ def cocos_bridge_status():
         'environment_count': len(environments),
         'account_count': len(unique_accounts),
         'instance_count': len(targets),
+        'refreshed': bool(force_refresh),
+        'refreshed_count': len(targets) if force_refresh else 0,
         'environments': environments,
         'ks_catalog': catalog,
     }
+
+
+def current_cocos_targets(force_refresh=False):
+    connections = _active_cocos_connections()
+    if force_refresh and connections:
+        with ThreadPoolExecutor(max_workers=min(8, len(connections))) as pool:
+            list(pool.map(lambda connection: connection.refresh_target_info(), connections))
+    direct_targets = [item.target_snapshot() for item in connections]
+    proxy_targets, _proxy_error = _cocos_proxy_targets(force_refresh=force_refresh)
+    return direct_targets + proxy_targets
 
 
 def _execute_cocos_connection(connection, normalized):
@@ -2897,6 +3634,18 @@ def inspect_ls_token(token, base_url='', credential_text=''):
 
 KS_DEFAULT_BASE_URL = 'https://zxty.tuyoo.com'
 KS_LOGIN_CASE_NAME = 'TestLoginGvg'
+GM_CONSOLE_DEFAULT_USERNAME = os.environ.get('GM_CONSOLE_USERNAME', '')
+GM_CONSOLE_DEFAULT_PASSWORD = os.environ.get('GM_CONSOLE_PASSWORD', '')
+_gm_console_login_lock = threading.Lock()
+GM_CONSOLE_SERVER_SPECIALS = [
+    {'id': -7, 'name': '官渡战场'},
+    {'id': -6, 'name': '小游戏'},
+    {'id': -5, 'name': '搜打撤战场'},
+    {'id': -4, 'name': '个人战场'},
+    {'id': -1, 'name': '全服'},
+    {'id': -2, 'name': 'GM'},
+    {'id': -3, 'name': '匹配'},
+]
 
 
 def _load_json_object(path, default=None):
@@ -2929,6 +3678,31 @@ def save_ks_config(base_url, token):
     _save_json_object(KS_CONFIG_FILE, {
         'base_url': normalize_ks_base_url(base_url or KS_DEFAULT_BASE_URL),
         'token': str(token or '').strip(),
+    })
+
+
+def load_gm_console_config():
+    config = _load_json_object(GM_CONSOLE_CONFIG_FILE)
+    env_token = str(os.environ.get('GM_CONSOLE_TOKEN') or '').strip()
+    env_cookie = str(os.environ.get('GM_CONSOLE_COOKIE') or '').strip()
+    env_username = str(os.environ.get('GM_CONSOLE_USERNAME') or '').strip()
+    env_password = str(os.environ.get('GM_CONSOLE_PASSWORD') or '')
+    return {
+        'token': env_token or str(config.get('token') or '').strip(),
+        'cookie': env_cookie or str(config.get('cookie') or '').strip(),
+        'username': env_username or str(config.get('username') or '').strip(),
+        'password': env_password or str(config.get('password') or ''),
+    }
+
+
+def save_gm_console_config(token=None, cookie=None, username=None, password=None):
+    current = load_gm_console_config()
+    _save_json_object(GM_CONSOLE_CONFIG_FILE, {
+        'token': str(current.get('token', '') if token is None else token).strip(),
+        'cookie': str(current.get('cookie', '') if cookie is None else cookie).strip(),
+        'username': str(current.get('username', '') if username is None else username).strip(),
+        'password': str(current.get('password', '') if password is None else password),
+        'updated_at': now_str(),
     })
 
 
@@ -3078,6 +3852,21 @@ def ks_fetch_applications(base_url, token, project, cluster_name):
 
 def _text_value(value):
     return '' if value in (None, '') else str(value).strip()
+
+
+def _int_value(value, default=0):
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _bool_value(value):
+    if isinstance(value, bool):
+        return value
+    if value in (None, ''):
+        return False
+    return str(value).strip().lower() in ('1', 'true', 'yes', 'on')
 
 
 def ks_account_cache_id(environment_key, account):
@@ -3335,6 +4124,8 @@ def sync_ks_catalog(token='', base_url='', persist_config=False):
             environment = futures[future]
             try:
                 environment['accounts'] = future.result()
+                environment['accounts_refreshed_at'] = time.time()
+                environment['accounts_updated_at'] = now_str()
             except Exception as exc:
                 environment['accounts'] = []
                 environment['account_error'] = str(exc)[:240]
@@ -3578,7 +4369,8 @@ def execute_ks_commands(commands, requested_targets):
     return result
 
 
-def execute_gm_commands(commands, target_id='', target_ids=None, target_specs=None, ks_targets=None):
+def execute_gm_commands(commands, target_id='', target_ids=None, target_specs=None,
+                        ks_targets=None):
     client_specs = [item for item in (target_specs or []) if isinstance(item, dict)]
     offline_specs = [item for item in (ks_targets or []) if isinstance(item, dict)]
     if not client_specs and not offline_specs:
@@ -3587,6 +4379,7 @@ def execute_gm_commands(commands, target_id='', target_ids=None, target_specs=No
             'code': 'gm_target_required',
             'msg': '请选择至少一个可执行账号',
         }
+    print(f'[GM-EXEC] request cocos={len(client_specs)} ks={len(offline_specs)}')
     results = []
     if client_specs:
         client_result = execute_cocos_commands(
@@ -3629,8 +4422,36 @@ def execute_gm_commands(commands, target_id='', target_ids=None, target_specs=No
     return response
 
 
-def _ks_display_account_match(account, target):
-    if normalize_game_url(account.get('environment_url')) != normalize_game_url(target.get('environment_url')):
+def _ks_environment_urls(environment):
+    urls = set()
+    for key in ('login_url', 'environment_url'):
+        url = normalize_game_url(environment.get(key))
+        if url:
+            urls.add(url)
+    links = environment.get('links') if isinstance(environment, dict) else []
+    for link in links if isinstance(links, list) else []:
+        url = normalize_game_url(link)
+        if url:
+            urls.add(url)
+    return urls
+
+
+def _ks_environment_matches_target(environment, target):
+    target_url = normalize_game_url(target.get('environment_url'))
+    if not target_url:
+        return False
+    if target_url in _ks_environment_urls(environment):
+        return True
+    target_host = (urlparse(target_url).hostname or '').lower()
+    app_name = _text_value(environment.get('app_name') or environment.get('name')).lower()
+    return bool(app_name and app_name in target_host)
+
+
+def _ks_display_account_match(account, target, environment=None):
+    if environment is not None:
+        if not _ks_environment_matches_target(environment, target):
+            return -1
+    elif normalize_game_url(account.get('environment_url')) != normalize_game_url(target.get('environment_url')):
         return -1
     account_role_id = _text_value(account.get('role_id'))
     target_role_id = _text_value(target.get('role_id'))
@@ -3690,20 +4511,37 @@ def ks_catalog_with_online(targets=None):
             for target in targets:
                 if target.get('id') in matched_target_ids:
                     continue
-                score = _ks_display_account_match(account, target)
+                score = _ks_display_account_match(account, target, environment)
                 if score > best_score:
                     best_target, best_score = target, score
             if best_target is not None:
                 matched_target_ids.add(best_target.get('id'))
-                preserved_cache_id = account.get('cache_id')
+                preserved = {
+                    'cache_id': account.get('cache_id'),
+                    'account_name': account.get('account_name'),
+                    'account_label': account.get('account_label') or account.get('account_name'),
+                    'user_key': account.get('user_key'),
+                    'source_case_name': account.get('source_case_name'),
+                    'source': account.get('source'),
+                    'operation_time': account.get('operation_time'),
+                    'last_seen': account.get('last_seen'),
+                }
                 account.update(best_target)
                 account.update({
-                    'cache_id': preserved_cache_id,
+                    **{key: value for key, value in preserved.items() if value not in (None, '')},
+                    'account_label': best_target.get('role_name') or
+                                     best_target.get('account_label') or
+                                     preserved.get('account_label') or
+                                     best_target.get('account_name') or
+                                     best_target.get('role_id') or '',
+                    'client_account_label': best_target.get('account_label', ''),
+                    'client_role_name': best_target.get('role_name', ''),
                     'environment_key': environment.get('key', ''),
                     'environment_name': environment.get('name', ''),
                     'environment_url': environment.get('login_url', '') or best_target.get('environment_url', ''),
                     'connected': True,
                     'online': True,
+                    'ks_dispatchable': ks_dispatchable,
                 })
 
     for target in targets:
@@ -3712,7 +4550,7 @@ def ks_catalog_with_online(targets=None):
         target_url = normalize_game_url(target.get('environment_url'))
         environment = next((
             item for item in environments
-            if normalize_game_url(item.get('login_url') or item.get('environment_url')) == target_url
+            if _ks_environment_matches_target(item, target)
         ), None)
         if environment is None:
             key = 'online:' + hashlib.sha256(target_url.encode('utf-8')).hexdigest()[:16]
@@ -3784,6 +4622,1401 @@ def ks_catalog_status():
         'expires_at': token_state.get('expires_at', 0),
         'profile': token_state.get('profile', {}),
     }
+
+
+def ks_cached_environment(environment_key):
+    with _ks_cache_lock:
+        cache = _load_json_object(KS_ACCOUNT_CACHE_FILE)
+    return next((
+        item for item in (cache.get('catalog', {}).get('environments') or [])
+        if isinstance(item, dict) and _text_value(item.get('key')) == _text_value(environment_key)
+    ), None)
+
+
+def refresh_kongming_account_catalog():
+    if not _kongming_account_catalog_refresh_lock.acquire(blocking=False):
+        return {'ok': True, 'skipped': True, 'msg': '全环境账号目录正在刷新'}
+    try:
+        config = load_ks_config()
+        token_state = ks_token_status(config.get('token', ''))
+        if not token_state.get('configured') or token_state.get('expired'):
+            return {'ok': False, 'skipped': True, 'msg': 'KS Token 未配置或已过期'}
+        with _ks_cache_lock:
+            cache = _load_json_object(KS_ACCOUNT_CACHE_FILE)
+        environment_keys = [
+            _text_value(item.get('key'))
+            for item in (cache.get('catalog', {}).get('environments') or [])
+            if isinstance(item, dict) and not item.get('is_public') and _text_value(item.get('key'))
+        ]
+        if not environment_keys:
+            return {'ok': True, 'environment_count': 0, 'success_count': 0, 'failure_count': 0}
+
+        failures = []
+        success_count = 0
+        with ThreadPoolExecutor(max_workers=min(6, len(environment_keys))) as pool:
+            futures = {
+                pool.submit(ks_refresh_environment_accounts, environment_key): environment_key
+                for environment_key in environment_keys
+            }
+            for future in as_completed(futures):
+                environment_key = futures[future]
+                try:
+                    future.result()
+                    success_count += 1
+                except Exception as exc:
+                    failures.append({'environment_key': environment_key, 'msg': str(exc)[:240]})
+        return {
+            'ok': not failures,
+            'environment_count': len(environment_keys),
+            'success_count': success_count,
+            'failure_count': len(failures),
+            'failures': failures,
+        }
+    finally:
+        _kongming_account_catalog_refresh_lock.release()
+
+
+def start_kongming_account_catalog_service():
+    if KONGMING_ACCOUNT_REFRESH_INTERVAL <= 0:
+        return None
+
+    def worker():
+        while True:
+            try:
+                result = refresh_kongming_account_catalog()
+                if result.get('environment_count'):
+                    print(
+                        f'[KONGMING] 全环境账号目录刷新：'
+                        f'{result.get("success_count", 0)}/{result.get("environment_count", 0)}'
+                    )
+            except Exception as exc:
+                print(f'[KONGMING] 全环境账号目录刷新失败：{exc}')
+            time.sleep(max(30, KONGMING_ACCOUNT_REFRESH_INTERVAL))
+
+    thread = threading.Thread(target=worker, name='kongming-account-catalog', daemon=True)
+    thread.start()
+    return thread
+
+
+def ks_resolve_season_server(environment, origin_server_ids):
+    config = load_ks_config()
+    token = config.get('token', '')
+    token_state = ks_token_status(token)
+    if not token:
+        raise ValueError('未配置 KS Token')
+    if token_state.get('expired'):
+        raise ValueError('KS Token 已过期，请更新 Token 后重试')
+
+    app_id = _text_value(
+        environment.get('app_id') or environment.get('raw_id') or environment.get('key')
+    )
+    project_id = _text_value(environment.get('project_id'))
+    cluster_name = _text_value(environment.get('cluster') or environment.get('cluster_name'))
+    if not app_id or not project_id or not cluster_name:
+        raise ValueError('KS 环境缺少应用、项目或集群信息，请重新同步环境')
+
+    pods_data = ks_request_json(
+        config.get('base_url'),
+        token,
+        f'/idp/apk/application/{quote(app_id, safe="")}/pods',
+        {'project_id': project_id, 'cluster_name': cluster_name},
+        timeout=30,
+    )
+    raw_pods = []
+    if isinstance(pods_data, dict):
+        raw_pods = pods_data.get('apps') or pods_data.get('results') or pods_data.get('pods') or []
+    pod_ids = []
+    for item in raw_pods if isinstance(raw_pods, list) else []:
+        name = _text_value(item.get('name')) if isinstance(item, dict) else _text_value(item)
+        match = re.search(r'(?:^|-)gameserver-(\d+)(?:-|$)', name, flags=re.IGNORECASE)
+        if match and match.group(1) not in pod_ids:
+            pod_ids.append(match.group(1))
+    if not pod_ids:
+        raise ValueError('KS 环境中没有识别到 gameserver 赛季服，请确认环境已部署完成')
+
+    requested = {_text_value(item) for item in origin_server_ids if _text_value(item)}
+    mapping = {}
+    try:
+        mapping_data = ks_request_json(
+            config.get('base_url'),
+            token,
+            f'/idp/apk/project/{quote(project_id, safe="")}/game/server/config',
+            timeout=30,
+        )
+        if isinstance(mapping_data, dict) and isinstance(mapping_data.get('results'), dict):
+            mapping = mapping_data['results']
+    except ValueError:
+        if len(pod_ids) > 1:
+            raise
+
+    matched = []
+    for pod_id in pod_ids:
+        item = mapping.get(pod_id, {}) if isinstance(mapping, dict) else {}
+        origin_ids = {
+            _text_value(value) for value in (item.get('origin_server_ids') or [])
+            if _text_value(value)
+        } if isinstance(item, dict) else set()
+        if requested and requested.issubset(origin_ids):
+            matched.append(pod_id)
+    if len(matched) == 1:
+        return matched[0], {'pod_ids': pod_ids, 'matched_by': 'origin_server_mapping'}
+    if len(pod_ids) == 1:
+        return pod_ids[0], {'pod_ids': pod_ids, 'matched_by': 'single_gameserver'}
+    if matched:
+        raise ValueError('多个赛季服同时包含目标原服，无法唯一确定创建账号的赛季服')
+    raise ValueError('当前环境存在多个赛季服，但没有一个赛季服完整映射到指定原服')
+
+
+def ks_request_ndjson(base_url, token, path, payload, timeout=300):
+    base_url = normalize_ks_base_url(base_url or KS_DEFAULT_BASE_URL)
+    url = urljoin(base_url + '/', str(path or '').lstrip('/'))
+    clean_token = re.sub(r'^(?:Bearer|Token)\s+', '', str(token or '').strip(), flags=re.IGNORECASE)
+    headers = {
+        'Accept': 'application/x-ndjson, application/json, text/plain, */*',
+        'Authorization': 'Token ' + clean_token,
+        'Content-Type': 'application/json; charset=utf-8',
+        'User-Agent': 'GMCommandTool/2.0',
+    }
+    body = json.dumps(payload, ensure_ascii=False, separators=(',', ':')).encode('utf-8')
+    request = urllib.request.Request(url, data=body, headers=headers, method='POST')
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            raw = response.read(16 * 1024 * 1024)
+    except urllib.error.HTTPError as exc:
+        try:
+            detail = exc.read(8192).decode('utf-8', errors='replace')
+        except OSError:
+            detail = ''
+        if exc.code == 401:
+            raise ValueError('KS Token 已失效，请更新 Token 后重试') from exc
+        raise ValueError(f'KS 创建账号请求失败（HTTP {exc.code}）：{detail[:500]}') from exc
+    except urllib.error.URLError as exc:
+        raise ValueError(f'无法连接 KS 创建账号服务：{exc.reason}') from exc
+
+    text = raw.decode('utf-8-sig', errors='replace')
+    events = []
+    for line in text.splitlines():
+        line = line.strip()
+        if line.startswith('data:'):
+            line = line[5:].strip()
+        if not line:
+            continue
+        try:
+            item = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(item, dict):
+            events.append(item)
+    failed = next((
+        item for item in events
+        if _text_value(item.get('status')).lower() in ('error', 'failed', 'failure')
+    ), None)
+    if failed:
+        message = _text_value(
+            failed.get('message') or failed.get('error') or failed.get('result')
+        ) or 'KS 创建账号任务执行失败'
+        raise ValueError(message[:500])
+    return {
+        'ok': True,
+        'completed': any(_text_value(item.get('status')).lower() == 'completed' for item in events),
+        'event_count': len(events),
+        'statuses': [_text_value(item.get('status')) for item in events if item.get('status')],
+        'events': events,
+        'raw_excerpt': text[:1000] if not events else '',
+    }
+
+
+def ks_create_alliance_accounts(environment, season_server_id, origin_server_ids):
+    config = load_ks_config()
+    token = config.get('token', '')
+    token_state = ks_token_status(token)
+    if not token:
+        raise ValueError('未配置 KS Token')
+    if token_state.get('expired'):
+        raise ValueError('KS Token 已过期，请更新 Token 后重试')
+    server_list = {
+        _text_value(server_id): {'alliance_count': 1, 'member_count': 1}
+        for server_id in origin_server_ids if _text_value(server_id)
+    }
+    payload = {
+        'case_name': KS_LOGIN_CASE_NAME,
+        'application_name': _text_value(environment.get('app_name') or environment.get('name')),
+        'server_ids': [_text_value(season_server_id)],
+        'server_id': _text_value(season_server_id),
+        'login_url': normalize_game_url(environment.get('login_url')),
+        'user_count': len(server_list),
+        'alliance_count': 1,
+        'role_count_per_alliance': 1,
+        'enable_unlock_all_funcs': True,
+        'enable_money_all': True,
+        'enable_upgrade_all_building': True,
+        'upgrade_building_level': 30,
+        'gvg_config': {'server_list': server_list},
+        'gvgConfigsByServer': {
+            _text_value(season_server_id): [
+                {'server_id': server_id, 'alliance_count': 1, 'member_count': 1}
+                for server_id in server_list
+            ],
+        },
+    }
+    if not payload['application_name'] or not payload['login_url'] or not server_list:
+        raise ValueError('KS 创建账号参数不完整，请重新同步环境')
+    return ks_request_ndjson(
+        config.get('base_url'), token, f'/idp/apk/cases/{KS_LOGIN_CASE_NAME}', payload, timeout=300
+    )
+
+
+def ks_refresh_environment_accounts(environment_key):
+    environment = ks_cached_environment(environment_key)
+    if not environment:
+        raise ValueError('KS 环境缓存不存在，请重新同步环境')
+    config = load_ks_config()
+    token = config.get('token', '')
+    if not token:
+        raise ValueError('未配置 KS Token')
+    refreshed = ks_fetch_environment_accounts(config.get('base_url'), token, environment)
+    with _ks_cache_lock:
+        cache = _load_json_object(KS_ACCOUNT_CACHE_FILE)
+        catalog = cache.get('catalog', {})
+        environments = catalog.get('environments') or []
+        target = next((
+            item for item in environments
+            if isinstance(item, dict) and _text_value(item.get('key')) == _text_value(environment_key)
+        ), None)
+        if not target:
+            raise ValueError('KS 环境缓存已变化，请重新同步环境')
+        previous = {
+            _text_value(item.get('cache_id')): item
+            for item in (target.get('accounts') or [])
+            if isinstance(item, dict) and _text_value(item.get('cache_id'))
+        }
+        target['accounts'] = [
+            ks_merge_account_record(previous.get(_text_value(item.get('cache_id'))), item)
+            for item in refreshed
+        ]
+        target['account_count'] = len(target['accounts'])
+        target['accounts_refreshed_at'] = time.time()
+        target['accounts_updated_at'] = now_str()
+        catalog['account_count'] = sum(
+            len(item.get('accounts') or []) for item in environments if isinstance(item, dict)
+        )
+        catalog['updated_at'] = now_str()
+        cache['catalog'] = catalog
+        _save_json_object(KS_ACCOUNT_CACHE_FILE, cache)
+        return dict(target)
+
+
+def gm_console_token_status():
+    config = load_gm_console_config()
+    return {
+        'configured': bool(config.get('token') or config.get('cookie')),
+        'username': config.get('username', ''),
+    }
+
+
+def gm_console_base_from_environment(environment):
+    links = environment.get('links') if isinstance(environment, dict) else []
+    normalized_links = []
+    for link in links if isinstance(links, list) else []:
+        url = normalize_game_url(link)
+        if url:
+            normalized_links.append(url)
+    for url in normalized_links:
+        host = (urlparse(url).hostname or '').lower()
+        if host.startswith('gm-') or '-gm-' in host:
+            return url.rstrip('/')
+    login_url = normalize_game_url(
+        environment.get('login_url') or environment.get('environment_url')
+    )
+    if login_url:
+        parsed = urlparse(login_url)
+        host = parsed.hostname or ''
+        if host.startswith('login-'):
+            host = 'gm-' + host[len('login-'):]
+            netloc = host
+            if parsed.port:
+                netloc += ':' + str(parsed.port)
+            return parsed._replace(netloc=netloc, path='', params='', query='', fragment='').geturl().rstrip('/')
+    return ''
+
+
+def gm_console_find_environment(environment_key):
+    with _ks_cache_lock:
+        cache = _load_json_object(KS_ACCOUNT_CACHE_FILE)
+    for environment in (cache.get('catalog', {}).get('environments') or []):
+        if isinstance(environment, dict) and _text_value(environment.get('key')) == _text_value(environment_key):
+            return environment
+    return None
+
+
+def gm_console_request(environment, path, payload=None, timeout=60):
+    config = load_gm_console_config()
+    token = config.get('token', '')
+    cookie = config.get('cookie', '')
+    if not token and not cookie:
+        raise ValueError('未配置 GM 控制台登录信息')
+    base_url = gm_console_base_from_environment(environment)
+    if not base_url:
+        raise ValueError('该 KS 环境未读取到 GM 控制台入口')
+    url = urljoin(base_url.rstrip('/') + '/', str(path or '').lstrip('/'))
+    body = urlencode(payload or {}).encode('utf-8')
+    headers = {
+        'Accept': 'application/json, text/plain, */*',
+        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+        'X-Requested-With': 'XMLHttpRequest',
+        'User-Agent': 'GMCommandTool/2.0',
+        'Origin': base_url,
+        'Referer': base_url.rstrip('/') + '/console/v2/dist/groovy/execute',
+    }
+    if token:
+        headers['Authorization'] = 'Bearer ' + token
+    if cookie:
+        headers['Cookie'] = cookie
+    req = urllib.request.Request(url, data=body, headers=headers, method='POST')
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as response:
+            raw = response.read(8 * 1024 * 1024)
+    except urllib.error.HTTPError as exc:
+        try:
+            detail = exc.read(4096).decode('utf-8', errors='replace')
+        except OSError:
+            detail = ''
+        raise ValueError(f'GM 控制台接口请求失败（HTTP {exc.code}）：{detail[:240]}') from exc
+    except urllib.error.URLError as exc:
+        raise ValueError(f'无法连接 GM 控制台：{exc.reason}') from exc
+    try:
+        data = json.loads(raw.decode('utf-8'))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError('GM 控制台返回内容不是有效 JSON') from exc
+    if isinstance(data, dict) and data.get('sysRet') == '1':
+        msg = _text_value(data.get('sysMsg')) or 'GM 控制台登录已失效'
+        raise ValueError(msg + '，请重新登录 GM 控制台')
+    return data
+
+
+def gm_console_cookie_from_headers(headers):
+    raw_values = []
+    if hasattr(headers, 'get_all'):
+        raw_values = headers.get_all('Set-Cookie') or []
+    if not raw_values:
+        value = headers.get('Set-Cookie') if headers else ''
+        raw_values = [value] if value else []
+    cookies = []
+    for raw in raw_values:
+        for part in str(raw or '').split(','):
+            first = part.strip().split(';', 1)[0]
+            if '=' in first and not first.lower().startswith('expires='):
+                name, value = first.split('=', 1)
+                if name.strip() and value.strip() and value.strip() != 'deleteMe':
+                    cookies.append(name.strip() + '=' + value.strip())
+    deduped = []
+    seen = set()
+    for cookie in cookies:
+        name = cookie.split('=', 1)[0]
+        if name not in seen:
+            seen.add(name)
+            deduped.append(cookie)
+    return '; '.join(deduped)
+
+
+def gm_console_extract_token(value):
+    if isinstance(value, dict):
+        for key in ('token', 'accessToken', 'access_token', 'jwt', 'Authorization', 'authorization'):
+            candidate = value.get(key)
+            if isinstance(candidate, str) and candidate.strip():
+                token = candidate.strip()
+                return token[7:].strip() if token.lower().startswith('bearer ') else token
+        for child in value.values():
+            token = gm_console_extract_token(child)
+            if token:
+                return token
+    elif isinstance(value, list):
+        for child in value:
+            token = gm_console_extract_token(child)
+            if token:
+                return token
+    elif isinstance(value, str):
+        text = value.strip()
+        if text.lower().startswith('bearer '):
+            text = text[7:].strip()
+        if len(text) > 30 and (text.count('.') >= 2 or re.match(r'^[A-Za-z0-9._=-]+$', text)):
+            return text
+    return ''
+
+
+def gm_console_login(environment_key, username, password):
+    environment = gm_console_find_environment(environment_key)
+    if not environment:
+        return {'ok': False, 'code': 'gm_environment_not_found', 'msg': '请选择有效的 KS 环境'}
+    username = _text_value(username)
+    password = str(password or '')
+    if not username or not password:
+        return {'ok': False, 'code': 'gm_login_required', 'msg': '请填写 GM 控制台账号和密码'}
+    base_url = gm_console_base_from_environment(environment)
+    if not base_url:
+        return {'ok': False, 'code': 'gm_url_missing', 'msg': '该环境没有 GM 控制台入口'}
+    url = base_url.rstrip('/') + '/console/v2/login'
+    body = urlencode({'username': username, 'password': password}).encode('utf-8')
+    headers = {
+        'Accept': 'application/json, text/plain, */*',
+        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+        'X-Requested-With': 'XMLHttpRequest',
+        'User-Agent': 'GMCommandTool/2.0',
+        'Origin': base_url,
+        'Referer': base_url.rstrip('/') + '/console/v2/dist/login',
+    }
+    req = urllib.request.Request(url, data=body, headers=headers, method='POST')
+    try:
+        with urllib.request.urlopen(req, timeout=30) as response:
+            raw = response.read(1024 * 1024)
+            response_headers = response.headers
+    except urllib.error.HTTPError as exc:
+        try:
+            detail = exc.read(4096).decode('utf-8', errors='replace')
+        except OSError:
+            detail = ''
+        raise ValueError(f'GM 控制台登录失败（HTTP {exc.code}）：{detail[:240]}') from exc
+    except urllib.error.URLError as exc:
+        raise ValueError(f'无法连接 GM 控制台：{exc.reason}') from exc
+    text = raw.decode('utf-8', errors='replace')
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise ValueError('GM 控制台登录返回内容不是有效 JSON') from exc
+    if not isinstance(data, dict):
+        return {'ok': False, 'code': 'gm_login_failed', 'msg': 'GM 控制台登录返回格式不受支持'}
+    ret = _int_value(data.get('ret'), 0)
+    if ret != 0:
+        return {'ok': False, 'code': 'gm_login_failed', 'ret': ret, 'msg': _text_value(data.get('msg')) or '账号或密码错误'}
+    token = gm_console_extract_token(data)
+    header_auth = response_headers.get('Authorization') or response_headers.get('authorization') or ''
+    if header_auth and not token:
+        token = header_auth[7:].strip() if header_auth.lower().startswith('bearer ') else header_auth.strip()
+    cookie = gm_console_cookie_from_headers(response_headers)
+    if not token and not cookie:
+        return {'ok': False, 'code': 'gm_login_no_auth', 'msg': '登录成功但未拿到 Token 或 Cookie'}
+    save_gm_console_config(token=token, cookie=cookie, username=username, password=password)
+    return {
+        'ok': True,
+        'configured': True,
+        'username': username,
+        'has_token': bool(token),
+        'has_cookie': bool(cookie),
+        'msg': 'GM 控制台登录成功',
+    }
+
+
+def gm_console_is_auth_error(exc):
+    text = str(exc or '')
+    auth_markers = (
+        '未配置 GM 控制台登录信息',
+        '重新登录 GM 控制台',
+        '登录已失效',
+        '登录失效',
+        '未登录',
+        'HTTP 401',
+        'HTTP 403',
+    )
+    return any(marker in text for marker in auth_markers)
+
+
+def gm_console_auto_login(environment_key):
+    config = load_gm_console_config()
+    username = _text_value(config.get('username') or GM_CONSOLE_DEFAULT_USERNAME)
+    password = str(config.get('password') or GM_CONSOLE_DEFAULT_PASSWORD)
+    if not username or not password:
+        raise ValueError('未配置 GM 控制台自动登录账号')
+    with _gm_console_login_lock:
+        result = gm_console_login(
+            environment_key,
+            username,
+            password,
+        )
+    if not result.get('ok'):
+        raise ValueError(result.get('msg') or 'GM 控制台自动登录失败')
+    return result
+
+
+def gm_console_request_with_auto_login(environment_key, environment, path, payload=None, timeout=60):
+    try:
+        return gm_console_request(environment, path, payload, timeout=timeout), False
+    except ValueError as exc:
+        if not gm_console_is_auth_error(exc):
+            raise
+    gm_console_auto_login(environment_key)
+    return gm_console_request(environment, path, payload, timeout=timeout), True
+
+
+def normalize_gm_server_options(response):
+    servers = []
+    if isinstance(response, dict):
+        data = response.get('data') if isinstance(response.get('data'), dict) else {}
+        raw_servers = data.get('servers') or response.get('servers') or []
+    else:
+        raw_servers = []
+    for item in raw_servers if isinstance(raw_servers, list) else []:
+        if not isinstance(item, dict):
+            continue
+        sid = item.get('id')
+        name = item.get('name') or item.get('serverName') or sid
+        if sid in (None, ''):
+            continue
+        servers.append({'id': sid, 'name': str(name)})
+    return GM_CONSOLE_SERVER_SPECIALS + servers
+
+
+def normalize_gm_collect_options(response):
+    data = response.get('data') if isinstance(response, dict) else []
+    collects = []
+    for item in data if isinstance(data, list) else []:
+        if not isinstance(item, dict):
+            continue
+        cid = item.get('id')
+        if cid in (None, ''):
+            continue
+        collects.append({
+            'id': cid,
+            'taskName': _text_value(item.get('taskName') or item.get('name')) or str(cid),
+        })
+    return collects
+
+
+def gm_console_options(environment_key):
+    environment = gm_console_find_environment(environment_key)
+    if not environment:
+        return {'ok': False, 'code': 'gm_environment_not_found', 'msg': '请选择有效的 KS 环境'}
+    base_url = gm_console_base_from_environment(environment)
+    if not base_url:
+        return {'ok': False, 'code': 'gm_url_missing', 'msg': '该环境没有 GM 控制台入口'}
+    auto_logged_in = False
+    servers_response, logged_in = gm_console_request_with_auto_login(
+        environment_key, environment, '/console/v2/server/list', {}, timeout=30
+    )
+    auto_logged_in = auto_logged_in or logged_in
+    try:
+        collects_response, logged_in = gm_console_request_with_auto_login(
+            environment_key, environment, '/console/v2/groovy/history/getCollect', {}, timeout=30
+        )
+        auto_logged_in = auto_logged_in or logged_in
+    except ValueError as exc:
+        if not gm_console_is_auth_error(exc):
+            raise
+        gm_console_auto_login(environment_key)
+        auto_logged_in = True
+        servers_response = gm_console_request(environment, '/console/v2/server/list', {}, timeout=30)
+        collects_response = gm_console_request(environment, '/console/v2/groovy/history/getCollect', {}, timeout=30)
+    login_status = gm_console_token_status()
+    return {
+        'ok': True,
+        'environment': {
+            'key': environment.get('key', ''),
+            'name': environment.get('name', ''),
+            'category': environment.get('category', ''),
+            'gm_url': base_url,
+            'execute_url': base_url.rstrip('/') + '/console/v2/dist/groovy/execute',
+            'history_url': base_url.rstrip('/') + '/console/v2/dist/groovy/history',
+        },
+        'servers': normalize_gm_server_options(servers_response),
+        'collects': normalize_gm_collect_options(collects_response),
+        'token_configured': login_status.get('configured', False),
+        'username': login_status.get('username', ''),
+        'auto_logged_in': auto_logged_in,
+    }
+
+
+def gm_console_collect_detail(environment_key, collect_id):
+    environment = gm_console_find_environment(environment_key)
+    if not environment:
+        return {'ok': False, 'code': 'gm_environment_not_found', 'msg': '请选择有效的 KS 环境'}
+    data, _ = gm_console_request_with_auto_login(
+        environment_key, environment, '/console/v2/groovy/history/get', {'id': collect_id}, timeout=30
+    )
+    if not isinstance(data, dict) or data.get('ret', 0) != 0:
+        return {'ok': False, 'code': 'gm_collect_failed', 'msg': _text_value(data.get('msg')) or '收藏读取失败'}
+    return {'ok': True, 'item': data.get('data') or {}}
+
+
+def gm_console_execute(payload):
+    environment_key = _text_value(payload.get('environment_key'))
+    environment = gm_console_find_environment(environment_key)
+    if not environment:
+        return {'ok': False, 'code': 'gm_environment_not_found', 'msg': '请选择有效的 KS 环境'}
+    task_name = _text_value(payload.get('taskName') or payload.get('task_name'))
+    server_ids = payload.get('serverIds') or payload.get('server_ids')
+    if isinstance(server_ids, list):
+        server_ids = [_text_value(item) for item in server_ids if _text_value(item)]
+    else:
+        server_id = _text_value(payload.get('serverId') or payload.get('server_id'))
+        server_ids = [server_id] if server_id else []
+    script = str(payload.get('script') or '')
+    thread_mode = _int_value(payload.get('threadMode') or payload.get('thread_mode'), 2)
+    operation_type = _int_value(payload.get('operationType') or payload.get('operation_type'), 1)
+    confirm_flag = _bool_value(payload.get('confirmFlag') if 'confirmFlag' in payload else payload.get('confirm_flag'))
+    if not server_ids:
+        return {'ok': False, 'code': 'gm_server_required', 'msg': '请选择服务器 ID'}
+    seen_server_ids = []
+    for server_id in server_ids:
+        if server_id not in seen_server_ids:
+            seen_server_ids.append(server_id)
+    server_ids = seen_server_ids
+    if not task_name:
+        return {'ok': False, 'code': 'gm_task_name_required', 'msg': '请填写任务名称'}
+    if len(task_name) > 15:
+        return {'ok': False, 'code': 'gm_task_name_too_long', 'msg': '任务名称不能超过 15 个字符'}
+    if not script.strip():
+        return {'ok': False, 'code': 'gm_script_required', 'msg': '脚本内容不能为空'}
+    if thread_mode not in (1, 2):
+        thread_mode = 2
+    if operation_type not in (1, 2):
+        operation_type = 1
+
+    def execute_one(server_id):
+        return gm_console_execute_one(
+            environment_key, environment, task_name, server_id, thread_mode, operation_type, script, confirm_flag
+        )
+
+    if len(server_ids) == 1:
+        result = execute_one(server_ids[0])
+        result.update({
+            'target_count': 1,
+            'success_count': 1 if result.get('ok') and result.get('success') is not False else 0,
+            'failure_count': 0 if result.get('ok') and result.get('success') is not False else 1,
+        })
+        return result
+
+    initial_results = []
+    remaining_server_ids = server_ids
+    if not confirm_flag:
+        first_result = execute_one(server_ids[0])
+        if first_result.get('confirm_required'):
+            return {
+                'ok': False,
+                'code': 'gm_confirm_required',
+                'confirm_required': True,
+                'msg': first_result.get('msg') or 'GM 控制台要求二次确认',
+                'data': first_result.get('data'),
+                'batch_results': [first_result],
+            }
+        initial_results.append(first_result)
+        remaining_server_ids = server_ids[1:]
+
+    batch_results = list(initial_results)
+    with ThreadPoolExecutor(max_workers=min(4, max(1, len(remaining_server_ids)))) as pool:
+        futures = {pool.submit(execute_one, server_id): server_id for server_id in remaining_server_ids}
+        for future in as_completed(futures):
+            server_id = futures[future]
+            try:
+                item = future.result()
+            except Exception as exc:
+                item = {'ok': False, 'server_id': server_id, 'msg': str(exc)[:300]}
+            batch_results.append(item)
+    order = {server_id: index for index, server_id in enumerate(server_ids)}
+    batch_results.sort(key=lambda item: order.get(_text_value(item.get('server_id')), len(order)))
+    confirm_item = next((item for item in batch_results if item.get('confirm_required')), None)
+    if confirm_item:
+        return {
+            'ok': False,
+            'code': 'gm_confirm_required',
+            'confirm_required': True,
+            'msg': confirm_item.get('msg') or 'GM 控制台要求二次确认',
+            'data': confirm_item.get('data'),
+            'batch_results': batch_results,
+        }
+    failed = [item for item in batch_results if not item.get('ok') or item.get('success') is False]
+    success_count = len(batch_results) - len(failed)
+    base_url = gm_console_base_from_environment(environment)
+    return {
+        'ok': not failed,
+        'msg': f'并行提交完成：成功 {success_count} 个，失败 {len(failed)} 个',
+        'environment_name': environment.get('name', ''),
+        'gm_url': base_url,
+        'history_url': base_url.rstrip('/') + '/console/v2/dist/groovy/history',
+        'target_count': len(batch_results),
+        'success_count': success_count,
+        'failure_count': len(failed),
+        'batch_results': batch_results,
+    }
+
+
+def gm_console_execute_one(environment_key, environment, task_name, server_id, thread_mode, operation_type, script, confirm_flag=False):
+    request_payload = {
+        'taskName': task_name,
+        'serverId': server_id,
+        'async': thread_mode,
+        'script': script,
+        'operationType': operation_type,
+        'confirmFlag': 'true' if confirm_flag else 'false',
+    }
+    data, _ = gm_console_request_with_auto_login(
+        environment_key, environment, '/console/v2/groovy/execute', request_payload, timeout=60
+    )
+    if not isinstance(data, dict):
+        return {'ok': False, 'server_id': server_id, 'code': 'gm_execute_failed', 'msg': 'GM 控制台返回格式不受支持'}
+    ret = int(data.get('ret') or 0)
+    if ret in (-1001, -1002):
+        return {
+            'ok': False,
+            'server_id': server_id,
+            'code': 'gm_confirm_required',
+            'confirm_required': True,
+            'ret': ret,
+            'msg': _text_value(data.get('msg')) or 'GM 控制台要求二次确认',
+            'data': data.get('data'),
+        }
+    if ret != 0:
+        return {
+            'ok': False,
+            'server_id': server_id,
+            'code': 'gm_execute_failed',
+            'ret': ret,
+            'msg': _text_value(data.get('msg')) or '执行失败',
+        }
+    task_id = data.get('data')
+    result = {
+        'ok': True,
+        'server_id': server_id,
+        'task_id': task_id,
+        'msg': '任务提交成功',
+        'environment_name': environment.get('name', ''),
+        'gm_url': gm_console_base_from_environment(environment),
+        'history_url': gm_console_base_from_environment(environment).rstrip('/') + '/console/v2/dist/groovy/history',
+    }
+    if task_id:
+        try:
+            final = gm_console_poll_task(environment_key, environment, task_id)
+            result.update(final)
+        except Exception as exc:
+            result.update({
+                'task_status': 1,
+                'poll_timeout': True,
+                'msg': f'任务已提交，轮询未拿到最终结果：{exc}',
+            })
+    return result
+
+
+def gm_console_poll_task(environment_key, environment, task_id, interval=5, attempts=10):
+    last = None
+    for _ in range(max(1, attempts)):
+        time.sleep(interval)
+        data, _ = gm_console_request_with_auto_login(
+            environment_key, environment, '/console/v2/groovy/history/get', {'id': task_id}, timeout=30
+        )
+        last = data.get('data') if isinstance(data, dict) else None
+        if isinstance(last, dict) and int(last.get('taskStatus') or 0) != 1:
+            status = int(last.get('taskStatus') or 0)
+            return {
+                'task_status': status,
+                'completed': True,
+                'success': status == 2,
+                'response': last.get('response', ''),
+                'record': last,
+                'msg': '任务执行成功' if status == 2 else '任务执行失败',
+            }
+    return {
+        'task_status': int(last.get('taskStatus') or 1) if isinstance(last, dict) else 1,
+        'completed': False,
+        'poll_timeout': True,
+        'record': last,
+        'msg': '任务仍在执行中，请稍后在操作记录中查询',
+    }
+
+
+def _workflow_step(workflow, step_id):
+    return next((
+        item for item in (workflow.get('steps') or [])
+        if isinstance(item, dict) and item.get('id') == step_id
+    ), None)
+
+
+def _workflow_account_identity(account):
+    return _text_value(account.get('cache_id')) or ':'.join((
+        _text_value(account.get('server_id')),
+        _text_value(account.get('account_name')),
+        _text_value(account.get('role_id')),
+    ))
+
+
+def _workflow_new_accounts(workflow, environment):
+    runtime = workflow.setdefault('runtime', {})
+    baseline = runtime.get('account_baseline') or {}
+    accounts = environment.get('accounts') or []
+    resolved = []
+    for server_id in workflow.get('account_servers') or []:
+        previous = set(baseline.get(server_id) or [])
+        candidates = [
+            item for item in accounts
+            if isinstance(item, dict)
+            and _text_value(item.get('server_id')) == _text_value(server_id)
+            and _workflow_account_identity(item) not in previous
+            and _text_value(item.get('account_name'))
+            and _text_value(item.get('role_id'))
+            and _text_value(item.get('cache_id'))
+            and (not item.get('source_case_name') or item.get('source_case_name') == KS_LOGIN_CASE_NAME)
+        ]
+        candidates.sort(
+            key=lambda item: (_text_value(item.get('operation_time')), _text_value(item.get('last_seen'))),
+            reverse=True,
+        )
+        if candidates:
+            item = candidates[0]
+            resolved.append({
+                'environment_key': workflow.get('environment', {}).get('key', ''),
+                'cache_id': _text_value(item.get('cache_id')),
+                'account_name': _text_value(item.get('account_name')),
+                'account_label': _text_value(item.get('role_name') or item.get('account_label') or item.get('account_name')),
+                'role_id': _text_value(item.get('role_id')),
+                'server_id': _text_value(item.get('server_id')),
+                'operation_time': _text_value(item.get('operation_time') or item.get('last_seen')),
+            })
+    return resolved
+
+
+def _workflow_resolve_environment(workflow):
+    expected = workflow.get('environment') or {}
+    environment = ks_cached_environment(expected.get('key'))
+    if not environment:
+        raise ValueError('KS 环境缓存不存在，请更新 Token 并同步环境后重试')
+    if _text_value(environment.get('app_id') or environment.get('raw_id') or environment.get('key')) != _text_value(expected.get('app_id')):
+        raise ValueError('KS 环境标识已变化，请重新生成任务')
+    season_server_id, resolution = ks_resolve_season_server(
+        environment, workflow.get('account_servers') or []
+    )
+    workflow.setdefault('runtime', {})['season_server_id'] = season_server_id
+    save_kongming_workflow(KONGMING_WORKFLOW_DIR, workflow)
+    return {
+        'msg': f'已解析 KS 环境，赛季服为 {season_server_id}',
+        'season_server_id': season_server_id,
+        'matched_by': resolution.get('matched_by', ''),
+    }
+
+
+def _workflow_create_accounts(workflow):
+    environment_key = workflow.get('environment', {}).get('key', '')
+    environment = ks_cached_environment(environment_key)
+    if not environment:
+        raise ValueError('KS 环境缓存不存在，请重新同步环境')
+    runtime = workflow.setdefault('runtime', {})
+    if not runtime.get('account_baseline_captured'):
+        baseline = {}
+        for server_id in workflow.get('account_servers') or []:
+            baseline[server_id] = [
+                _workflow_account_identity(item)
+                for item in (environment.get('accounts') or [])
+                if isinstance(item, dict) and _text_value(item.get('server_id')) == _text_value(server_id)
+            ]
+        runtime['account_baseline'] = baseline
+        runtime['account_baseline_captured'] = True
+        save_kongming_workflow(KONGMING_WORKFLOW_DIR, workflow)
+
+    # A retry first reconciles the read model. This avoids creating duplicate
+    # accounts when the original streaming request completed but its response was lost.
+    try:
+        refreshed = ks_refresh_environment_accounts(environment_key)
+        recovered = _workflow_new_accounts(workflow, refreshed)
+    except ValueError:
+        recovered = []
+    account_servers = list(workflow.get('account_servers') or [])
+    if len(recovered) == len(account_servers):
+        runtime['created_accounts'] = recovered
+        save_kongming_workflow(KONGMING_WORKFLOW_DIR, workflow)
+        return {'msg': f'已核对到 {len(recovered)} 个本次新增账号，无需重复创建', 'reconciled': True}
+
+    recovered_servers = {_text_value(item.get('server_id')) for item in recovered}
+    missing_servers = [server_id for server_id in account_servers if server_id not in recovered_servers]
+
+    season_server_id = _text_value(runtime.get('season_server_id'))
+    if not season_server_id:
+        raise ValueError('尚未解析到赛季服，无法创建账号')
+    result = ks_create_alliance_accounts(
+        environment, season_server_id, missing_servers
+    )
+    try:
+        refreshed = ks_refresh_environment_accounts(environment_key)
+        created = _workflow_new_accounts(workflow, refreshed)
+        if created:
+            runtime['created_accounts'] = created
+            save_kongming_workflow(KONGMING_WORKFLOW_DIR, workflow)
+    except ValueError:
+        created = []
+    if not result.get('completed') and len(created) != len(account_servers):
+        raise ValueError('KS 创建请求已结束，但没有收到完成事件；已停止后续操作，请先重试核对')
+    return {
+        'msg': f'KS 创建请求已完成，本次补建 {len(missing_servers)} 个原服账号',
+        'event_count': result.get('event_count', 0),
+        'completed': result.get('completed', False),
+    }
+
+
+def _workflow_sync_accounts(workflow):
+    environment_key = workflow.get('environment', {}).get('key', '')
+    environment = ks_refresh_environment_accounts(environment_key)
+    created = _workflow_new_accounts(workflow, environment)
+    expected = workflow.get('account_servers') or []
+    found_servers = {_text_value(item.get('server_id')) for item in created}
+    missing = [server_id for server_id in expected if server_id not in found_servers]
+    if missing:
+        raise ValueError('未读取到本次新增账号：原服 ' + '、'.join(missing))
+    workflow.setdefault('runtime', {})['created_accounts'] = created
+    save_kongming_workflow(KONGMING_WORKFLOW_DIR, workflow)
+    return {
+        'msg': f'已同步并核对 {len(created)} 个本次新增盟主号',
+        'account_count': len(created),
+        'servers': [item.get('server_id') for item in created],
+    }
+
+
+def _workflow_execute_command(workflow):
+    runtime = workflow.setdefault('runtime', {})
+    accounts = runtime.get('created_accounts') or []
+    expected = workflow.get('account_servers') or []
+    if {_text_value(item.get('server_id')) for item in accounts} != set(expected):
+        raise ValueError('本次新增账号范围不完整，已阻止执行 GM 命令')
+    completed_ids = set(runtime.get('command_completed_cache_ids') or [])
+    pending = [item for item in accounts if _text_value(item.get('cache_id')) not in completed_ids]
+    if not pending:
+        return {'msg': f'{len(accounts)} 个账号均已完成成为天子命令', 'target_count': len(accounts)}
+    targets = [
+        {'environment_key': item.get('environment_key'), 'cache_id': item.get('cache_id')}
+        for item in pending
+    ]
+    command = _text_value(workflow.get('command', {}).get('command'))
+    result = execute_ks_commands([command], targets)
+    for item in result.get('batch_results') or []:
+        target = item.get('target') or {}
+        if item.get('ok') and _text_value(target.get('cache_id')):
+            completed_ids.add(_text_value(target.get('cache_id')))
+    runtime['command_completed_cache_ids'] = sorted(completed_ids)
+    save_kongming_workflow(KONGMING_WORKFLOW_DIR, workflow)
+    if not result.get('ok'):
+        failed = [item for item in (result.get('batch_results') or []) if not item.get('ok')]
+        message = next((_text_value(item.get('msg')) for item in failed if item.get('msg')), '')
+        raise ValueError(message or f'成为天子命令部分失败：{result.get("failure_count", 0)} 个账号')
+    return {
+        'msg': f'已对 {result.get("success_count", len(pending))} 个新增账号执行成为天子命令',
+        'target_count': result.get('target_count', len(pending)),
+        'success_count': result.get('success_count', len(pending)),
+    }
+
+
+def _workflow_auto_login(workflow):
+    environment_key = workflow.get('environment', {}).get('key', '')
+    result = gm_console_options(environment_key)
+    if not result.get('ok'):
+        raise ValueError(result.get('msg') or 'GM 控制台自动登录失败')
+    available = {
+        _text_value(item.get('id')): {'id': item.get('id'), 'name': _text_value(item.get('name'))}
+        for item in (result.get('servers') or []) if isinstance(item, dict)
+    }
+    targets = workflow.get('script_servers') or []
+    missing = [server_id for server_id in targets if server_id not in available]
+    if missing:
+        raise ValueError('GM 控制台中没有找到脚本目标服务器：' + '、'.join(missing))
+    workflow.setdefault('runtime', {})['gm_servers'] = [available[server_id] for server_id in targets]
+    save_kongming_workflow(KONGMING_WORKFLOW_DIR, workflow)
+    return {
+        'msg': f'GM 控制台已登录，已核对 {len(targets)} 个脚本目标服务器',
+        'auto_logged_in': bool(result.get('auto_logged_in')),
+        'servers': targets,
+    }
+
+
+def _workflow_execute_script(workflow):
+    runtime = workflow.setdefault('runtime', {})
+    target_servers = list(workflow.get('script_servers') or [])
+    validated_servers = {_text_value(item.get('id')) for item in (runtime.get('gm_servers') or [])}
+    if not set(target_servers).issubset(validated_servers):
+        raise ValueError('脚本服务器尚未完成 GM 控制台核对')
+    completed = set(runtime.get('script_completed_server_ids') or [])
+    pending = [server_id for server_id in target_servers if server_id not in completed]
+    if not pending:
+        return {'msg': f'{len(target_servers)} 个原服均已提交备战活动脚本', 'target_count': len(target_servers)}
+    script = workflow.get('script') or {}
+    result = gm_console_execute({
+        'environment_key': workflow.get('environment', {}).get('key', ''),
+        'taskName': '孔明-备战活动',
+        'serverIds': pending,
+        'threadMode': 2,
+        'operationType': 1,
+        'script': script.get('content', ''),
+        'confirmFlag': True,
+    })
+    batch_results = result.get('batch_results') or ([result] if len(pending) == 1 else [])
+    for item in batch_results:
+        server_id = _text_value(item.get('server_id'))
+        if server_id and item.get('ok') and item.get('success') is not False:
+            completed.add(server_id)
+    runtime['script_completed_server_ids'] = [
+        server_id for server_id in target_servers if server_id in completed
+    ]
+    save_kongming_workflow(KONGMING_WORKFLOW_DIR, workflow)
+    if not result.get('ok'):
+        failed = [item for item in batch_results if not item.get('ok') or item.get('success') is False]
+        message = next((_text_value(item.get('msg')) for item in failed if item.get('msg')), '')
+        raise ValueError(message or result.get('msg') or '备战活动脚本部分执行失败')
+    return {
+        'msg': f'已在 {len(pending)} 个原服提交备战活动脚本',
+        'target_count': result.get('target_count', len(pending)),
+        'success_count': result.get('success_count', len(pending)),
+        'history_url': result.get('history_url', ''),
+    }
+
+
+def _workflow_reward_target_identity(target):
+    cache_id = _text_value(target.get('cache_id'))
+    if cache_id:
+        return 'cache:' + cache_id
+    role_id = _text_value(target.get('role_id'))
+    server_id = _text_value(target.get('server_id'))
+    account_name = _text_value(target.get('account_name'))
+    return 'role:' + ':'.join((server_id, role_id, account_name))
+
+
+def _workflow_reward_online_match_score(expected, current, environment):
+    if not current.get('dispatchable'):
+        return -1
+    score = 0
+    expected_connection_id = _text_value(expected.get('connection_id') or expected.get('id'))
+    current_connection_id = _text_value(current.get('id') or current.get('connection_id'))
+    if expected_connection_id and expected_connection_id == current_connection_id:
+        score += 100
+
+    for field, weight in (('role_id', 30), ('server_id', 20)):
+        left = _text_value(expected.get(field))
+        right = _text_value(current.get(field))
+        if left and right:
+            if left != right:
+                return -1
+            score += weight
+        elif left:
+            return -1
+
+    expected_account_name = _text_value(expected.get('account_name'))
+    current_account_name = _text_value(current.get('account_name'))
+    if expected_account_name and current_account_name:
+        if expected_account_name != current_account_name:
+            return -1
+        score += 8
+
+    expected_url = normalize_game_url(
+        expected.get('environment_url') or workflow_environment_url(environment)
+    )
+    current_url = normalize_game_url(current.get('environment_url'))
+    if environment and _ks_environment_matches_target(environment, current):
+        score += 10
+    elif expected_url and current_url:
+        if expected_url != current_url:
+            return -1
+        score += 10
+    elif expected_url:
+        return -1
+    return score
+
+
+def workflow_environment_url(environment):
+    return (environment or {}).get('login_url') or (environment or {}).get('environment_url') or ''
+
+
+def _workflow_online_reward_spec(expected, current):
+    spec = {
+        **current,
+        'connection_id': _text_value(current.get('id') or current.get('connection_id')),
+        'cache_id': _text_value(expected.get('cache_id')),
+        'account_name': _text_value(expected.get('account_name') or current.get('account_name')),
+        'account_label': _text_value(
+            expected.get('account_label') or current.get('role_name') or
+            current.get('account_label') or expected.get('account_name')
+        ),
+        'expected_role_id': _text_value(expected.get('role_id')),
+        'expected_server_id': _text_value(expected.get('server_id')),
+        'expected_identity': _workflow_reward_target_identity(expected),
+    }
+    return spec
+
+
+def _workflow_resolve_reward_targets(workflow):
+    environment_key = workflow.get('environment', {}).get('key', '')
+    environment = ks_cached_environment(environment_key) or workflow.get('environment') or {}
+    expected_targets = workflow.get('targets') or workflow.get('runtime', {}).get('targets') or []
+    if not expected_targets:
+        raise ValueError('任务中没有目标账号，请重新生成任务')
+
+    online_targets = current_cocos_targets(force_refresh=True)
+    client_targets = []
+    ks_targets = []
+    used_connection_ids = set()
+    missing = []
+    for expected in expected_targets:
+        candidates = []
+        for current in online_targets:
+            connection_id = _text_value(current.get('id') or current.get('connection_id'))
+            if not connection_id or connection_id in used_connection_ids:
+                continue
+            score = _workflow_reward_online_match_score(expected, current, environment)
+            if score >= 0:
+                candidates.append((score, current))
+        if candidates:
+            candidates.sort(key=lambda item: item[0], reverse=True)
+            current = candidates[0][1]
+            used_connection_ids.add(_text_value(current.get('id') or current.get('connection_id')))
+            client_targets.append(_workflow_online_reward_spec(expected, current))
+            continue
+        cache_id = _text_value(expected.get('cache_id'))
+        expected_environment_key = _text_value(expected.get('environment_key') or environment_key)
+        if cache_id and expected_environment_key:
+            ks_targets.append({
+                **expected,
+                'environment_key': expected_environment_key,
+                'cache_id': cache_id,
+            })
+            continue
+        missing.append(
+            _text_value(expected.get('account_name')) or
+            _text_value(expected.get('role_id')) or
+            cache_id or '未知账号'
+        )
+
+    if missing:
+        raise ValueError('以下目标账号缺少 Cocos 在线身份和 KS 缓存身份，已停止执行：' + '、'.join(missing))
+    runtime = workflow.setdefault('runtime', {})
+    runtime['targets'] = expected_targets
+    runtime['online_targets'] = client_targets
+    runtime['client_targets'] = client_targets
+    runtime['ks_targets'] = ks_targets
+    save_kongming_workflow(KONGMING_WORKFLOW_DIR, workflow)
+    channels = []
+    if client_targets:
+        channels.append('Cocos')
+    if ks_targets:
+        channels.append('KS')
+    return {
+        'msg': (
+            f'已核对 {len(expected_targets)} 个账号：'
+            f'Cocos {len(client_targets)} 个，KS {len(ks_targets)} 个'
+        ),
+        'target_count': len(expected_targets),
+        'channel': '+'.join(channels).lower(),
+        'client_count': len(client_targets),
+        'ks_count': len(ks_targets),
+    }
+
+
+def _workflow_execute_account_command(workflow):
+    runtime = workflow.setdefault('runtime', {})
+    client_targets = runtime.get('client_targets') or runtime.get('online_targets') or []
+    ks_targets = runtime.get('ks_targets') or []
+    targets = list(client_targets) + list(ks_targets)
+    if not targets:
+        raise ValueError('目标账号尚未完成执行通道核对，已停止执行')
+    completed_ids = set(runtime.get('command_completed_cache_ids') or [])
+    pending_clients = [
+        item for item in client_targets
+        if _workflow_reward_target_identity(item) not in completed_ids
+    ]
+    pending_ks = [
+        item for item in ks_targets
+        if _workflow_reward_target_identity(item) not in completed_ids
+    ]
+    if not pending_clients and not pending_ks:
+        return {'msg': f'{len(targets)} 个账号均已完成 GM 操作', 'target_count': len(targets)}
+    command = _text_value(workflow.get('command', {}).get('command'))
+    result = execute_gm_commands(
+        [command],
+        target_specs=pending_clients,
+        ks_targets=pending_ks,
+    )
+    identity_by_connection = {
+        _text_value(item.get('connection_id') or item.get('id')): _workflow_reward_target_identity(item)
+        for item in pending_clients
+    }
+    identity_by_cache = {
+        _text_value(item.get('cache_id')): _workflow_reward_target_identity(item)
+        for item in pending_ks
+    }
+    for item in result.get('batch_results') or []:
+        target = item.get('target') or {}
+        connection_id = _text_value(target.get('id') or target.get('connection_id'))
+        cache_id = _text_value(target.get('cache_id'))
+        completed_identity = (
+            identity_by_connection.get(connection_id)
+            or identity_by_cache.get(cache_id)
+        )
+        if item.get('ok') and completed_identity:
+            completed_ids.add(completed_identity)
+    runtime['command_completed_cache_ids'] = sorted(completed_ids)
+    save_kongming_workflow(KONGMING_WORKFLOW_DIR, workflow)
+    if not result.get('ok'):
+        failed = [item for item in (result.get('batch_results') or []) if not item.get('ok')]
+        message = next((_text_value(item.get('msg')) for item in failed if item.get('msg')), '')
+        raise ValueError(message or f'GM 操作部分失败：{result.get("failure_count", 0)} 个账号')
+    operation = workflow.get('operation') or {}
+    operation_name = _text_value(
+        operation.get('name') or workflow.get('command', {}).get('description') or
+        workflow.get('command', {}).get('name') or 'GM 操作'
+    )
+    pending_count = len(pending_clients) + len(pending_ks)
+    return {
+        'msg': f'已对 {result.get("success_count", pending_count)} 个账号执行：{operation_name}',
+        'target_count': result.get('target_count', pending_count),
+        'success_count': result.get('success_count', pending_count),
+        'channels': result.get('channels') or [],
+    }
+
+
+def _workflow_execute_reward_command(workflow):
+    result = _workflow_execute_account_command(workflow)
+    reward = workflow.get('reward') or {}
+    result['msg'] = (
+        f'已对 {result.get("success_count", 0)} 个账号发放 '
+        f'{reward.get("amount_text") or reward.get("amount")} '
+        f'{reward.get("currency_name") or "资源"}'
+    )
+    return result
+
+
+KONGMING_WORKFLOW_STEP_HANDLERS = {
+    'resolve_environment': _workflow_resolve_environment,
+    'create_accounts': _workflow_create_accounts,
+    'sync_accounts': _workflow_sync_accounts,
+    'execute_command': _workflow_execute_command,
+    'auto_login': _workflow_auto_login,
+    'execute_script': _workflow_execute_script,
+    'resolve_reward_targets': _workflow_resolve_reward_targets,
+    'execute_reward_command': _workflow_execute_reward_command,
+    'resolve_account_targets': _workflow_resolve_reward_targets,
+    'execute_account_command': _workflow_execute_account_command,
+}
+
+
+def _run_kongming_workflow(owner_id, workflow_id):
+    try:
+        workflow = load_kongming_workflow(KONGMING_WORKFLOW_DIR, owner_id, workflow_id)
+        if not workflow:
+            return
+        workflow['state'] = 'running'
+        workflow['error'] = ''
+        append_workflow_event(workflow, '任务开始执行')
+        save_kongming_workflow(KONGMING_WORKFLOW_DIR, workflow)
+        for step in workflow.get('steps') or []:
+            if step.get('status') == 'completed':
+                continue
+            handler = KONGMING_WORKFLOW_STEP_HANDLERS.get(step.get('id'))
+            if not handler:
+                raise RuntimeError('未知任务步骤：' + _text_value(step.get('id')))
+            step.update({
+                'status': 'running',
+                'started_at': now_str(),
+                'finished_at': '',
+                'error': '',
+                'attempts': int(step.get('attempts') or 0) + 1,
+            })
+            append_workflow_event(workflow, '开始：' + _text_value(step.get('title')))
+            save_kongming_workflow(KONGMING_WORKFLOW_DIR, workflow)
+            try:
+                result = handler(workflow)
+            except Exception as exc:
+                message = str(exc or '任务步骤执行失败')[:500]
+                step.update({
+                    'status': 'failed',
+                    'finished_at': now_str(),
+                    'error': message,
+                })
+                workflow['state'] = 'failed'
+                workflow['error'] = message
+                append_workflow_event(workflow, '失败：' + message, 'error')
+                save_kongming_workflow(KONGMING_WORKFLOW_DIR, workflow)
+                return
+            step.update({
+                'status': 'completed',
+                'finished_at': now_str(),
+                'result': result if isinstance(result, dict) else {'msg': str(result or '')},
+            })
+            append_workflow_event(workflow, '完成：' + _text_value(step.get('title')))
+            save_kongming_workflow(KONGMING_WORKFLOW_DIR, workflow)
+        workflow['state'] = 'completed'
+        workflow['completed_at'] = now_str()
+        workflow['error'] = ''
+        append_workflow_event(workflow, '任务全部完成')
+        save_kongming_workflow(KONGMING_WORKFLOW_DIR, workflow)
+    finally:
+        with _kongming_workflow_state_lock:
+            _kongming_workflow_running.discard(workflow_id)
+        _kongming_workflow_run_lock.release()
+
+
+def start_kongming_workflow(owner_id, workflow_id, retry=False):
+    workflow = load_kongming_workflow(KONGMING_WORKFLOW_DIR, owner_id, workflow_id)
+    if not workflow:
+        raise ValueError('孔明任务不存在或无权访问')
+    state = workflow.get('state')
+    if state == 'completed':
+        return workflow
+    if retry:
+        if state != 'failed':
+            raise ValueError('只有失败的任务可以重试')
+        failed_step = next((
+            step for step in (workflow.get('steps') or []) if step.get('status') == 'failed'
+        ), None)
+        resume_from = 'create_accounts' if failed_step and failed_step.get('id') == 'sync_accounts' else ''
+        failed_seen = False
+        for step in workflow.get('steps') or []:
+            if step.get('status') == 'failed' or (resume_from and step.get('id') == resume_from):
+                failed_seen = True
+            if failed_seen and step.get('status') != 'completed':
+                step['status'] = 'pending'
+                step.pop('error', None)
+            elif resume_from and step.get('id') == resume_from:
+                step['status'] = 'pending'
+                step.pop('error', None)
+        workflow['error'] = ''
+    elif state != 'pending_confirmation':
+        raise ValueError('任务当前状态不能确认执行')
+    if not _kongming_workflow_run_lock.acquire(blocking=False):
+        raise BlockingIOError('已有孔明任务正在执行，请等待完成后再试')
+    workflow['state'] = 'queued'
+    if not workflow.get('confirmed_at'):
+        workflow['confirmed_at'] = now_str()
+    append_workflow_event(workflow, '已确认执行范围，任务进入队列')
+    save_kongming_workflow(KONGMING_WORKFLOW_DIR, workflow)
+    with _kongming_workflow_state_lock:
+        _kongming_workflow_running.add(workflow_id)
+    try:
+        thread = threading.Thread(
+            target=_run_kongming_workflow,
+            args=(owner_id, workflow_id),
+            daemon=True,
+            name='kongming-workflow-' + workflow_id[:8],
+        )
+        thread.start()
+    except Exception:
+        with _kongming_workflow_state_lock:
+            _kongming_workflow_running.discard(workflow_id)
+        _kongming_workflow_run_lock.release()
+        raise
+    return workflow
+
+
+def get_kongming_workflow(owner_id, workflow_id):
+    workflow = load_kongming_workflow(KONGMING_WORKFLOW_DIR, owner_id, workflow_id)
+    if not workflow:
+        return None
+    if workflow.get('state') in ('queued', 'running'):
+        with _kongming_workflow_state_lock:
+            active = workflow_id in _kongming_workflow_running
+        if not active:
+            running_step = next((
+                step for step in (workflow.get('steps') or []) if step.get('status') == 'running'
+            ), None)
+            if running_step:
+                running_step.update({
+                    'status': 'failed',
+                    'finished_at': now_str(),
+                    'error': '工具服务重启导致任务中断，请重试当前步骤',
+                })
+            workflow['state'] = 'failed'
+            workflow['error'] = '工具服务重启导致任务中断，请重试当前步骤'
+            append_workflow_event(workflow, workflow['error'], 'error')
+            workflow = save_kongming_workflow(KONGMING_WORKFLOW_DIR, workflow)
+    return workflow
 
 
 # ---------- QA 测试设计（Codex Skill） ----------
@@ -4420,11 +6653,109 @@ def get_kongming_chat_payload(owner_id, conversation_id=''):
         load_kongming_conversation(KONGMING_CHAT_DIR, owner_id, selected_id)
         if selected_id else None
     )
+    if conversation:
+        for message in conversation.get('messages') or []:
+            metadata = message.get('metadata') if isinstance(message, dict) else None
+            workflow_id = _text_value(metadata.get('workflow_id')) if isinstance(metadata, dict) else ''
+            if workflow_id:
+                message['workflow'] = public_kongming_workflow(
+                    get_kongming_workflow(owner_id, workflow_id)
+                )
     return {
         'ok': True,
         'conversations': conversations,
         'conversation': conversation,
         **_kongming_chat_runtime_status(),
+    }
+
+
+def create_kongming_workflow_plan(owner_id, question):
+    catalog = ks_catalog_with_online()
+    workflow = build_kongming_workflow(
+        owner_id,
+        question,
+        catalog,
+        load_data(),
+        load_scripts(),
+    )
+    append_workflow_event(workflow, '已从自然语言生成任务预览')
+    return save_kongming_workflow(KONGMING_WORKFLOW_DIR, workflow)
+
+
+def _latest_kongming_conversation_workflow(owner_id, conversation):
+    messages = conversation.get('messages') if isinstance(conversation, dict) else []
+    for message in reversed(messages or []):
+        metadata = message.get('metadata') if isinstance(message, dict) else None
+        workflow_id = _text_value(metadata.get('workflow_id')) if isinstance(metadata, dict) else ''
+        if not workflow_id:
+            continue
+        workflow = load_kongming_workflow(KONGMING_WORKFLOW_DIR, owner_id, workflow_id)
+        if workflow:
+            return workflow
+    return None
+
+
+def _kongming_workflow_question_with_context(owner_id, question, conversation):
+    if is_kongming_workflow_request(question):
+        return question
+    workflow = _latest_kongming_conversation_workflow(owner_id, conversation)
+    if not workflow:
+        return question
+    environment = workflow.get('environment') or {}
+    environment_reference = _text_value(
+        environment.get('source_url') or environment.get('login_url') or
+        environment.get('name') or environment.get('key')
+    )
+    targets = workflow.get('targets') or workflow.get('runtime', {}).get('targets') or []
+    account_names = []
+    seen = set()
+    for target in targets:
+        account_name = _text_value(target.get('account_name')) if isinstance(target, dict) else ''
+        if account_name and account_name.lower() not in seen:
+            seen.add(account_name.lower())
+            account_names.append(account_name)
+    if not environment_reference or not account_names:
+        return question
+    inherited = (
+        f'{question}\n\n'
+        '【从最近任务卡继承的已校验执行范围】\n'
+        f'KS环境：{environment_reference}\n'
+        f'目标账号：{"、".join(account_names)}'
+    )
+    return inherited if is_kongming_workflow_request(inherited) else question
+
+
+def run_kongming_workflow_chat(owner_id, question, conversation_id='', planning_question=''):
+    requested_conversation_id = _text_value(conversation_id)
+    conversation = (
+        load_kongming_conversation(KONGMING_CHAT_DIR, owner_id, requested_conversation_id)
+        if requested_conversation_id else None
+    )
+    if requested_conversation_id and conversation is None:
+        raise ValueError('孔明会话不存在或无权访问')
+    if conversation is None:
+        conversation = create_kongming_conversation(owner_id, question)
+    workflow_source = planning_question or question
+    workflow = create_kongming_workflow_plan(owner_id, workflow_source)
+    answer = workflow_preview_markdown(workflow)
+    append_kongming_message(conversation, 'user', question)
+    assistant_message = append_kongming_message(conversation, 'assistant', answer, {
+        'engine': '规则编排器',
+        'duration_ms': 0,
+        'workflow_id': workflow.get('id', ''),
+        'workflow_type': workflow.get('type', ''),
+        'context_inherited': workflow_source != question,
+    })
+    save_kongming_conversation(KONGMING_CHAT_DIR, conversation)
+    payload = get_kongming_chat_payload(owner_id, conversation.get('id'))
+    return {
+        'ok': True,
+        'answer': answer,
+        'message': assistant_message,
+        'workflow': public_kongming_workflow(workflow),
+        'engine': '规则编排器',
+        'duration_ms': 0,
+        **payload,
     }
 
 
@@ -4484,12 +6815,28 @@ def _kongming_search_context(conversation):
 
 def run_kongming_chat(owner_id, question, conversation_id=''):
     question = normalize_kongming_question(question)
+    requested_conversation_id = str(conversation_id or '').strip()
+    existing_conversation = (
+        load_kongming_conversation(KONGMING_CHAT_DIR, owner_id, requested_conversation_id)
+        if requested_conversation_id else None
+    )
+    if requested_conversation_id and existing_conversation is None:
+        raise ValueError('孔明会话不存在或无权访问')
+    planning_question = _kongming_workflow_question_with_context(
+        owner_id, question, existing_conversation
+    )
+    if is_kongming_workflow_request(planning_question):
+        return run_kongming_workflow_chat(
+            owner_id,
+            question,
+            requested_conversation_id,
+            planning_question=planning_question,
+        )
     runtime_status = _kongming_chat_runtime_status()
     if not runtime_status.get('chat_available'):
         if not runtime_status.get('codex_ready'):
             raise RuntimeError('未找到 Codex 命令行工具，孔明对话服务暂不可用')
         raise RuntimeError('客户端或配置表目录不存在，孔明无法进行项目检索')
-    requested_conversation_id = str(conversation_id or '').strip()
     if not requested_conversation_id:
         cached = _kongming_cached_answer(question)
         if cached and cached.get('answer'):
@@ -4786,6 +7133,8 @@ class GMHandler(SimpleHTTPRequestHandler):
                 self._list_formulas(parse_qs(parsed.query))
             elif path.startswith('/api/formulas/'):
                 self._get_formula(path.rsplit('/', 1)[-1])
+            elif path == '/api/hanzhong-score':
+                self._hanzhong_score_rules()
             elif path == '/api/items':
                 self._list_items(parse_qs(parsed.query))
             elif path == '/api/items/refresh':
@@ -4793,9 +7142,13 @@ class GMHandler(SimpleHTTPRequestHandler):
                     return
                 self._refresh_items()
             elif path == '/api/cocos/status':
-                self._cocos_status()
+                self._cocos_status(parse_qs(parsed.query))
             elif path == '/api/ks/catalog':
                 self._send_json(ks_catalog_status())
+            elif path == '/api/gm-console/options':
+                self._gm_console_options(parse_qs(parsed.query))
+            elif path == '/api/gm-console/collect':
+                self._gm_console_collect(parse_qs(parsed.query))
             elif path == '/api/qa-test-design/status':
                 self._send_json(qa_test_design_status())
             elif path == '/api/qa-test-design/artifact':
@@ -4806,10 +7159,18 @@ class GMHandler(SimpleHTTPRequestHandler):
                 sess = self._require_login()
                 if sess is not None:
                     self._qa_test_design_history(sess, parse_qs(parsed.query))
+            elif path == '/api/skillhub/status':
+                if self._require_admin() is None:
+                    return
+                self._send_json(skillhub_status())
             elif path == '/api/kongming/chat':
                 sess = self._require_login()
                 if sess is not None:
                     self._kongming_chat_history(sess, parse_qs(parsed.query))
+            elif path.startswith('/api/kongming/workflows/'):
+                sess = self._require_login()
+                if sess is not None:
+                    self._kongming_workflow_get(sess, path.rsplit('/', 1)[-1])
             elif path == '/api/kongming/status':
                 self._send_json(kongming_status())
             elif path == '/api/git/repos':
@@ -4845,6 +7206,16 @@ class GMHandler(SimpleHTTPRequestHandler):
             if sess is not None:
                 self._qa_test_design_upload(sess)
             return
+        if path == '/api/users':
+            if self._require_admin() is None:
+                return
+            self._create_user()
+            return
+        if path.startswith('/api/commands/') and path.endswith('/usage'):
+            if self._require_login() is None:
+                return
+            self._increment_command_usage(path.split('/')[-2])
+            return
         if path == '/api/qa-test-design/generate':
             sess = self._require_login()
             if sess is None:
@@ -4856,10 +7227,18 @@ class GMHandler(SimpleHTTPRequestHandler):
             if sess is not None:
                 self._kongming_chat_send(sess)
             return
-        if path == '/api/users':
-            if self._require_admin() is None:
-                return
-            self._create_user()
+        if path == '/api/kongming/workflows/plan':
+            sess = self._require_login()
+            if sess is not None:
+                self._kongming_workflow_plan(sess)
+            return
+        workflow_action = re.fullmatch(r'/api/kongming/workflows/([^/]+)/(execute|retry)', path)
+        if workflow_action:
+            sess = self._require_admin()
+            if sess is not None:
+                self._kongming_workflow_action(
+                    sess, workflow_action.group(1), workflow_action.group(2)
+                )
             return
         if self._require_admin() is None:
             return
@@ -4877,12 +7256,26 @@ class GMHandler(SimpleHTTPRequestHandler):
             self._ks_sync()
         elif path == '/api/ks/token-bridge/open-folder':
             self._ks_token_bridge_open_folder()
+        elif path == '/api/gm-console/config':
+            self._gm_console_config()
+        elif path == '/api/gm-console/login':
+            self._gm_console_login()
+        elif path == '/api/gm-console/execute':
+            self._gm_console_execute()
         elif path == '/api/git/pull':
             self._git_pull()
+        elif path == '/api/git/fetch':
+            self._git_fetch()
+        elif path == '/api/git/checkout':
+            self._git_checkout()
         elif path == '/api/git/resolve-excel-pull':
             self._git_resolve_excel_pull()
         elif path == '/api/ls/token-envs':
             self._ls_token_envs()
+        elif path == '/api/skillhub/open':
+            self._skillhub_open()
+        elif path == '/api/skillhub/open-folder':
+            self._skillhub_open_folder()
         elif path == '/api/kongming/bridge':
             self._kongming_bridge()
         elif path == '/api/kongming/open-folder':
@@ -4902,6 +7295,12 @@ class GMHandler(SimpleHTTPRequestHandler):
             if self._require_admin() is None:
                 return
             self._update_user(path.rsplit('/', 1)[-1])
+            return
+        workflow_update = re.fullmatch(r'/api/kongming/workflows/([^/]+)', path)
+        if workflow_update:
+            sess = self._require_admin()
+            if sess is not None:
+                self._kongming_workflow_update(sess, workflow_update.group(1))
             return
         if self._require_admin() is None:
             return
@@ -5121,6 +7520,12 @@ class GMHandler(SimpleHTTPRequestHandler):
             items = load_data()
         result = [it for it in items
                   if matches(it, keyword) and (not category or it.get('category') == category)]
+        result.sort(key=lambda it: (
+            -command_usage_count(it),
+            str(it.get('category') or ''),
+            str(it.get('name') or '').lower(),
+            str(it.get('id') or ''),
+        ))
         self._send_json({'ok': True, 'total': len(result), 'items': result})
 
     def _get_command(self, cid):
@@ -5131,6 +7536,28 @@ class GMHandler(SimpleHTTPRequestHandler):
                 self._send_json({'ok': True, 'item': it})
                 return
         self._send_json({'ok': False, 'msg': '命令不存在'}, status=404)
+
+    def _increment_command_usage(self, cid):
+        with _lock:
+            items = load_data()
+            for idx, item in enumerate(items):
+                if item.get('id') == cid:
+                    try:
+                        usage_count = int(item.get('usage_count') or 0)
+                    except (TypeError, ValueError):
+                        usage_count = 0
+                    item['usage_count'] = usage_count + 1
+                    item['last_used_at'] = now_str()
+                    items[idx] = item
+                    save_data(items)
+                    self._send_json({
+                        'ok': True,
+                        'id': cid,
+                        'usage_count': item['usage_count'],
+                        'last_used_at': item['last_used_at'],
+                    })
+                    return
+        self._send_json({'ok': False, 'msg': 'command not found'}, status=404)
 
     def _create_command(self):
         data = self._read_json()
@@ -5277,6 +7704,31 @@ class GMHandler(SimpleHTTPRequestHandler):
                          'source': data.get('source', '')})
 
     # ---------- 计算公式 ----------
+    def _hanzhong_score_rules(self):
+        try:
+            items = parse_hanzhong_personal_scores()
+            updated_at = time.strftime(
+                '%Y-%m-%d %H:%M:%S',
+                time.localtime(os.path.getmtime(HANZHONG_SCORE_XLSX)),
+            )
+        except (FileNotFoundError, OSError, ValueError, zipfile.BadZipFile, ET.ParseError) as exc:
+            self._send_json({'ok': False, 'msg': str(exc)}, status=400)
+            return
+        self._send_json({
+            'ok': True,
+            'items': items,
+            'total': len(items),
+            'source': HANZHONG_SCORE_XLSX,
+            'sheet': HANZHONG_SCORE_SHEET,
+            'updated_at': updated_at,
+            'fields': {
+                'parameter': 'I / para1',
+                'unit_score': 'L / score',
+                'parameter_note': 'M / 参数说明',
+                'description': 'O / 任务描述',
+            },
+        })
+
     def _list_formulas(self, params):
         keyword = params.get('q', [''])[0]
         category = params.get('category', [''])[0]
@@ -5417,8 +7869,10 @@ class GMHandler(SimpleHTTPRequestHandler):
     # ---------- 工具方法 ----------
 
     # ---------- Cocos GM 桥接 ----------
-    def _cocos_status(self):
-        self._send_json({'ok': True, **cocos_bridge_status()})
+    def _cocos_status(self, params=None):
+        refresh_value = (params or {}).get('refresh', [''])[0].strip().lower()
+        force_refresh = refresh_value in ('1', 'true', 'yes')
+        self._send_json({'ok': True, **cocos_bridge_status(force_refresh=force_refresh)})
 
     def _cocos_execute(self):
         data = self._read_json()
@@ -5474,11 +7928,45 @@ class GMHandler(SimpleHTTPRequestHandler):
             self._send_json({'ok': False, 'msg': '未知仓库'}, status=400)
             return
 
-        job_id = start_git_pull_job(repo_ids)
+        try:
+            job_id = start_git_pull_job(repo_ids)
+        except BlockingIOError as exc:
+            self._send_json({'ok': False, 'code': 'git_busy', 'msg': str(exc)}, status=409)
+            return
         self._send_json({'ok': True, 'job_id': job_id, 'state': 'queued'}, status=202)
 
+    def _git_fetch(self):
+        data = self._read_json()
+        if data is None:
+            return
+        repo_id = str(data.get('repo', '')).strip()
+        if repo_id == 'all':
+            repo_ids = list(GIT_REPOS.keys())
+        elif repo_id in GIT_REPOS:
+            repo_ids = [repo_id]
+        else:
+            self._send_json({'ok': False, 'msg': '未知仓库'}, status=400)
+            return
+        items = [git_fetch_repo_result(rid) for rid in repo_ids]
+        result = {'ok': all(item.get('ok') for item in items), 'items': items}
+        self._send_json(result, status=200 if result['ok'] else 409)
+
+    def _git_checkout(self):
+        data = self._read_json()
+        if data is None:
+            return
+        repo_id = str(data.get('repo', '')).strip()
+        branch = str(data.get('branch', '')).strip()
+        source = str(data.get('source', 'local')).strip().lower()
+        result = git_checkout_branch(repo_id, branch, source)
+        self._send_json(result, status=200 if result.get('ok') else 409)
+
     def _git_resolve_excel_pull(self):
-        job_id = start_git_pull_job(['excel'], resolve_excel=True)
+        try:
+            job_id = start_git_pull_job(['excel'], resolve_excel=True)
+        except BlockingIOError as exc:
+            self._send_json({'ok': False, 'code': 'git_busy', 'msg': str(exc)}, status=409)
+            return
         self._send_json({'ok': True, 'job_id': job_id, 'state': 'queued'}, status=202)
 
     def _ls_token_envs(self):
@@ -5515,6 +8003,73 @@ class GMHandler(SimpleHTTPRequestHandler):
             print(f'[KS-TOKEN-BRIDGE] open folder failed: {exc}')
             result = {'ok': False, 'code': 'ks_token_bridge_failed', 'msg': '浏览器桥接目录打开失败'}
         self._send_json(result, status=200 if result.get('ok') else 404)
+
+    def _gm_console_options(self, params):
+        environment_key = params.get('environment_key', [''])[0].strip()
+        try:
+            result = gm_console_options(environment_key)
+        except ValueError as exc:
+            result = {'ok': False, 'code': 'gm_console_failed', 'msg': str(exc)}
+        except Exception as exc:
+            print(f'[GM-CONSOLE] options failed: {exc}')
+            result = {'ok': False, 'code': 'gm_console_failed', 'msg': 'GM 控制台信息读取失败'}
+        self._send_json(result, status=200 if result.get('ok') else 400)
+
+    def _gm_console_collect(self, params):
+        environment_key = params.get('environment_key', [''])[0].strip()
+        collect_id = params.get('id', [''])[0].strip()
+        if not collect_id:
+            self._send_json({'ok': False, 'msg': '缺少收藏 ID'}, status=400)
+            return
+        try:
+            result = gm_console_collect_detail(environment_key, collect_id)
+        except ValueError as exc:
+            result = {'ok': False, 'code': 'gm_console_failed', 'msg': str(exc)}
+        except Exception as exc:
+            print(f'[GM-CONSOLE] collect failed: {exc}')
+            result = {'ok': False, 'code': 'gm_console_failed', 'msg': '收藏读取失败'}
+        self._send_json(result, status=200 if result.get('ok') else 400)
+
+    def _gm_console_config(self):
+        data = self._read_json()
+        if data is None:
+            return
+        token = str(data.get('token') or '').strip()
+        if not token:
+            self._send_json({'ok': False, 'msg': 'Token 不能为空'}, status=400)
+            return
+        save_gm_console_config(token=token)
+        self._send_json({'ok': True, 'configured': True})
+
+    def _gm_console_login(self):
+        data = self._read_json()
+        if data is None:
+            return
+        try:
+            result = gm_console_login(
+                data.get('environment_key'),
+                data.get('username'),
+                data.get('password'),
+            )
+        except ValueError as exc:
+            result = {'ok': False, 'code': 'gm_login_failed', 'msg': str(exc)}
+        except Exception as exc:
+            print(f'[GM-CONSOLE] login failed: {exc}')
+            result = {'ok': False, 'code': 'gm_login_failed', 'msg': 'GM 控制台登录失败'}
+        self._send_json(result, status=200 if result.get('ok') else 400)
+
+    def _gm_console_execute(self):
+        data = self._read_json()
+        if data is None:
+            return
+        try:
+            result = gm_console_execute(data)
+        except ValueError as exc:
+            result = {'ok': False, 'code': 'gm_console_failed', 'msg': str(exc)}
+        except Exception as exc:
+            print(f'[GM-CONSOLE] execute failed: {exc}')
+            result = {'ok': False, 'code': 'gm_console_failed', 'msg': 'GM 控制台执行失败'}
+        self._send_json(result, status=200 if result.get('ok') or result.get('confirm_required') else 400)
 
     def _read_qa_multipart_files(self):
         content_type = str(self.headers.get('Content-Type') or '')
@@ -5624,9 +8179,10 @@ class GMHandler(SimpleHTTPRequestHandler):
             return
         try:
             attachments = resolve_qa_uploads(sess.get('id'), data.get('file_ids') or [])
+            engine = str(data.get('engine') or '').strip().lower()
             runner = (
                 run_local_qa_test_design
-                if str(data.get('engine') or '').strip().lower() in ('ollama', 'local')
+                if engine in ('ollama', 'local')
                 else run_qa_test_design
             )
             result = runner(
@@ -5647,6 +8203,33 @@ class GMHandler(SimpleHTTPRequestHandler):
             self._send_json({'ok': False, 'code': 'busy', 'msg': str(exc)}, status=429)
             return
         except subprocess.TimeoutExpired:
+            if runner is run_qa_test_design:
+                try:
+                    fallback = run_local_qa_test_design(
+                        data.get('requirement'),
+                        data.get('mode'),
+                        data.get('domain'),
+                        data.get('depth'),
+                        data.get('title'),
+                        attachments,
+                    )
+                    fallback = finalize_qa_design_result(
+                        sess.get('id'), fallback, data.get('mode'), data.get('title'), engine
+                    )
+                except BlockingIOError as exc:
+                    self._send_json({'ok': False, 'code': 'busy', 'msg': str(exc)}, status=429)
+                    return
+                except RuntimeError as exc:
+                    self._send_json({'ok': False, 'code': 'unavailable', 'msg': str(exc)}, status=503)
+                    return
+                except Exception as exc:
+                    print(f'[QA-TEST-DESIGN] fallback after Codex timeout failed: {exc}')
+                else:
+                    fallback['fallback'] = True
+                    fallback['source_engine'] = 'Codex'
+                    fallback['fallback_reason'] = f'Codex 生成超过 {QA_CODEX_TIMEOUT} 秒，已自动改用本地测试引擎'
+                    self._send_json(fallback)
+                    return
             self._send_json({
                 'ok': False,
                 'code': 'timeout',
@@ -5661,6 +8244,30 @@ class GMHandler(SimpleHTTPRequestHandler):
             self._send_json({'ok': False, 'code': 'failed', 'msg': '测试设计生成失败'}, status=500)
             return
         self._send_json(result)
+
+    def _skillhub_open(self):
+        try:
+            status = open_skillhub_app()
+        except FileNotFoundError as exc:
+            self._send_json({'ok': False, 'code': 'not_installed', 'msg': str(exc)}, status=404)
+            return
+        except Exception as exc:
+            print(f'[SKILLHUB] open failed: {exc}')
+            self._send_json({'ok': False, 'code': 'failed', 'msg': 'AI SkillHub 打开失败'}, status=500)
+            return
+        self._send_json({'ok': True, 'msg': 'AI SkillHub 已打开', **status})
+
+    def _skillhub_open_folder(self):
+        try:
+            status = open_skillhub_folder()
+        except FileNotFoundError as exc:
+            self._send_json({'ok': False, 'code': 'not_installed', 'msg': str(exc)}, status=404)
+            return
+        except Exception as exc:
+            print(f'[SKILLHUB] open folder failed: {exc}')
+            self._send_json({'ok': False, 'code': 'failed', 'msg': '安装目录打开失败'}, status=500)
+            return
+        self._send_json({'ok': True, 'msg': '安装目录已打开', **status})
 
     def _kongming_bridge(self):
         data = self._read_json()
@@ -5683,6 +8290,67 @@ class GMHandler(SimpleHTTPRequestHandler):
     def _kongming_chat_history(self, sess, params):
         conversation_id = str((params.get('conversation_id') or [''])[0]).strip()
         self._send_json(get_kongming_chat_payload(sess.get('id'), conversation_id))
+
+    def _kongming_workflow_get(self, sess, workflow_id):
+        workflow = get_kongming_workflow(sess.get('id'), workflow_id)
+        if not workflow:
+            self._send_json({
+                'ok': False,
+                'code': 'workflow_not_found',
+                'msg': '孔明任务不存在或无权访问',
+            }, status=404)
+            return
+        self._send_json({'ok': True, 'workflow': public_kongming_workflow(workflow)})
+
+    def _kongming_workflow_plan(self, sess):
+        data = self._read_json()
+        if data is None:
+            return
+        try:
+            question = normalize_kongming_question(data.get('message'))
+            workflow = create_kongming_workflow_plan(sess.get('id'), question)
+        except ValueError as exc:
+            self._send_json({'ok': False, 'code': 'invalid_workflow', 'msg': str(exc)}, status=400)
+            return
+        self._send_json({'ok': True, 'workflow': public_kongming_workflow(workflow)})
+
+    def _kongming_workflow_action(self, sess, workflow_id, action):
+        try:
+            workflow = start_kongming_workflow(
+                sess.get('id'), workflow_id, retry=action == 'retry'
+            )
+        except ValueError as exc:
+            self._send_json({'ok': False, 'code': 'invalid_workflow_state', 'msg': str(exc)}, status=409)
+            return
+        except BlockingIOError as exc:
+            self._send_json({'ok': False, 'code': 'workflow_busy', 'msg': str(exc)}, status=409)
+            return
+        except Exception as exc:
+            print(f'[KONGMING] workflow start failed: {exc}')
+            self._send_json({'ok': False, 'code': 'workflow_failed', 'msg': '孔明任务启动失败'}, status=500)
+            return
+        self._send_json({'ok': True, 'workflow': public_kongming_workflow(workflow)}, status=202)
+
+    def _kongming_workflow_update(self, sess, workflow_id):
+        data = self._read_json()
+        if data is None:
+            return
+        try:
+            workflow = update_kongming_workflow_command(
+                KONGMING_WORKFLOW_DIR,
+                sess.get('id'),
+                workflow_id,
+                data.get('command_text'),
+                sess.get('username'),
+            )
+        except ValueError as exc:
+            self._send_json({
+                'ok': False,
+                'code': 'invalid_workflow_edit',
+                'msg': str(exc),
+            }, status=409)
+            return
+        self._send_json({'ok': True, 'workflow': public_kongming_workflow(workflow)})
 
     def _kongming_chat_send(self, sess):
         data = self._read_json()
@@ -5809,6 +8477,7 @@ if __name__ == '__main__':
     start_cocos_bridge()
     start_skillhub_translation_watcher()
     start_kongming_index_service()
+    start_kongming_account_catalog_service()
     print('  Ctrl+C 停止')
     print()
 

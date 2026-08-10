@@ -4,6 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>登录 - GM 命令管理工具</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..24,400,0,0" rel="stylesheet">
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
@@ -869,34 +872,274 @@
       animation: none !important;
     }
   }
+
+  /* Nexus Operational System - Stitch login */
+  :root {
+    --login-bg: #121414;
+    --login-panel: #151717;
+    --login-surface: #1f2020;
+    --login-border: #303030;
+    --login-text: #e3e2e2;
+    --login-muted: #c0c7d6;
+    --login-faint: #8a919f;
+    --login-primary: #a5c8ff;
+    --login-primary-strong: #2492ff;
+    --login-on-primary: #00315e;
+    --login-warning: #faad14;
+    --login-danger: #ffb4ab;
+  }
+  html,
+  body { min-width: 320px; min-height: 100%; }
+  body {
+    min-height: 100dvh;
+    padding: 28px;
+    display: grid;
+    place-items: center;
+    background: var(--login-bg);
+    color: var(--login-text);
+    font-family: "Inter", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
+    letter-spacing: 0;
+  }
+  body::before,
+  body::after,
+  .login-box::before,
+  .login-box::after,
+  .rb-spotlight::before,
+  .rb-shiny::after { display: none !important; }
+  .rb-magnetic { transform: none !important; will-change: auto; }
+  .material-symbols-outlined {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 22;
+  }
+  .login-box {
+    width: min(480px, 100%);
+    max-width: none;
+    padding: 38px 36px 34px;
+    overflow: visible;
+    border: 1px solid var(--login-border);
+    border-radius: 8px;
+    background: var(--login-panel);
+    box-shadow: 0 24px 70px rgba(0, 0, 0, .28);
+    backdrop-filter: none;
+  }
+  .brand {
+    margin: 0 0 30px;
+    padding: 0;
+    text-align: center;
+  }
+  .brand .icon {
+    width: 46px;
+    height: 46px;
+    margin: 0 auto 14px;
+    border: 0;
+    border-radius: 4px;
+    background: var(--login-primary);
+    color: var(--login-on-primary);
+    box-shadow: none;
+  }
+  .brand .icon .material-symbols-outlined { font-size: 29px; }
+  .brand h1 {
+    color: var(--login-text);
+    font-size: 23px;
+    font-weight: 600;
+    line-height: 32px;
+    letter-spacing: 0;
+  }
+  .brand .sub {
+    margin-top: 4px;
+    color: var(--login-muted);
+    font-size: 13px;
+    line-height: 20px;
+  }
+  .field { margin-bottom: 17px; }
+  .field label {
+    display: block;
+    margin-bottom: 7px;
+    color: var(--login-text);
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0;
+  }
+  .field label span {
+    margin-left: 6px;
+    color: var(--login-faint);
+    font: 400 9px/1 "JetBrains Mono", monospace;
+  }
+  .field input {
+    width: 100%;
+    min-height: 48px;
+    padding: 11px 13px;
+    border: 1px solid #d7dbe1;
+    border-radius: 4px;
+    background: #f7f7f8;
+    color: #24282d;
+    font-size: 14px;
+    box-shadow: none;
+  }
+  .field input::placeholder { color: #758191; }
+  .field input:focus {
+    border-color: var(--login-primary-strong);
+    outline: 2px solid rgba(165, 200, 255, .28);
+    outline-offset: 1px;
+    background: #ffffff;
+    box-shadow: none;
+  }
+  .btn {
+    width: 100%;
+    min-height: 48px;
+    margin: 4px 0 0;
+    padding: 10px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border: 1px solid var(--login-primary);
+    border-radius: 4px;
+    background: var(--login-primary);
+    color: var(--login-on-primary);
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0;
+    box-shadow: none;
+  }
+  .btn:hover { background: var(--login-primary-strong); border-color: var(--login-primary-strong); transform: none; box-shadow: none; }
+  .btn:active { transform: none; }
+  .btn:disabled { opacity: .55; cursor: wait; }
+  .err {
+    min-height: 20px;
+    margin-top: 10px;
+    color: var(--login-danger);
+    font-size: 12px;
+    text-align: center;
+  }
+  .tip {
+    margin-top: 14px;
+    padding: 11px 12px;
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    border: 1px solid var(--login-border);
+    border-radius: 4px;
+    background: var(--login-surface);
+    color: var(--login-muted);
+    font-size: 11px;
+    line-height: 17px;
+    text-align: left;
+  }
+  .tip .material-symbols-outlined { flex: 0 0 auto; margin-top: 1px; color: var(--login-warning); font-size: 16px; }
+  @media (max-width: 560px) {
+    body { padding: 16px; }
+    .login-box { padding: 30px 22px 26px; }
+    .brand { text-align: center; }
+    .brand .icon { margin-left: auto; margin-right: auto; }
+  }
+
+  /* Finesse authentication refinement */
+  :root {
+    --login-focus: rgba(165, 200, 255, .3);
+    --login-danger-soft: rgba(255, 180, 171, .08);
+  }
+  ::selection { background: rgba(165, 200, 255, .24); color: var(--login-text); }
+  .login-box {
+    border-top: 3px solid var(--login-primary);
+    box-shadow: 0 24px 70px rgba(0, 0, 0, .34);
+  }
+  .field input:hover { border-color: #aeb6c1; }
+  .field input:focus-visible {
+    border-color: var(--login-primary-strong);
+    outline: 2px solid var(--login-focus);
+    outline-offset: 1px;
+  }
+  .field input[aria-invalid="true"] {
+    border-color: var(--login-danger);
+    outline-color: var(--login-danger-soft);
+  }
+  .btn:focus-visible {
+    outline: 2px solid var(--login-primary);
+    outline-offset: 3px;
+  }
+  .btn[aria-busy="true"] .material-symbols-outlined { animation: finesseLoginSpin .8s linear infinite; }
+  .err:not(:empty) {
+    margin-top: 12px;
+    padding: 8px 10px;
+    border: 1px solid rgba(255, 180, 171, .28);
+    border-radius: 4px;
+    background: var(--login-danger-soft);
+  }
+  @keyframes finesseLoginSpin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { transition-duration: .01ms !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
+  }
+  @media (max-width: 560px) {
+    .login-box { width: 100%; border-radius: 6px; }
+    .field input,
+    .btn { min-height: 50px; }
+  }
+
+  /* Uiverse-inspired login action with a stable, full-width layout. */
+  .btn {
+    --uiverse-login-fill: var(--login-primary-strong);
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+    border-color: #3b4651 !important;
+    border-radius: 999px !important;
+    background-color: #252c33 !important;
+    background-image: linear-gradient(var(--uiverse-login-fill), var(--uiverse-login-fill)) !important;
+    background-position: left center !important;
+    background-repeat: no-repeat !important;
+    background-size: 0 100% !important;
+    color: #ffffff !important;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .08), 0 6px 18px rgba(0, 0, 0, .18) !important;
+    transition: background-size .3s ease, border-color .3s ease, box-shadow .3s ease, transform .3s ease !important;
+  }
+  .btn:hover {
+    border-color: var(--uiverse-login-fill) !important;
+    background-size: 100% 100% !important;
+    color: #ffffff !important;
+    box-shadow: 0 8px 22px color-mix(in srgb, var(--uiverse-login-fill) 30%, transparent) !important;
+    transform: translateY(-1px);
+  }
+  .btn .material-symbols-outlined { transition: transform .3s ease; }
+  .btn:hover .material-symbols-outlined { transform: translateY(1px) scale(.92); }
+
 </style>
 </head>
 <body>
-<div class="login-box">
+<div class="login-box" role="form" aria-labelledby="loginTitle" aria-describedby="loginTip">
   <div class="brand">
-    <div class="icon">GM</div>
-    <h1>GM 命令管理工具</h1>
-    <div class="sub">GM Command Console</div>
+    <div class="icon"><span class="material-symbols-outlined">terminal</span></div>
+    <h1 id="loginTitle">GM 命令管理工具</h1>
+    <div class="sub">Mission Control Authentication</div>
   </div>
   <div class="field">
-    <label>用户名 USERNAME</label>
-    <input type="text" id="username" placeholder="请输入用户名" autocomplete="username">
+    <label for="username">用户名 <span>USERNAME</span></label>
+    <input type="text" id="username" placeholder="请输入操作员账号" autocomplete="username" aria-describedby="err">
   </div>
   <div class="field">
-    <label>密码 PASSWORD</label>
-    <input type="password" id="password" placeholder="请输入密码" autocomplete="current-password">
+    <label for="password">密码 <span>PASSWORD</span></label>
+    <input type="password" id="password" placeholder="请输入密码" autocomplete="current-password" aria-describedby="err">
   </div>
-  <button class="btn" onclick="doLogin()">登 录</button>
-  <div class="err" id="err"></div>
-  <div class="tip">首次使用默认管理员账号：admin / admin123<br>登录后请尽快修改密码</div>
+  <button class="btn" id="loginBtn" type="button" onclick="doLogin()"><span class="material-symbols-outlined">login</span>登录</button>
+  <div class="err" id="err" role="alert" aria-live="assertive"></div>
+  <div class="tip" id="loginTip" role="note"><span class="material-symbols-outlined">info</span><span>首次使用请向系统管理员获取初始密码，登录后及时修改。</span></div>
 </div>
 <script>
 async function doLogin() {
   const username = document.getElementById('username').value.trim();
   const password = document.getElementById('password').value;
   const err = document.getElementById('err');
+  const btn = document.getElementById('loginBtn');
   err.textContent = '';
+  document.getElementById('username').setAttribute('aria-invalid', username ? 'false' : 'true');
+  document.getElementById('password').setAttribute('aria-invalid', password ? 'false' : 'true');
   if (!username || !password) { err.textContent = '请输入用户名和密码'; return; }
+  btn.disabled = true;
+  btn.setAttribute('aria-busy', 'true');
+  btn.innerHTML = '<span class="material-symbols-outlined">progress_activity</span>正在登录';
   try {
     const res = await fetch('/api/auth/login', {
       method: 'POST',
@@ -913,8 +1156,16 @@ async function doLogin() {
     }
   } catch (e) {
     err.textContent = '网络错误，服务器可能未启动';
+  } finally {
+    btn.disabled = false;
+    btn.removeAttribute('aria-busy');
+    btn.innerHTML = '<span class="material-symbols-outlined">login</span>登录';
   }
 }
+['username', 'password'].forEach(id => document.getElementById(id).addEventListener('input', event => {
+  event.currentTarget.setAttribute('aria-invalid', 'false');
+  document.getElementById('err').textContent = '';
+}));
 document.getElementById('password').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
 document.getElementById('username').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('password').focus(); });
 

@@ -1,1 +1,12 @@
-[]
+[
+  {
+    "id": "9358bdc65a4a",
+    "name": "备战活动脚本",
+    "content": "import com.lc.billion.icefire.game.Application\nimport com.lc.billion.icefire.game.biz.dao.mongo.root.ServerInfoDao\nimport com.lc.billion.icefire.game.biz.service.impl.activity.handler.migrate.MigrateActivityHandler\nvar serverInfoDao = Application.getBean(ServerInfoDao.class);\nvar configCenter = Application.getConfigCenter();\nfor (var s : Application.getAllServerIds()) {\nvar data = serverInfoDao.findById(s);\nif (data == null ) {\ndata = serverInfoDao.create(s, configCenter.getOpenTimeMs(s));\n} else {\n}\n}\nvar handler =Application.getBean(MigrateActivityHandler.class);\nhandler.flushRoleToRedis();\nreturn '1';",
+    "category": "",
+    "tags": [],
+    "description": "",
+    "create_time": "2026-07-22 11:49:43",
+    "update_time": "2026-07-22 11:49:43"
+  }
+]
