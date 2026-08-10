@@ -12713,6 +12713,9 @@ function renderKongmingWorkflow(workflow) {
   const targets = Array.isArray(workflow.targets) ? workflow.targets : [];
   const reward = workflow.reward || {};
   const operation = workflow.operation || {};
+  const executionStep = steps.find(step => ['execute_account_command', 'execute_reward_command'].includes(step.id)) || {};
+  const executionResult = executionStep.result || {};
+  const gameResultVerified = executionResult.verification_status === 'verified';
   const workflowId = esc(workflow.id);
   const commandText = String(command.command || command.name || '');
   const canEditCommand = isRewardWorkflow && workflow.state === 'pending_confirmation' && isAdmin();
@@ -12756,7 +12759,10 @@ function renderKongmingWorkflow(workflow) {
   } else if (workflow.state === 'queued' || workflow.state === 'running') {
     actions = '<span class="kongming-workflow-note">任务正在后台执行，完成状态会自动更新。</span>';
   } else if (workflow.state === 'completed') {
-    actions = `<span class="kongming-workflow-note">所有步骤已完成，你现在只需登录游戏核对结果。</span><button class="btn btn-ghost" type="button" onclick="switchView('commands')"><span class="material-symbols-outlined">terminal</span><span>命令管理</span></button><button class="btn btn-ghost" type="button" onclick="switchView('scripts')"><span class="material-symbols-outlined">code</span><span>脚本管理</span></button>`;
+    const completionNote = gameResultVerified
+      ? `已读取并核验 ${Number(executionResult.verified_count || 0)} 个账号的游戏内结果，操作已生效。`
+      : '任务已完成投递；当前命令不支持自动核验，请以游戏内结果为准。';
+    actions = `<span class="kongming-workflow-note">${completionNote}</span><button class="btn btn-ghost" type="button" onclick="switchView('commands')"><span class="material-symbols-outlined">terminal</span><span>命令管理</span></button><button class="btn btn-ghost" type="button" onclick="switchView('scripts')"><span class="material-symbols-outlined">code</span><span>脚本管理</span></button>`;
   }
   return `<section class="kongming-workflow" data-workflow-id="${workflowId}" aria-label="孔明任务预览 ${esc(workflow.title || '')}">
     <div class="kongming-workflow-preview-label"><span class="material-symbols-outlined">fact_check</span><span>任务预览</span><small>${state.label}</small></div>
