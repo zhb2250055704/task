@@ -396,6 +396,32 @@ def _normalized_command_text(value):
     return re.sub(r'[^0-9a-z\u4e00-\u9fff]+', '', str(value or '').lower())
 
 
+def _canonical_command_question(value):
+    source = str(value or '')
+    replacements = (
+        ('提升到', '设置为'),
+        ('提高到', '设置为'),
+        ('升级到', '设置为'),
+        ('升到', '设置为'),
+        ('调整到', '设置为'),
+        ('调到', '设置为'),
+        ('修改为', '设置为'),
+        ('改成', '设置为'),
+        ('设为', '设置为'),
+        ('级别', '等级'),
+    )
+    for before, after in replacements:
+        source = source.replace(before, after)
+    return source
+
+
+def _command_intent_text(value):
+    source = str(value or '').split('【从最近任务卡继承的已校验执行范围】', 1)[0]
+    source = re.sub(r'https?://[^\s\]\[<>"\']+', ' ', source, flags=re.IGNORECASE)
+    source = re.sub(r'\b\d+\.A\.account\.\d+\b', ' ', source, flags=re.IGNORECASE)
+    return source.strip()
+
+
 def _command_bigrams(value):
     normalized = _normalized_command_text(value)
     if len(normalized) < 2:
@@ -404,7 +430,7 @@ def _command_bigrams(value):
 
 
 def _command_match_score(question, command):
-    source = str(question or '')
+    source = _canonical_command_question(question)
     normalized_source = _normalized_command_text(source)
     template = str(command.get('command') or '').strip()
     name = str(command.get('name') or '').strip()
@@ -692,8 +718,9 @@ def build_kongming_account_command_workflow(owner_id, text, catalog, commands):
     if account_scope['mode'] == 'all':
         account_names = _bulk_reward_account_names(environment, account_scope.get('expected_count'))
     targets = _resolve_reward_targets(environment, account_names)
-    command = _select_kongming_command(text, commands)
-    arguments = _extract_kongming_command_arguments(text, command)
+    intent_text = _command_intent_text(text)
+    command = _select_kongming_command(intent_text, commands)
+    arguments = _extract_kongming_command_arguments(intent_text, command)
     template = str(command.get('command') or '').strip()
     executable_command = ' '.join([template, *arguments]).strip()
     operation_name = str(command.get('description') or command.get('name') or template).strip()

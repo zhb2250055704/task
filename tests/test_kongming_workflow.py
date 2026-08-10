@@ -224,6 +224,15 @@ class KongmingWorkflowParsingTests(unittest.TestCase):
             'execute_account_command',
         ])
 
+    def test_generic_command_match_accepts_natural_action_synonyms(self):
+        text = BULK_REWARD_TEXT.splitlines()[0] + '\n把这3个账号的VIP都升到12级'
+        workflow = kongming_workflow.build_kongming_workflow(
+            'owner-1', text, sample_bulk_reward_catalog(), sample_account_commands(), []
+        )
+
+        self.assertEqual(workflow['command']['id'], 'doc_setviplevel')
+        self.assertEqual(workflow['command']['command'], '#setVipLevel 12')
+
     def test_follow_up_action_inherits_only_the_latest_workflow_scope(self):
         previous = kongming_workflow.build_kongming_workflow(
             'owner-1', BULK_REWARD_TEXT, sample_bulk_reward_catalog(), sample_reward_commands(), []
