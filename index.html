@@ -9351,6 +9351,128 @@
     .kongming-workflow-actions .btn { width: 100%; }
   }
 
+  /* Keep command resources in the first viewport while retaining every target control. */
+  @media (min-width: 900px) {
+    #view-commands.active {
+      height: var(--gm-command-view-height, calc(100dvh - var(--nexus-header) - var(--nexus-footer)));
+      min-height: 0;
+      padding-bottom: 18px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) clamp(280px, 34%, 420px);
+      grid-template-rows: auto auto minmax(0, 1fr);
+      column-gap: 16px;
+      align-items: start;
+      overflow: hidden;
+    }
+    #view-commands > header {
+      grid-column: 1 / -1;
+      grid-row: 1;
+      min-height: 66px;
+      margin-bottom: 12px;
+      padding-bottom: 12px;
+    }
+    #view-commands > .toolbar {
+      grid-column: 1;
+      grid-row: 2;
+      align-self: start;
+    }
+    #view-commands > .toolbar input[type="search"] {
+      width: auto;
+      min-width: 0;
+      flex: 1 1 210px;
+    }
+    #view-commands > .toolbar select {
+      width: auto;
+      min-width: 0;
+      flex: 1 1 140px;
+    }
+    #view-commands > #ksSyncWorkspace {
+      grid-column: 2;
+      grid-row: 2;
+      min-width: 0;
+      margin: 0 0 14px;
+      align-self: start;
+    }
+    #view-commands > .container {
+      grid-column: 1;
+      grid-row: 3;
+      min-height: 0;
+      height: 100%;
+      padding: 0 4px 0 0;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      scrollbar-gutter: stable;
+    }
+    #view-commands > .cocos-target-panel {
+      grid-column: 2;
+      grid-row: 3;
+      min-width: 0;
+      min-height: 0;
+      max-height: 100%;
+      margin: 0;
+      display: block;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      scrollbar-gutter: stable;
+    }
+    #view-commands .cocos-target-head,
+    #view-commands .ks-catalog-toolbar,
+    #view-commands #cocosTargetEmpty,
+    #view-commands #cocosTargetContent {
+      grid-column: auto;
+      grid-row: auto;
+      border-right: 0;
+    }
+    #view-commands .cocos-target-head {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto auto;
+      padding: 14px;
+      border-bottom: 1px solid var(--border);
+    }
+    #view-commands .cocos-target-summary {
+      grid-column: 1 / -1;
+      order: initial;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    #view-commands .cocos-target-summary .cocos-target-count,
+    #view-commands .cocos-target-summary .cocos-target-count:last-child {
+      grid-column: auto;
+      min-height: 25px;
+      padding: 4px 7px;
+      align-items: center;
+      font-size: 10px;
+      line-height: 16px;
+    }
+    #view-commands .cocos-target-head > .btn {
+      order: initial;
+      width: auto;
+      margin: 0;
+    }
+    #view-commands .ks-catalog-toolbar {
+      padding: 12px 14px;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      border-bottom: 1px solid var(--border);
+    }
+    #view-commands .ks-catalog-actions { grid-column: 1 / -1; }
+    #view-commands #cocosTargetEmpty { min-height: 220px; }
+    #view-commands .cocos-account-workspace { padding: 14px; }
+    #view-commands .cocos-account-toolbar {
+      display: grid;
+      grid-template-columns: 1fr;
+      align-items: stretch;
+    }
+    #view-commands .cocos-account-search { width: 100%; }
+    #view-commands .cocos-filter-group,
+    #view-commands .cocos-batch-actions { flex-wrap: wrap; }
+    #view-commands .cocos-account-list {
+      max-height: none;
+      grid-template-columns: 1fr;
+    }
+    #view-commands .cocos-environment-body { grid-template-columns: 1fr; }
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .gm-flip-content { transition-duration: 1ms; }
     .gm-flip-face::before { animation: none; }
@@ -9445,7 +9567,7 @@ FORM: Operate mode, Stitch high-fidelity prototype, source order 1, no concept s
         <button class="btn btn-primary admin-only" onclick="openModal()" style="display:none">新增命令</button>
         <button class="btn btn-ghost admin-only" onclick="openCategoryModal()" style="display:none">管理分类</button>
       </div>
-      <details class="ks-sync-embedded admin-only" id="ksSyncWorkspace" open style="display:none">
+      <details class="ks-sync-embedded admin-only" id="ksSyncWorkspace" style="display:none">
         <summary>
           <span class="ks-sync-embedded-title"><span class="material-symbols-outlined">sync</span>KS 环境与账号同步</span>
           <span id="lsTokenCount" class="count-badge ks-sync-embedded-summary"></span>
@@ -15806,7 +15928,15 @@ function applyZoom(z) {
   z = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, z));
   const effectiveZoom = window.innerWidth <= 760 ? Math.min(z, 100) : z;
   const main = document.querySelector('.main');
-  if (main) main.style.zoom = (effectiveZoom / 100).toString();
+  if (main) {
+    const scale = effectiveZoom / 100;
+    const rootStyle = getComputedStyle(document.documentElement);
+    const headerHeight = parseFloat(rootStyle.getPropertyValue('--nexus-header')) || 56;
+    const footerHeight = parseFloat(rootStyle.getPropertyValue('--nexus-footer')) || 32;
+    const commandViewHeight = Math.max(320, window.innerHeight / scale - headerHeight - footerHeight);
+    main.style.zoom = scale.toString();
+    main.style.setProperty('--gm-command-view-height', `${commandViewHeight}px`);
+  }
   const inp = document.getElementById('zoomInput');
   if (inp && +inp.value !== effectiveZoom) inp.value = effectiveZoom;
   localStorage.setItem('gm_zoom', z);
