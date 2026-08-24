@@ -2,6 +2,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -133,6 +134,26 @@ class GitBranchOperationsTest(unittest.TestCase):
             'origin/feature/source',
             {item['name'] for item in result['status']['remote_branches']},
         )
+
+    def test_status_job_refreshes_upstream_and_reaches_completion(self):
+        self.git('-C', self.seed, 'switch', 'main')
+        Path(self.seed, 'status-job.txt').write_text('remote status\n', encoding='utf-8')
+        self.git('-C', self.seed, 'add', 'status-job.txt')
+        self.git('-C', self.seed, 'commit', '-m', 'status job update')
+        self.git('-C', self.seed, 'push', 'origin', 'main')
+
+        job_id = server.start_git_status_job([self.repo_id])
+        deadline = time.time() + 15
+        job = server.git_job_snapshot(job_id)
+        while job and job.get('state') not in ('done', 'failed') and time.time() < deadline:
+            time.sleep(0.05)
+            job = server.git_job_snapshot(job_id)
+
+        self.assertIsNotNone(job)
+        self.assertEqual(job['state'], 'done', job.get('detail'))
+        self.assertEqual(job['percent'], 100)
+        self.assertTrue(job['result']['remote_refresh_ok'])
+        self.assertEqual(job['result']['items'][0]['remote_count'], 1)
 
     def test_pull_discards_local_changes_without_creating_stash(self):
         self.git('-C', self.seed, 'switch', 'main')

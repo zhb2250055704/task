@@ -19,6 +19,7 @@ import threading
 import webbrowser
 import zipfile
 import re
+import signal
 import shutil
 import subprocess
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -149,6 +150,9 @@ GIT_REPOS = {
     },
 }
 GIT_TIMEOUT = 180
+GIT_STATUS_FETCH_TIMEOUT = max(
+    10, int(os.environ.get('GM_GIT_STATUS_FETCH_TIMEOUT', '45'))
+)
 KONGMING_CHAT_TIMEOUT = int(os.environ.get('GM_KONGMING_CHAT_TIMEOUT', '240'))
 KONGMING_CACHE_TTL = int(os.environ.get('GM_KONGMING_CACHE_TTL', '600'))
 KONGMING_CACHE_MAX_ITEMS = int(os.environ.get('GM_KONGMING_CACHE_MAX_ITEMS', '100'))
@@ -1199,16 +1203,44 @@ def git_executable():
     return os.environ.get('GM_GIT_EXE') or shutil.which('git') or 'git'
 
 
-def git_subprocess_options():
+def git_subprocess_options(new_process_group=False):
     if os.name != 'nt':
         return {}
     startupinfo = subprocess.STARTUPINFO()
     startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
     startupinfo.wShowWindow = 0
+    creationflags = subprocess.CREATE_NO_WINDOW
+    if new_process_group:
+        creationflags |= subprocess.CREATE_NEW_PROCESS_GROUP
     return {
-        'creationflags': subprocess.CREATE_NO_WINDOW,
+        'creationflags': creationflags,
         'startupinfo': startupinfo,
     }
+
+
+def terminate_process_tree(proc):
+    if proc.poll() is not None:
+        return
+    if os.name == 'nt':
+        try:
+            subprocess.run(
+                ['taskkill', '/PID', str(proc.pid), '/T', '/F'],
+                capture_output=True,
+                timeout=10,
+                **git_subprocess_options(),
+            )
+        except (OSError, subprocess.SubprocessError):
+            pass
+    else:
+        try:
+            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+        except (OSError, ProcessLookupError):
+            pass
+    if proc.poll() is None:
+        try:
+            proc.kill()
+        except OSError:
+            pass
 
 
 def run_git_command(repo, args, timeout=60):
@@ -1223,33 +1255,36 @@ def run_git_command(repo, args, timeout=60):
     env = os.environ.copy()
     env['GIT_TERMINAL_PROMPT'] = '0'
     try:
-        proc = subprocess.run(
+        popen_options = git_subprocess_options(new_process_group=True)
+        if os.name != 'nt':
+            popen_options['start_new_session'] = True
+        proc = subprocess.Popen(
             [git_executable()] + list(args),
             cwd=path,
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
             encoding='utf-8',
             errors='replace',
-            timeout=timeout,
             env=env,
-            **git_subprocess_options(),
+            **popen_options,
         )
+        stdout, stderr = proc.communicate(timeout=timeout)
     except FileNotFoundError:
         return {'ok': False, 'code': -1, 'stdout': '', 'stderr': '',
                 'output': '找不到 git 命令，请安装 Git 或设置 GM_GIT_EXE。'}
-    except subprocess.TimeoutExpired as e:
-        stdout = e.stdout or ''
-        stderr = e.stderr or ''
-        if isinstance(stdout, bytes):
-            stdout = stdout.decode('utf-8', errors='replace')
-        if isinstance(stderr, bytes):
-            stderr = stderr.decode('utf-8', errors='replace')
+    except subprocess.TimeoutExpired:
+        terminate_process_tree(proc)
+        stdout, stderr = proc.communicate()
+        stdout = stdout or ''
+        stderr = stderr or ''
         return {'ok': False, 'code': -1, 'stdout': stdout, 'stderr': stderr,
-                'output': (stdout + '\n' + stderr + '\n执行超时').strip()}
+                'timed_out': True,
+                'output': (stdout + '\n' + stderr + f'\n执行超过 {timeout} 秒，已停止').strip()}
 
-    output = (proc.stdout + ('\n' if proc.stdout and proc.stderr else '') + proc.stderr).strip()
+    output = (stdout + ('\n' if stdout and stderr else '') + stderr).strip()
     return {'ok': proc.returncode == 0, 'code': proc.returncode,
-            'stdout': proc.stdout, 'stderr': proc.stderr, 'output': output}
+            'stdout': stdout, 'stderr': stderr, 'output': output}
 
 
 def git_tool_repo_prefix(repo):
@@ -1842,13 +1877,17 @@ def git_switch_safety(repo_id, known_changes=None, check_office_locks=True, auto
     }
 
 
-def git_repo_status(repo_id, fetch_remote=True, enrich=False):
+def git_repo_status(repo_id, fetch_remote=True, enrich=False, fetch_timeout=None):
     repo = GIT_REPOS[repo_id]
     item = {'id': repo_id, 'label': repo['label'], 'path': repo['path']}
 
     # 状态列表只需要一次 fetch 和几次 log。提交文件明细在点击记录时懒加载，
     # 避免为几十条提交逐条执行 git show。
-    fetch = run_git_command(repo, ['fetch', '--prune'], timeout=GIT_TIMEOUT) if fetch_remote else {
+    fetch = run_git_command(
+        repo,
+        ['fetch', '--prune', '--no-tags'],
+        timeout=fetch_timeout or GIT_TIMEOUT,
+    ) if fetch_remote else {
         'ok': True, 'output': ''
     }
     status = run_git_command(repo, ['status', '-sb'], timeout=30)
@@ -1859,6 +1898,7 @@ def git_repo_status(repo_id, fetch_remote=True, enrich=False):
                      'local_commits': [], 'local_count': 0,
                      'recent_commits': [], 'recent_count': 0,
                      'fetch_ok': fetch.get('ok'), 'fetch_msg': fetch.get('output', ''),
+                     'remote_refreshed': bool(fetch_remote and fetch.get('ok')),
                      'msg': status.get('output', '状态检查失败')})
         return item
 
@@ -1921,6 +1961,7 @@ def git_repo_status(repo_id, fetch_remote=True, enrich=False):
         'recent_count': len(recent_commits),
         'fetch_ok': fetch.get('ok'),
         'fetch_msg': '' if fetch.get('ok') else fetch.get('output', ''),
+        'remote_refreshed': bool(fetch_remote and fetch.get('ok')),
         'msg': '',
     })
     return item
@@ -1968,6 +2009,158 @@ def git_active_pull_job(repo_ids):
     git_cleanup_jobs()
     with _git_job_lock:
         return _git_active_job_locked(repo_ids)
+
+
+def git_cached_repo_statuses(repo_ids=None):
+    repo_ids = list(repo_ids or GIT_REPOS.keys())
+    if not repo_ids:
+        return []
+    workers = min(4, len(repo_ids))
+    results = {}
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        futures = {
+            executor.submit(git_repo_status, repo_id, False, False): repo_id
+            for repo_id in repo_ids
+        }
+        for future in as_completed(futures):
+            repo_id = futures[future]
+            try:
+                results[repo_id] = future.result()
+            except Exception as exc:
+                repo = GIT_REPOS.get(repo_id, {})
+                results[repo_id] = {
+                    'ok': False,
+                    'id': repo_id,
+                    'label': repo.get('label', repo_id),
+                    'path': repo.get('path', ''),
+                    'msg': f'状态检查异常：{exc}',
+                    'remote_refreshed': False,
+                }
+    return [results[repo_id] for repo_id in repo_ids]
+
+
+def git_fetch_current_upstream(repo, timeout=GIT_STATUS_FETCH_TIMEOUT):
+    upstream = run_git_command(
+        repo,
+        ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}'],
+        timeout=15,
+    )
+    upstream_name = upstream.get('stdout', '').strip() if upstream.get('ok') else ''
+    if '/' in upstream_name:
+        remote_name, branch_name = upstream_name.split('/', 1)
+        return run_git_command(
+            repo,
+            [
+                'fetch', '--prune', '--no-tags', remote_name,
+                f'+refs/heads/{branch_name}:refs/remotes/{remote_name}/{branch_name}',
+            ],
+            timeout=timeout,
+        )
+    return run_git_command(repo, ['fetch', '--prune', '--no-tags'], timeout=timeout)
+
+
+def start_git_status_job(repo_ids=None):
+    repo_ids = list(repo_ids or GIT_REPOS.keys())
+    job_id = uuid.uuid4().hex
+    with _git_job_lock:
+        active = _git_active_job_locked(repo_ids)
+        if active:
+            if active.get('kind') == 'status':
+                return active.get('job_id')
+            raise BlockingIOError('所选仓库正在执行 Git 操作，请等待当前任务完成')
+        if _git_operation_lock.locked():
+            raise BlockingIOError('另一个 Git 操作正在执行，请稍后重试')
+        _git_jobs[job_id] = {
+            'job_id': job_id,
+            'kind': 'status',
+            'repo_ids': repo_ids,
+            'state': 'queued',
+            'percent': 0,
+            'stage': '准备检查',
+            'detail': '正在准备客户端和配置表仓库',
+            'result': None,
+            'created_at': time.time(),
+            'updated_at': time.time(),
+        }
+
+    def worker():
+        results = []
+        warnings = []
+        try:
+            total = max(1, len(repo_ids))
+            for index, repo_id in enumerate(repo_ids):
+                repo = GIT_REPOS[repo_id]
+                base = index / total * 90
+                span = 90 / total
+                git_job_update(
+                    job_id,
+                    state='running',
+                    percent=round(base + span * 0.12),
+                    stage=f'{repo["label"]}：刷新远端',
+                    detail=f'仅获取当前跟踪分支，最长等待 {GIT_STATUS_FETCH_TIMEOUT} 秒',
+                )
+                with _git_operation_lock:
+                    fetched = git_fetch_current_upstream(repo)
+                    git_job_update(
+                        job_id,
+                        state='running',
+                        percent=round(base + span * 0.68),
+                        stage=f'{repo["label"]}：读取状态',
+                        detail='正在统计本地改动、待拉取提交和历史记录',
+                    )
+                    status = git_repo_status(repo_id, fetch_remote=False, enrich=False)
+                status['fetch_ok'] = bool(fetched.get('ok'))
+                status['fetch_msg'] = '' if fetched.get('ok') else fetched.get('output', '')
+                status['remote_refreshed'] = bool(fetched.get('ok'))
+                if not fetched.get('ok'):
+                    reason = fetched.get('output', '') or '远端刷新失败'
+                    warnings.append(f'{repo["label"]}：{reason}')
+                results.append(status)
+                git_job_update(
+                    job_id,
+                    state='running',
+                    percent=min(95, round(base + span)),
+                    stage=f'{repo["label"]}：检查完成',
+                    detail='已更新仓库状态卡片',
+                )
+
+            status_ok = all(item.get('ok') for item in results)
+            detail = '客户端和配置表仓库检查成功'
+            if warnings:
+                detail = '本地状态检查完成；部分远端刷新失败，已显示上次成功获取的远端记录'
+            result = {
+                'ok': status_ok,
+                'items': results,
+                'warnings': warnings,
+                'remote_refresh_ok': not warnings,
+            }
+            git_job_update(
+                job_id,
+                state='done' if status_ok else 'failed',
+                percent=100,
+                stage='检查完成' if status_ok else '检查失败',
+                detail=detail,
+                result=result,
+            )
+        except Exception as exc:
+            message = f'仓库状态检查异常：{exc}'
+            print(f'[GIT] status job {job_id} failed: {message}')
+            git_job_update(
+                job_id,
+                state='failed',
+                percent=100,
+                stage='检查失败',
+                detail=message,
+                result={'ok': False, 'items': results, 'msg': message},
+            )
+
+    thread = threading.Thread(
+        target=worker,
+        name=f'git-status-{job_id[:8]}',
+        daemon=True,
+    )
+    thread.start()
+    return job_id
 
 
 def git_fetch_repo_result(repo_id):
@@ -2151,6 +2344,7 @@ def start_git_pull_job(repo_ids, resolve_excel=False):
             raise BlockingIOError('另一个 Git 操作正在执行，请稍后重试')
         _git_jobs[job_id] = {
             'job_id': job_id,
+            'kind': 'pull',
             'repo_ids': list(repo_ids),
             'state': 'queued',
             'percent': 0,
@@ -7424,6 +7618,8 @@ class GMHandler(SimpleHTTPRequestHandler):
             self._git_pull()
         elif path == '/api/git/fetch':
             self._git_fetch()
+        elif path == '/api/git/status-refresh':
+            self._git_status_refresh()
         elif path == '/api/git/checkout':
             self._git_checkout()
         elif path == '/api/git/resolve-excel-pull':
@@ -8048,8 +8244,11 @@ class GMHandler(SimpleHTTPRequestHandler):
 
     # ---------- Git 拉取 ----------
     def _list_git_repos(self):
-        self._send_json({'ok': True,
-                         'items': [git_repo_status(rid) for rid in GIT_REPOS]})
+        self._send_json({
+            'ok': True,
+            'remote_cached': True,
+            'items': git_cached_repo_statuses(),
+        })
 
     def _git_detail(self, params):
         repo_id = params.get('repo', [''])[0].strip()
@@ -8088,6 +8287,25 @@ class GMHandler(SimpleHTTPRequestHandler):
 
         try:
             job_id = start_git_pull_job(repo_ids)
+        except BlockingIOError as exc:
+            self._send_json({'ok': False, 'code': 'git_busy', 'msg': str(exc)}, status=409)
+            return
+        self._send_json({'ok': True, 'job_id': job_id, 'state': 'queued'}, status=202)
+
+    def _git_status_refresh(self):
+        data = self._read_json()
+        if data is None:
+            return
+        repo_id = str(data.get('repo', 'all')).strip()
+        if repo_id == 'all':
+            repo_ids = list(GIT_REPOS.keys())
+        elif repo_id in GIT_REPOS:
+            repo_ids = [repo_id]
+        else:
+            self._send_json({'ok': False, 'msg': '未知仓库'}, status=400)
+            return
+        try:
+            job_id = start_git_status_job(repo_ids)
         except BlockingIOError as exc:
             self._send_json({'ok': False, 'code': 'git_busy', 'msg': str(exc)}, status=409)
             return

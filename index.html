@@ -10251,7 +10251,7 @@ FORM: Operate mode, Stitch high-fidelity prototype, source order 1, no concept s
       </header>
       <div class="toolbar">
         <input type="text" id="gitAuthorSearch" name="gmGitAuthorSearch" placeholder="搜索提交人" autocomplete="off" autocapitalize="off" spellcheck="false" oninput="renderGitFromCache()" onkeydown="if(event.key==='Enter')renderGitFromCache()">
-        <button class="btn btn-ghost" onclick="loadGitRepos()">检查状态</button>
+        <button class="btn btn-ghost" onclick="loadGitRepos(true)">检查状态</button>
         <button class="btn btn-ghost" onclick="clearGitAuthorSearch()">清空</button>
         <button class="btn btn-primary" id="gitPullAllBtn" onclick="pullGit('all')">全部拉取</button>
       </div>
@@ -10590,6 +10590,7 @@ let gitProgressTimer = null;
 let gitProgressValue = 0;
 let gitStatusProgressTimer = null;
 let gitStatusProgressValue = 0;
+let gitStatusRequestController = null;
 let lastExcelPullFailure = null;
 let commandSearchUserEdited = false;
 let commandSearchAutofillGuard = null;
@@ -13901,7 +13902,7 @@ function clearLsToken() {
   document.getElementById('lsTokenInput').value = '';
   document.getElementById('lsBaseUrlInput').value = '';
 }
-async function loadGitRepos() {
+async function loadGitRepos(refreshRemote = false) {
   if (gitBusy) {
     toast('Git 操作正在执行，请稍后再检查');
     return;
@@ -13910,11 +13911,18 @@ async function loadGitRepos() {
   const count = document.getElementById('gitCount');
   startGitStatusProgress();
   count.textContent = '';
+  if (gitStatusRequestController) gitStatusRequestController.abort();
+  const requestController = new AbortController();
+  gitStatusRequestController = requestController;
+  const requestTimer = setTimeout(() => requestController.abort(), 45000);
   try {
-    const res = await fetch(GIT_API + '/repos');
-    const data = await res.json();
+    const res = await fetch(GIT_API + '/repos', {
+      cache: 'no-store',
+      signal: requestController.signal
+    });
+    const data = await readJsonResponse(res, '仓库状态接口不可用，请重启工具服务后重试');
     stopGitStatusProgress();
-    if (!data.ok) {
+    if (!res.ok || !data.ok) {
       grid.innerHTML = '<div class="empty">' +
         gitProgressHtml(100, '检查失败', data.msg || '请稍后重试', 'failed', '检查进度') +
         '<div>检查失败：' + esc(data.msg || '未知错误') + '</div>' +
@@ -13923,12 +13931,93 @@ async function loadGitRepos() {
     }
     gitRepoCache = data.items || [];
     renderGitFromCache();
+    renderGitProgress(
+      100,
+      '本地状态检查完成',
+      refreshRemote ? '正在后台刷新当前分支的远端提交' : '已显示本地状态和上次成功获取的远端记录',
+      'done',
+      '检查进度'
+    );
+    if (refreshRemote) await refreshGitRemoteStatus();
   } catch (e) {
     stopGitStatusProgress();
+    const message = e && e.name === 'AbortError'
+      ? '本地仓库检查超过 45 秒，已停止等待，请重试或检查磁盘占用'
+      : (e.message || String(e));
     grid.innerHTML = '<div class="empty">' +
-      gitProgressHtml(100, '检查失败', '请求没有完成，请查看错误信息', 'failed', '检查进度') +
-      '<div>检查失败：' + esc(e) + '</div>' +
+      gitProgressHtml(100, '检查失败', message, 'failed', '检查进度') +
+      '<div>检查失败：' + esc(message) + '</div>' +
     '</div>';
+  } finally {
+    clearTimeout(requestTimer);
+    if (gitStatusRequestController === requestController) gitStatusRequestController = null;
+  }
+}
+
+function renderGitStatusRefreshProgress(percent, stage, detail, state) {
+  const grid = document.getElementById('gitRepoGrid');
+  if (!grid) return;
+  const current = document.getElementById('gitStatusRefreshProgress');
+  const html = '<div id="gitStatusRefreshProgress" class="empty git-status-loading" style="grid-column:1/-1">' +
+    gitProgressHtml(percent, stage, detail, state || '', '远端检查进度') +
+  '</div>';
+  if (current) current.outerHTML = html;
+  else grid.insertAdjacentHTML('afterbegin', html);
+}
+
+async function pollGitStatusJob(jobId) {
+  while (true) {
+    const res = await fetch(GIT_API + '/pull-progress?id=' + encodeURIComponent(jobId), { cache: 'no-store' });
+    const job = await readJsonResponse(res, '无法读取仓库检查进度');
+    if (!res.ok || !job.ok) throw new Error(gitRequestError(job, '无法读取仓库检查进度'));
+    const terminal = job.state === 'done' || job.state === 'failed';
+    renderGitStatusRefreshProgress(
+      Number.isFinite(Number(job.percent)) ? Number(job.percent) : 0,
+      job.stage || '检查中',
+      job.detail || '',
+      terminal ? job.state : ''
+    );
+    if (terminal) return job.result || { ok: job.state === 'done', items: [] };
+    await new Promise(resolve => setTimeout(resolve, 450));
+  }
+}
+
+async function refreshGitRemoteStatus() {
+  gitBusy = true;
+  const allBtn = document.getElementById('gitPullAllBtn');
+  if (allBtn) allBtn.disabled = true;
+  try {
+    const res = await fetch(GIT_API + '/status-refresh', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ repo: 'all' })
+    });
+    const accepted = await readJsonResponse(res, '仓库检查任务创建失败');
+    if (!res.ok || !accepted.ok || !accepted.job_id) {
+      throw new Error(gitRequestError(accepted, '仓库检查任务创建失败'));
+    }
+    const result = await pollGitStatusJob(accepted.job_id);
+    if (result.items && result.items.length) {
+      gitRepoCache = result.items;
+      renderGitFromCache();
+    }
+    const warnings = result.warnings || [];
+    if (!result.ok) throw new Error(result.msg || '仓库状态检查失败');
+    if (warnings.length) {
+      renderGitProgress(100, '检查完成，远端刷新有警告', warnings.join('\n'), 'failed', '检查进度');
+      toast('检查完成，部分远端记录使用上次结果');
+    } else {
+      renderGitProgress(100, '检查成功', '客户端和配置表的本地、远端状态均已更新', 'done', '检查进度');
+      toast('仓库状态检查成功');
+    }
+  } catch (error) {
+    renderGitStatusRefreshProgress(100, '检查失败', error.message || String(error), 'failed');
+    renderGitProgress(100, '检查失败', error.message || String(error), 'failed', '检查进度');
+    toast(error.message || '仓库状态检查失败');
+  } finally {
+    gitBusy = false;
+    if (allBtn) allBtn.disabled = false;
+    renderGitFromCache();
   }
 }
 
@@ -14745,11 +14834,10 @@ function renderGitPullProgress(percent, stage, detail, state, title) {
 function startGitStatusProgress() {
   stopGitStatusProgress();
   const stages = [
-    { limit: 20, stage: '准备检查', detail: '正在确认客户端和配置表仓库' },
-    { limit: 42, stage: '读取本地状态', detail: '正在检查分支、提交和本地改动' },
-    { limit: 68, stage: '刷新远端信息', detail: '正在获取远端待拉取提交' },
-    { limit: 88, stage: '统计提交记录', detail: '正在整理提交人、历史记录和待拉取数量' },
-    { limit: 96, stage: '等待结果', detail: '检查仍在进行，请稍等' }
+    { limit: 24, stage: '准备检查', detail: '正在确认客户端和配置表仓库' },
+    { limit: 54, stage: '读取本地状态', detail: '正在检查分支、提交和本地改动' },
+    { limit: 78, stage: '读取远端缓存', detail: '正在整理上次成功获取的远端提交' },
+    { limit: 90, stage: '等待本地结果', detail: '本地检查最长等待 45 秒' }
   ];
   let index = 0;
   gitStatusProgressValue = 8;
