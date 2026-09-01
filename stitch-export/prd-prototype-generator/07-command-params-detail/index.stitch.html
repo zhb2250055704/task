@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>GameOps Engine - Command Detail</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&amp;family=JetBrains+Mono:wght@400&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "on-tertiary-fixed-variant": "#733600",
+                      "surface-container-highest": "#343535",
+                      "on-primary-fixed": "#001c3a",
+                      "success": "#52c41a",
+                      "background": "#121414",
+                      "primary-fixed": "#d4e3ff",
+                      "surface": "#121414",
+                      "on-surface": "#e3e2e2",
+                      "error": "#f5222d",
+                      "background-deep": "#141414",
+                      "on-primary-fixed-variant": "#004785",
+                      "inverse-surface": "#e3e2e2",
+                      "on-secondary-container": "#caa9ff",
+                      "secondary-container": "#600fc0",
+                      "primary-fixed-dim": "#a5c8ff",
+                      "surface-dim": "#121414",
+                      "background-elevated": "#1f1f1f",
+                      "primary-container": "#2492ff",
+                      "on-primary-container": "#002a53",
+                      "on-tertiary": "#512400",
+                      "surface-container-lowest": "#0d0e0f",
+                      "surface-container": "#1f2020",
+                      "surface-bright": "#383939",
+                      "on-tertiary-fixed": "#311300",
+                      "inverse-on-surface": "#2f3031",
+                      "tertiary-fixed": "#ffdbc7",
+                      "tertiary-container": "#e37103",
+                      "on-tertiary-container": "#471e00",
+                      "surface-variant": "#343535",
+                      "secondary-fixed": "#ecdcff",
+                      "on-error": "#690005",
+                      "on-surface-variant": "#c0c7d6",
+                      "inverse-primary": "#005fae",
+                      "warning": "#faad14",
+                      "primary": "#a5c8ff",
+                      "secondary-fixed-dim": "#d5baff",
+                      "surface-container-low": "#1b1c1c",
+                      "on-background": "#e3e2e2",
+                      "secondary": "#d5baff",
+                      "on-secondary-fixed": "#270057",
+                      "on-primary": "#00315e",
+                      "tertiary": "#ffb688",
+                      "tertiary-fixed-dim": "#ffb688",
+                      "surface-tint": "#a5c8ff",
+                      "outline": "#8a919f",
+                      "outline-variant": "#404753",
+                      "on-secondary": "#42008a",
+                      "border-subtle": "#303030",
+                      "surface-container-high": "#292a2a",
+                      "ks-executable": "#13c2c2",
+                      "error-container": "#93000a",
+                      "on-error-container": "#ffdad6",
+                      "on-secondary-fixed-variant": "#5e08bd"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.125rem",
+                      "lg": "0.25rem",
+                      "xl": "0.5rem",
+                      "full": "0.75rem"
+              },
+              "spacing": {
+                      "unit": "4px",
+                      "header-height": "56px",
+                      "gutter": "16px",
+                      "margin-page": "24px",
+                      "sidebar-width": "240px"
+              },
+              "fontFamily": {
+                      "headline-lg-mobile": ["Inter"],
+                      "headline-md": ["Inter"],
+                      "headline-lg": ["Inter"],
+                      "body-md": ["Inter"],
+                      "code-md": ["JetBrains Mono"],
+                      "label-caps": ["Inter"],
+                      "body-sm": ["Inter"]
+              },
+              "fontSize": {
+                      "headline-lg-mobile": ["20px", {"lineHeight": "28px", "fontWeight": "600"}],
+                      "headline-md": ["20px", {"lineHeight": "28px", "fontWeight": "600"}],
+                      "headline-lg": ["24px", {"lineHeight": "32px", "fontWeight": "600"}],
+                      "body-md": ["14px", {"lineHeight": "22px", "fontWeight": "400"}],
+                      "code-md": ["13px", {"lineHeight": "20px", "fontWeight": "400"}],
+                      "label-caps": ["11px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "700"}],
+                      "body-sm": ["12px", {"lineHeight": "18px", "fontWeight": "400"}]
+              }
+            }
+          }
+        }
+    </script>
+</head>
+<body class="bg-background text-on-background font-body-md text-body-md h-screen w-screen overflow-hidden flex">
+<!-- Content Canvas (Main Application Behind Modal) -->
+<main class="flex-1 ml-sidebar-width mt-header-height mb-8 p-margin-page overflow-y-auto relative z-0 opacity-50 blur-sm pointer-events-none transition-all duration-300 bg-background-deep">
+<!-- Mock background content -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+<div class="bg-background-elevated border border-border-subtle rounded p-4 h-64"></div>
+<div class="bg-background-elevated border border-border-subtle rounded p-4 h-64"></div>
+<div class="bg-background-elevated border border-border-subtle rounded p-4 h-64"></div>
+</div>
+</main>
+<!-- Modal Overlay Backdrop (Level 3 Depth) -->
+<div class="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+<!-- Modal Dialog -->
+<div class="bg-background-elevated border border-border-subtle rounded shadow-2xl w-full max-w-2xl flex flex-col relative overflow-hidden transform transition-all scale-100 opacity-100">
+<!-- Modal Header -->
+<div class="px-6 py-5 border-b border-border-subtle flex justify-between items-center bg-surface-container-low">
+<div>
+<h2 class="font-headline-lg text-headline-lg text-on-surface">Command Details</h2>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-1">Review and configure execution parameters.</p>
+</div>
+<button aria-label="Close modal" class="text-on-surface-variant hover:text-on-surface transition-colors rounded p-1 hover:bg-surface-container-high">
+<span class="material-symbols-outlined text-2xl" data-icon="close">close</span>
+</button>
+</div>
+<!-- Modal Body -->
+<div class="p-6 flex-1 overflow-y-auto space-y-8">
+<!-- Command Meta Header -->
+<div class="flex items-start justify-between">
+<div>
+<div class="flex items-center space-x-3 mb-2">
+<h3 class="font-headline-md text-headline-md text-primary">add_item_to_inventory</h3>
+<span class="bg-surface-container-high text-on-surface px-2 py-0.5 rounded font-label-caps text-label-caps border border-border-subtle flex items-center">
+<span class="material-symbols-outlined text-[14px] mr-1" data-icon="security">security</span> Admin
+                            </span>
+<span class="bg-surface-container-high text-warning px-2 py-0.5 rounded font-label-caps text-label-caps border border-border-subtle flex items-center">
+<span class="material-symbols-outlined text-[14px] mr-1" data-icon="bolt">bolt</span> High Impact
+                            </span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Injects specific items into a target player's inventory directly bypassing normal loot tables.</p>
+</div>
+<div class="text-right flex flex-col items-end">
+<div class="font-label-caps text-label-caps text-on-surface-variant mb-1">Usage Stats</div>
+<div class="font-code-md text-code-md text-on-surface">1,245 executions</div>
+<div class="font-body-sm text-body-sm text-on-surface-variant mt-1">Last: 2 mins ago</div>
+</div>
+</div>
+<!-- Category & Tags -->
+<div class="grid grid-cols-2 gap-4 border-t border-b border-border-subtle py-4">
+<div>
+<div class="font-label-caps text-label-caps text-on-surface-variant mb-2">Category</div>
+<div class="flex items-center space-x-2">
+<span class="material-symbols-outlined text-on-surface-variant" data-icon="inventory_2">inventory_2</span>
+<span class="text-on-surface font-body-md text-body-md">Economy &amp; Items</span>
+</div>
+</div>
+<div>
+<div class="font-label-caps text-label-caps text-on-surface-variant mb-2">System Tags</div>
+<div class="flex flex-wrap gap-2">
+<span class="bg-surface-container text-on-surface-variant px-2 py-1 rounded border border-border-subtle font-body-sm text-body-sm">production</span>
+<span class="bg-surface-container text-on-surface-variant px-2 py-1 rounded border border-border-subtle font-body-sm text-body-sm">live-ops</span>
+<span class="bg-surface-container text-on-surface-variant px-2 py-1 rounded border border-border-subtle font-body-sm text-body-sm">QA-approved</span>
+</div>
+</div>
+</div>
+<!-- Raw Command Syntax -->
+<div>
+<div class="font-label-caps text-label-caps text-on-surface-variant mb-2 flex justify-between items-center">
+<span>Raw Command String</span>
+<button class="text-primary hover:text-primary-fixed-dim transition-colors flex items-center space-x-1">
+<span class="material-symbols-outlined text-[16px]" data-icon="content_copy">content_copy</span>
+<span class="font-body-sm text-body-sm">Copy</span>
+</button>
+</div>
+<div class="bg-surface-container-lowest border border-border-subtle rounded p-4 relative group">
+<code class="font-code-md text-code-md text-on-surface whitespace-pre-wrap break-all">/admin execute action=add_item target={user_id} item_id={item_hash} quantity={count} force_bind={bool}</code>
+<div class="absolute inset-0 bg-primary/5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none rounded"></div>
+</div>
+</div>
+<!-- Parameters Section -->
+<div class="bg-surface-container rounded border border-border-subtle p-5">
+<div class="font-label-caps text-label-caps text-on-surface-variant mb-4 flex items-center">
+<span class="material-symbols-outlined text-[16px] mr-2" data-icon="tune">tune</span> Configure Execution
+                    </div>
+<div class="space-y-4">
+<!-- Target Accounts Display -->
+<div>
+<label class="block font-body-sm text-body-sm text-on-surface-variant mb-2">Targeted Accounts (Selected)</label>
+<div class="flex flex-wrap gap-2">
+<div class="bg-surface-container-highest border border-border-subtle rounded px-3 py-1.5 flex items-center space-x-2">
+<div class="w-2 h-2 rounded-full bg-success"></div>
+<span class="font-code-md text-code-md text-on-surface">USR-88921-A</span>
+<button class="text-on-surface-variant hover:text-error ml-2"><span class="material-symbols-outlined text-[14px]" data-icon="close">close</span></button>
+</div>
+<div class="bg-surface-container-highest border border-border-subtle rounded px-3 py-1.5 flex items-center space-x-2">
+<div class="w-2 h-2 rounded-full bg-success"></div>
+<span class="font-code-md text-code-md text-on-surface">USR-44102-B</span>
+<button class="text-on-surface-variant hover:text-error ml-2"><span class="material-symbols-outlined text-[14px]" data-icon="close">close</span></button>
+</div>
+<button class="bg-surface-container border border-dashed border-border-subtle text-on-surface-variant hover:text-on-surface hover:border-on-surface-variant rounded px-3 py-1.5 flex items-center space-x-1 transition-colors">
+<span class="material-symbols-outlined text-[14px]" data-icon="add">add</span>
+<span class="font-body-sm text-body-sm">Add Target</span>
+</button>
+</div>
+</div>
+<!-- Dynamic Parameter Input -->
+<div>
+<label class="block font-body-sm text-body-sm text-on-surface-variant mb-2" for="param-input">Execution Parameters <span class="text-error">*</span></label>
+<div class="relative">
+<input class="w-full bg-surface-container-lowest border border-border-subtle rounded px-4 py-2.5 font-code-md text-code-md text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all placeholder:text-on-surface-variant/50" id="param-input" placeholder="输入参数：{参数说明} e.g. item_id=992, quantity=5" type="text"/>
+<div class="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant">
+<span class="material-symbols-outlined text-[20px]" data-icon="keyboard">keyboard</span>
+</div>
+</div>
+<p class="font-body-sm text-body-sm text-warning mt-2 flex items-center">
+<span class="material-symbols-outlined text-[14px] mr-1" data-icon="warning">warning</span> Verify item hashes before execution to prevent inventory corruption.
+                             </p>
+</div>
+</div>
+</div>
+</div>
+<!-- Modal Footer Actions -->
+<div class="px-6 py-4 border-t border-border-subtle bg-surface-container-low flex justify-end items-center space-x-4">
+<button class="px-4 py-2 rounded border border-border-subtle text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors font-body-md text-body-md">
+                    Cancel
+                </button>
+<button class="px-4 py-2 rounded bg-primary-container text-on-primary-container hover:bg-primary-container/90 transition-colors font-headline-md text-headline-md text-[14px] flex items-center space-x-2">
+<span class="material-symbols-outlined text-[18px]" data-icon="play_arrow">play_arrow</span>
+<span>Execute Command</span>
+</button>
+</div>
+</div>
+</div>
+</body></html>

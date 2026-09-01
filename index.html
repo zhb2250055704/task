@@ -1374,6 +1374,16 @@
     max-height: 520px;
     color: #27374f;
   }
+  .git-detail-notice {
+    margin: 0 0 10px;
+    padding: 9px 11px;
+    border: 1px solid #f0d28a;
+    border-radius: 7px;
+    color: #76530a;
+    background: #fff8e6;
+    font-size: 12px;
+    line-height: 1.55;
+  }
   #detailMask.git-detail-modal .excel-diff {
     gap: 12px;
   }
@@ -6575,36 +6585,13 @@
     white-space: nowrap;
   }
   .mobile-menu { display: none !important; }
-  .mission-search {
-    width: min(390px, 36vw);
-    min-height: 34px;
-    margin-right: auto;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 0 10px;
-    border: 1px solid var(--border);
-    border-radius: var(--nexus-radius-control);
-    background: var(--ghost-bg);
-    color: var(--text-faint);
-  }
-  .mission-search .material-symbols-outlined { font-size: 19px; }
-  .mission-search input {
-    width: 100%;
-    min-width: 0;
-    border: 0;
-    outline: 0;
-    background: transparent;
-    color: var(--text);
-    font-size: 13px;
-  }
   .mission-tools,
   .topbar-user,
   .topbar-user .u-acts {
     display: flex;
     align-items: center;
   }
-  .mission-tools { gap: 4px; }
+  .mission-tools { gap: 4px; margin-left: auto; }
   .icon-button {
     width: 34px;
     height: 34px;
@@ -7657,8 +7644,19 @@
   }
   #gitRepoGrid,
   #gitCommitPanels { grid-column: 1; }
-  #gitRecordList { grid-column: 2; grid-row: 1 / span 2; }
+  #gitRecordList {
+    grid-column: 2;
+    grid-row: auto;
+    align-self: start;
+    min-height: 0;
+    max-height: calc(100dvh - var(--nexus-header) - var(--nexus-footer) - 184px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+  }
   #gitOutput { grid-column: 1 / -1; }
+  #gitRepoGrid.git-layout-empty,
+  #gitCommitPanels.git-layout-empty { display: none; }
   .repo-grid,
   .git-record-list { display: grid; grid-template-columns: 1fr; gap: 12px; }
   .git-commit-panels { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
@@ -7760,6 +7758,156 @@
   }
   .git-branch-message.error { color: var(--nexus-danger); }
   .git-branch-message .material-symbols-outlined { margin-top: 1px; flex: 0 0 auto; font-size: 15px; }
+  .git-unified-branch-panel {
+    grid-column: 1 / -1;
+    display: grid;
+    gap: 10px;
+    padding: 14px 16px;
+    border: 1px solid var(--border);
+    border-radius: var(--nexus-radius-card);
+    background: var(--panel);
+  }
+  .git-unified-branch-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .git-unified-branch-title { color: var(--text); font-size: 13px; font-weight: 700; }
+  .git-unified-branch-subtitle { margin-top: 3px; color: var(--text-faint); font-size: 10px; }
+  .git-unified-branch-status {
+    color: var(--nexus-primary);
+    font: 500 10px/1.4 "JetBrains Mono", monospace;
+    text-align: right;
+  }
+  .git-unified-branch-controls {
+    display: grid;
+    grid-template-columns: minmax(180px, .7fr) minmax(260px, 1.3fr) auto;
+    gap: 8px;
+    align-items: center;
+  }
+  .git-unified-branch-controls input,
+  .git-unified-branch-controls select {
+    width: 100%;
+    min-width: 0;
+    height: 36px;
+    padding: 0 10px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--nexus-radius-control);
+    background: var(--nexus-bg-deep);
+    color: var(--text);
+    font: 500 11px/1 "JetBrains Mono", monospace;
+  }
+  .git-unified-branch-controls input::placeholder { color: var(--text-faint); }
+  .git-unified-branch-controls input:focus-visible,
+  .git-unified-branch-controls select:focus-visible {
+    border-color: var(--nexus-primary);
+    outline: 2px solid color-mix(in srgb, var(--nexus-primary) 24%, transparent);
+    outline-offset: 1px;
+  }
+  .git-unified-branch-controls input:disabled,
+  .git-unified-branch-controls select:disabled { opacity: .58; cursor: not-allowed; }
+  .git-unified-branch-message { color: var(--text-faint); font-size: 10px; line-height: 1.5; }
+  .git-unified-branch-message.error { color: var(--nexus-danger); }
+
+  /* Configuration table version comparison */
+  #view-config-compare .container {
+    display: grid;
+    grid-template-columns: minmax(250px, 320px) minmax(0, 1fr);
+    gap: 16px;
+    align-items: start;
+  }
+  .config-compare-sidebar,
+  .config-compare-main {
+    min-width: 0;
+    border: 1px solid var(--border);
+    border-radius: var(--nexus-radius-panel);
+    background: var(--panel);
+  }
+  .config-compare-sidebar { overflow: hidden; }
+  .config-compare-sidebar-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .config-compare-section-title { color: var(--text); font-size: 13px; font-weight: 800; }
+  .config-compare-muted { margin-top: 4px; color: var(--text-faint); font-size: 10px; line-height: 1.45; word-break: break-word; }
+  .config-compare-list-count {
+    min-width: 24px;
+    padding: 4px 7px;
+    border-radius: var(--nexus-radius-control);
+    background: var(--nexus-surface-highest);
+    color: var(--nexus-primary);
+    font: 700 10px/1 "JetBrains Mono", monospace;
+    text-align: center;
+  }
+  .config-compare-table-list { max-height: calc(100dvh - var(--nexus-header) - var(--nexus-footer) - 210px); overflow-y: auto; }
+  .config-compare-table-item {
+    width: 100%;
+    min-height: 52px;
+    padding: 10px 14px;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    border: 0;
+    border-bottom: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-dim);
+    cursor: pointer;
+    text-align: left;
+  }
+  .config-compare-table-item:last-child { border-bottom: 0; }
+  .config-compare-table-item:hover { background: var(--row-hover); color: var(--text); }
+  .config-compare-table-item.active { background: var(--nexus-surface-high); color: var(--text); box-shadow: inset 3px 0 var(--nexus-primary); }
+  .config-compare-table-item .material-symbols-outlined { flex: 0 0 auto; color: var(--nexus-primary); font-size: 18px; }
+  .config-compare-table-copy { min-width: 0; display: grid; gap: 3px; }
+  .config-compare-table-name { overflow: hidden; color: inherit; font-size: 11px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+  .config-compare-table-path { overflow: hidden; color: var(--text-faint); font: 10px/1.35 "JetBrains Mono", monospace; text-overflow: ellipsis; white-space: nowrap; }
+  .config-compare-main { min-height: 500px; padding: 16px; }
+  .config-compare-empty { min-height: 468px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 9px; color: var(--text-faint); text-align: center; }
+  .config-compare-empty .material-symbols-outlined { color: var(--nexus-primary); font-size: 38px; }
+  .config-compare-empty strong { color: var(--text); font-size: 14px; }
+  .config-compare-empty span:last-child { max-width: 420px; font-size: 11px; line-height: 1.55; }
+  .config-compare-empty .spin { animation: config-compare-spin 1s linear infinite; }
+  @keyframes config-compare-spin { to { transform: rotate(360deg); } }
+  .config-compare-result { display: grid; gap: 14px; }
+  .config-compare-file-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; padding-bottom: 14px; border-bottom: 1px solid var(--border); }
+  .config-compare-file-title { color: var(--text); font-size: 16px; font-weight: 800; word-break: break-word; }
+  .config-compare-file-path { margin-top: 5px; color: var(--text-faint); font: 10px/1.4 "JetBrains Mono", monospace; word-break: break-all; }
+  .config-compare-branch { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 6px; max-width: 42%; color: var(--nexus-primary); font: 600 10px/1.4 "JetBrains Mono", monospace; text-align: right; }
+  .config-compare-branch span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .config-compare-head-meta { display: flex; flex-wrap: wrap; gap: 6px 12px; margin-top: 9px; color: var(--text-faint); font-size: 10px; }
+  .config-compare-head-meta code { color: var(--text-dim); font: 500 10px/1.3 "JetBrains Mono", monospace; }
+  .config-compare-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 9px; }
+  .config-compare-stat { min-width: 0; padding: 11px 12px; border: 1px solid var(--border); border-radius: var(--nexus-radius-card); background: var(--nexus-surface-low); }
+  .config-compare-stat-label { display: block; color: var(--text-faint); font-size: 10px; }
+  .config-compare-stat-value { display: block; margin-top: 5px; color: var(--text); font: 700 20px/1 "JetBrains Mono", monospace; }
+  .config-compare-history-note { padding: 9px 11px; border-left: 3px solid var(--nexus-primary); background: var(--nexus-surface-low); color: var(--text-dim); font-size: 10px; line-height: 1.55; }
+  .config-compare-history-note.warning { border-left-color: var(--nexus-warning); }
+  .config-compare-version-list { display: grid; gap: 12px; }
+  .config-compare-version { overflow: hidden; border: 1px solid var(--border); border-radius: var(--nexus-radius-card); background: var(--nexus-surface-low); }
+  .config-compare-version-head { padding: 13px 14px; border-bottom: 1px solid var(--border); }
+  .config-compare-version-title { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: var(--text); font-size: 13px; font-weight: 800; }
+  .config-compare-version-title .status { color: var(--nexus-success); font-size: 10px; font-weight: 700; }
+  .config-compare-version-title .status.warning { color: var(--nexus-warning); }
+  .config-compare-version-meta { display: flex; flex-wrap: wrap; gap: 6px 12px; margin-top: 6px; color: var(--text-faint); font-size: 10px; line-height: 1.45; }
+  .config-compare-version-meta code { color: var(--text-dim); font: 500 10px/1.3 "JetBrains Mono", monospace; }
+  .config-compare-version-summary { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 9px; color: var(--text-dim); font-size: 10px; }
+  .config-compare-version-summary strong { color: var(--text); font-family: "JetBrains Mono", monospace; }
+  .config-compare-sheet-changes { margin-top: 8px; color: var(--text-dim); font-size: 10px; line-height: 1.55; }
+  .config-compare-sheet-changes b { color: var(--text); }
+  .config-compare-sheet-changes code { color: var(--nexus-primary); font: 500 10px/1.4 "JetBrains Mono", monospace; }
+  .config-compare-fields { padding: 11px 14px 0; color: var(--text-dim); font-size: 10px; line-height: 1.55; }
+  .config-compare-fields b { color: var(--text); }
+  .config-compare-fields code { color: var(--nexus-primary); font: 500 10px/1.4 "JetBrains Mono", monospace; }
+  .config-compare-sheets { padding: 0 14px 14px; }
+  .config-compare-sheets .excel-diff-sheet { padding-right: 0; padding-left: 0; }
+  .config-compare-sheets .excel-diff-wrap { max-height: 420px; }
+  .config-compare-error { margin: 12px 14px 14px; padding: 11px; border-left: 3px solid var(--nexus-danger); background: var(--nexus-surface-high); color: var(--nexus-danger); font-size: 10px; line-height: 1.55; word-break: break-word; }
+  .config-compare-no-change { padding: 16px 14px; color: var(--nexus-success); font-size: 11px; }
 
   /* KS synchronization */
   .ks-sync-embedded {
@@ -8182,7 +8330,6 @@
     .sidebar-bottom { padding-inline: 10px; }
     .sidebar-launch,
     .sidebar-link { justify-content: center; }
-    .mission-search { width: min(330px, 34vw); }
     .topbar-user .u-info,
     .topbar-user .u-acts,
     .zoom-box { display: none; }
@@ -8195,6 +8342,7 @@
     #view-commands .cocos-target-panel,
     #ksSyncWorkspace .ls-token-panel,
     #view-git .container,
+    #view-config-compare .container,
     .qa-workspace { grid-template-columns: 1fr; }
     #view-commands .cocos-target-head,
     #view-commands .ks-catalog-toolbar,
@@ -8207,8 +8355,11 @@
     #gitCommitPanels,
     #gitRecordList,
     #gitOutput { grid-column: 1; grid-row: auto; }
+    #gitRecordList { max-height: none; overflow: visible; }
+    .config-compare-table-list { max-height: 280px; }
     .git-commit-panels { grid-template-columns: 1fr; }
     .git-branch-controls { grid-template-columns: minmax(120px, .65fr) minmax(180px, 1fr) auto auto; }
+    .git-unified-branch-controls { grid-template-columns: minmax(140px, .7fr) minmax(220px, 1.3fr) auto; }
     .ls-token-sidebar { position: static; }
   }
 
@@ -8218,6 +8369,16 @@
     .git-branch-search,
     .git-branch-select { grid-column: 1 / -1; }
     .git-branch-controls .btn { width: 100%; justify-content: center; }
+    .git-unified-branch-controls { grid-template-columns: 1fr 1fr; }
+    .git-unified-branch-controls input,
+    .git-unified-branch-controls select,
+    .git-unified-branch-controls .btn { width: 100%; grid-column: 1 / -1; }
+    .git-unified-branch-controls .btn { justify-content: center; }
+    .git-unified-branch-head { align-items: flex-start; flex-direction: column; }
+    .git-unified-branch-status { text-align: left; }
+    .config-compare-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .config-compare-file-head { flex-direction: column; }
+    .config-compare-branch { max-width: 100%; text-align: left; }
     .layout { display: block; }
     .topbar {
       width: var(--nexus-sidebar);
@@ -8248,7 +8409,6 @@
     .mission-header { left: 0; height: var(--nexus-header); padding-inline: 10px; gap: 8px; }
     .mobile-menu { display: inline-flex !important; }
     .mission-leading strong { font-size: 14px; }
-    .mission-search { flex: 1 1 auto; width: auto; min-width: 0; margin: 0; }
     .mission-tools > .icon-button:not(.theme-toggle),
     .mission-divider,
     .topbar-user { display: none; }
@@ -8323,12 +8483,6 @@
     outline: 2px solid var(--finesse-focus-strong);
     outline-offset: 2px;
   }
-  .mission-search:focus-within {
-    border-color: var(--finesse-focus-strong);
-    background: var(--input-bg);
-    box-shadow: 0 0 0 3px var(--finesse-focus);
-  }
-  .mission-search input:focus-visible { outline: 0; }
   .nav-item:focus-visible,
   .sidebar-launch:focus-visible,
   .sidebar-link:focus-visible { outline-offset: -3px; }
@@ -8519,8 +8673,6 @@
     .main button,
     .main input:not([type="checkbox"]):not([type="radio"]),
     .main select { min-height: 44px !important; }
-    .mission-search { min-height: 44px; }
-    .mission-search input { min-height: 0 !important; }
     .main input[type="checkbox"],
     .main input[type="radio"] { min-height: 16px !important; }
     .item-card .card-foot button,
@@ -9473,6 +9625,71 @@
     #view-commands .cocos-environment-body { grid-template-columns: 1fr; }
   }
 
+  /* Keep the target and resource columns independent when the KS panel is open. */
+  @media (min-width: 900px) {
+    #view-commands.active {
+      grid-template-columns: clamp(280px, 34%, 420px) minmax(0, 1fr);
+      grid-template-rows: auto minmax(0, 1fr);
+      column-gap: 16px;
+      row-gap: 0;
+    }
+    #view-commands > header {
+      grid-column: 1 / -1;
+      grid-row: 1;
+    }
+    #view-commands > .commands-target-column {
+      grid-column: 1;
+      grid-row: 2;
+      min-width: 0;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      scrollbar-gutter: stable;
+    }
+    #view-commands > .commands-resource-column {
+      grid-column: 2;
+      grid-row: 2;
+      min-width: 0;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    #view-commands > .commands-resource-column > .toolbar {
+      flex: 0 0 auto;
+      margin: 0 0 14px;
+    }
+    #view-commands > .commands-resource-column > .container {
+      flex: 1 1 auto;
+      min-width: 0;
+      min-height: 0;
+      height: auto;
+      padding: 0 4px 18px 0;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      scrollbar-gutter: stable;
+    }
+    #view-commands > .commands-target-column > .ks-sync-embedded {
+      flex: 0 0 auto;
+      min-width: 0;
+      margin: 0;
+    }
+    #view-commands > .commands-target-column > .cocos-target-panel {
+      flex: 1 1 auto;
+      min-width: 0;
+      min-height: 0;
+      max-height: none;
+      margin: 0;
+      display: block;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      scrollbar-gutter: stable;
+    }
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .gm-flip-content { transition-duration: 1ms; }
     .gm-flip-face::before { animation: none; }
@@ -9506,6 +9723,7 @@ FORM: Operate mode, Stitch high-fidelity prototype, source order 1, no concept s
       <button class="nav-item" type="button" data-view="formulas" onclick="switchView('formulas')"><span class="material-symbols-outlined">functions</span><span>计算公式</span></button>
       <button class="nav-item" type="button" data-view="items" onclick="switchView('items')"><span class="material-symbols-outlined">inventory_2</span><span>道具表</span></button>
       <button class="nav-item admin-only" type="button" data-view="git" onclick="switchView('git')" style="display:none"><span class="material-symbols-outlined">account_tree</span><span>Git 拉取</span></button>
+      <button class="nav-item admin-only" type="button" data-view="config-compare" onclick="switchView('config-compare')" style="display:none"><span class="material-symbols-outlined">difference</span><span>配置表对比</span></button>
       <button class="nav-item admin-only" type="button" data-view="users" onclick="switchView('users')" style="display:none"><span class="material-symbols-outlined">group</span><span>用户管理</span></button>
     </nav>
     <div class="sidebar-bottom">
@@ -9522,10 +9740,6 @@ FORM: Operate mode, Stitch high-fidelity prototype, source order 1, no concept s
         <button class="icon-button mobile-menu" id="mobileMenuButton" type="button" onclick="toggleSidebar()" title="打开导航" aria-label="打开导航" aria-controls="appSidebar" aria-expanded="false"><span class="material-symbols-outlined">menu</span></button>
         <strong>Mission Control</strong>
       </div>
-      <label class="mission-search" for="globalSearch">
-        <span class="material-symbols-outlined">search</span>
-        <input id="globalSearch" type="search" placeholder="搜索当前模块" autocomplete="off" onkeydown="if(event.key==='Enter')runGlobalSearch()">
-      </label>
       <div class="mission-tools">
         <button class="icon-button" type="button" onclick="changeZoom(1)" title="放大" aria-label="放大"><span class="material-symbols-outlined">zoom_in</span></button>
         <button class="icon-button" type="button" onclick="changeZoom(-1)" title="缩小" aria-label="缩小"><span class="material-symbols-outlined">zoom_out</span></button>
@@ -9559,14 +9773,7 @@ FORM: Operate mode, Stitch high-fidelity prototype, source order 1, no concept s
           <span id="cmdCount" class="count-badge"></span>
         </div>
       </header>
-      <div class="toolbar">
-        <input type="search" id="search" name="gmCommandSearchFilter" placeholder="搜索命令名 / 内容 / 标签 / 描述 / 参数…" autocomplete="new-password" autocapitalize="off" spellcheck="false">
-        <select id="filterCategory"><option value="">全部分类</option></select>
-        <button class="btn btn-ghost" onclick="loadList()">查询</button>
-        <button class="btn btn-ghost" onclick="clearSearch()">清空</button>
-        <button class="btn btn-primary admin-only" onclick="openModal()" style="display:none">新增命令</button>
-        <button class="btn btn-ghost admin-only" onclick="openCategoryModal()" style="display:none">管理分类</button>
-      </div>
+      <div class="commands-target-column">
       <details class="ks-sync-embedded admin-only" id="ksSyncWorkspace" style="display:none">
         <summary>
           <span class="ks-sync-embedded-title"><span class="material-symbols-outlined">sync</span>KS 环境与账号同步</span>
@@ -9688,9 +9895,20 @@ FORM: Operate mode, Stitch high-fidelity prototype, source order 1, no concept s
           </details>
         </div>
       </section>
+      </div>
+      <div class="commands-resource-column">
+      <div class="toolbar">
+        <input type="search" id="search" name="gmCommandSearchFilter" placeholder="搜索命令名 / 内容 / 标签 / 描述 / 参数…" autocomplete="new-password" autocapitalize="off" spellcheck="false">
+        <select id="filterCategory"><option value="">全部分类</option></select>
+        <button class="btn btn-ghost" onclick="loadList()">查询</button>
+        <button class="btn btn-ghost" onclick="clearSearch()">清空</button>
+        <button class="btn btn-primary admin-only" onclick="openModal()" style="display:none">新增命令</button>
+        <button class="btn btn-ghost admin-only" onclick="openCategoryModal()" style="display:none">管理分类</button>
+      </div>
       <div class="container">
         <div id="cmdGroups"></div>
         <div id="empty" class="empty" style="display:none">暂无数据，点击「新增命令」开始</div>
+      </div>
       </div>
     </div>
 
@@ -10256,10 +10474,74 @@ FORM: Operate mode, Stitch high-fidelity prototype, source order 1, no concept s
         <button class="btn btn-primary" id="gitPullAllBtn" onclick="pullGit('all')">全部拉取</button>
       </div>
       <div class="container">
+        <section class="git-unified-branch-panel" aria-label="客户端和配置表统一切换分支">
+          <div class="git-unified-branch-head">
+            <div>
+              <div class="git-unified-branch-title">统一切换分支</div>
+              <div class="git-unified-branch-subtitle">同时切换客户端和配置表，优先使用本地分支；没有本地分支时自动创建远端跟踪分支</div>
+            </div>
+            <span id="gitUnifiedBranchStatus" class="git-unified-branch-status">请先检查仓库状态</span>
+          </div>
+          <div class="git-unified-branch-controls">
+            <input type="search" id="gitUnifiedBranchSearch" placeholder="筛选共同分支" autocomplete="off" oninput="renderGitUnifiedBranchOptions()" aria-label="筛选共同分支">
+            <select id="gitUnifiedBranchSelect" aria-label="选择统一切换分支" onchange="renderGitUnifiedBranchOptions()">
+              <option value="">请先检查仓库状态</option>
+            </select>
+            <button class="btn btn-primary" id="gitUnifiedBranchButton" type="button" onclick="switchGitUnifiedBranch()" disabled>
+              <span class="material-symbols-outlined">swap_horiz</span><span>统一切换</span>
+            </button>
+          </div>
+          <div id="gitUnifiedBranchMessage" class="git-unified-branch-message">选择一次分支即可同步切换客户端和配置表。</div>
+        </section>
         <div id="gitRepoGrid" class="repo-grid"></div>
         <div id="gitCommitPanels" class="git-commit-panels"></div>
         <div id="gitRecordList" class="git-record-list"></div>
         <div id="gitOutput" class="git-output" style="display:none"></div>
+      </div>
+    </div>
+
+    <!-- ============ 配置表版本对比视图（仅管理员） ============ -->
+    <div class="view" id="view-config-compare">
+      <header>
+        <div class="page-heading">
+          <h1>配置表对比</h1>
+          <p>在当前分支中选择配置表，与前 3 个历史版本逐层核对差异。</p>
+        </div>
+        <div class="header-right">
+          <span id="configCompareCount" class="count-badge"></span>
+        </div>
+      </header>
+      <div class="toolbar">
+        <input type="search" id="configCompareSearch" placeholder="搜索配置表名称或路径" autocomplete="off" oninput="renderConfigCompareTables()">
+        <button class="btn btn-ghost" type="button" onclick="loadConfigCompareTables()"><span class="material-symbols-outlined">refresh</span><span>刷新清单</span></button>
+        <button class="btn btn-ghost" type="button" onclick="clearConfigCompareSearch()">清空</button>
+      </div>
+      <div class="container config-compare-container">
+        <aside class="config-compare-sidebar" aria-label="配置表清单">
+          <div class="config-compare-sidebar-head">
+            <div>
+              <div class="config-compare-section-title">csv/common</div>
+              <div id="configCompareRepoMeta" class="config-compare-muted">正在读取当前分支</div>
+            </div>
+            <span id="configCompareListCount" class="config-compare-list-count">0</span>
+          </div>
+          <div id="configCompareTableList" class="config-compare-table-list" aria-live="polite">
+            <div class="empty">正在读取配置表清单</div>
+          </div>
+        </aside>
+        <main class="config-compare-main" aria-live="polite">
+          <div id="configCompareEmpty" class="config-compare-empty">
+            <span class="material-symbols-outlined">difference</span>
+            <strong>选择一张配置表开始对比</strong>
+            <span>结果只读取当前分支的 Git 历史，不会修改工作区。</span>
+          </div>
+          <div id="configCompareLoading" class="config-compare-empty" style="display:none">
+            <span class="material-symbols-outlined spin">sync</span>
+            <strong>正在解析配置表历史</strong>
+            <span>正在读取当前版本和前 3 个历史版本，请稍候。</span>
+          </div>
+          <div id="configCompareResult" style="display:none"></div>
+        </main>
       </div>
     </div>
 
@@ -10280,6 +10562,7 @@ FORM: Operate mode, Stitch high-fidelity prototype, source order 1, no concept s
         <div class="user-stat"><span class="material-symbols-outlined">login</span><div class="user-stat-copy"><span>当前会话</span><strong id="userStatSession">1</strong></div></div>
       </div>
       <div class="toolbar">
+        <input type="search" id="userSearch" placeholder="搜索用户名 / 角色 / 创建时间" autocomplete="off" oninput="renderFilteredUsers()">
         <select id="userRoleFilter" onchange="renderFilteredUsers()" aria-label="按角色筛选">
           <option value="">全部角色</option>
           <option value="admin">管理员</option>
@@ -10553,6 +10836,7 @@ const HANZHONG_SCORE_API = '/api/hanzhong-score';
 const CAT_API = '/api/categories';
 const USER_API = '/api/users';
 const GIT_API = '/api/git';
+const CONFIG_COMPARE_API = '/api/config-compare';
 const KS_CATALOG_API = '/api/ks/catalog';
 const KS_SYNC_API = '/api/ks/sync';
 const KS_TOKEN_BRIDGE_REQUEST = 'GM_KS_TOKEN_BRIDGE_REQUEST';
@@ -10586,12 +10870,17 @@ let gitRepoCache = [];
 let gitBranchSelections = {};
 let gitBranchQueries = {};
 let gitBranchOperation = null;
+let gitUnifiedBranchCandidates = [];
 let gitProgressTimer = null;
 let gitProgressValue = 0;
 let gitStatusProgressTimer = null;
 let gitStatusProgressValue = 0;
 let gitStatusRequestController = null;
 let lastExcelPullFailure = null;
+let configCompareTables = [];
+let configCompareSelectedPath = '';
+let configCompareRequestController = null;
+let configCompareRequestId = 0;
 let commandSearchUserEdited = false;
 let commandSearchAutofillGuard = null;
 let selectedCommandId = null;
@@ -10745,7 +11034,7 @@ function startLoginAutofillGuard() {
 }
 
 function switchView(view) {
-  if (['users', 'skillhub', 'git'].includes(view) && !isAdmin()) return;
+  if (['users', 'skillhub', 'git', 'config-compare'].includes(view) && !isAdmin()) return;
   currentView = view;
   document.querySelectorAll('.nav-item').forEach(el => {
     const active = el.dataset.view === view;
@@ -10777,16 +11066,8 @@ function switchView(view) {
   else if (view === 'kongming') loadKongmingWorkspace();
   else if (view === 'items') loadItems();
   else if (view === 'git') loadGitRepos();
+  else if (view === 'config-compare') loadConfigCompareTables();
   else if (view === 'users') loadUsers();
-  const globalSearch = document.getElementById('globalSearch');
-  if (globalSearch) {
-    const labels = {
-      commands: '搜索命令', scripts: '搜索脚本', qa: '搜索当前模块', skillhub: '搜索当前模块', kongming: '询问孔明',
-      formulas: '搜索公式', items: '搜索道具', git: '搜索提交人', users: '搜索用户'
-    };
-    globalSearch.value = '';
-    globalSearch.placeholder = labels[view] || '搜索当前模块';
-  }
   document.body.classList.remove('sidebar-open');
   const mobileMenu = document.getElementById('mobileMenuButton');
   if (mobileMenu) mobileMenu.setAttribute('aria-expanded', 'false');
@@ -10800,27 +11081,6 @@ function toggleSidebar() {
     mobileMenu.setAttribute('aria-label', open ? '关闭导航' : '打开导航');
     mobileMenu.title = open ? '关闭导航' : '打开导航';
   }
-}
-
-function runGlobalSearch() {
-  const globalSearch = document.getElementById('globalSearch');
-  const value = globalSearch ? globalSearch.value.trim() : '';
-  const mappings = {
-    commands: ['search', loadList],
-    scripts: ['scriptSearch', loadScripts],
-    formulas: ['formulaSearch', loadFormulas],
-    items: ['itemSearch', loadItems],
-    git: ['gitAuthorSearch', renderGitFromCache]
-  };
-  if (currentView === 'users') {
-    renderFilteredUsers(value);
-    return;
-  }
-  const mapping = mappings[currentView];
-  if (!mapping) return;
-  const input = document.getElementById(mapping[0]);
-  if (input) input.value = value;
-  mapping[1]();
 }
 
 async function checkAuth() {
@@ -11028,16 +11288,11 @@ async function initializeKsCatalog() {
   renderKsCatalogFilters();
   const data = await loadKsCatalogStatus();
   if (!data || !isAdmin()) return;
-  const bridgeAttempted = sessionStorage.getItem('gm_ks_token_bridge_attempted') === '1';
-  if (!bridgeAttempted) {
-    sessionStorage.setItem('gm_ks_token_bridge_attempted', '1');
+  const alreadySynced = sessionStorage.getItem('gm_ks_auto_sync') === '1';
+  // A failed bridge attempt must not disable the next automatic refresh.
+  if (!alreadySynced || !data.configured || data.expired) {
     void autoRefreshKsTokenAndSync(data);
     return;
-  }
-  const alreadySynced = sessionStorage.getItem('gm_ks_auto_sync') === '1';
-  if (data.configured && !data.expired && !alreadySynced) {
-    sessionStorage.setItem('gm_ks_auto_sync', '1');
-    void syncKsCatalog(false);
   }
 }
 
@@ -11086,7 +11341,7 @@ function requestKsSyncFromBrowserBridge() {
     window.addEventListener('message', onMessage);
     const detectionTimer = setTimeout(() => {
       if (!acknowledged) fail('未检测到浏览器桥接，请先完成一次安装');
-    }, 1500);
+    }, 5000);
     const operationTimer = setTimeout(() => fail('读取 KS Token 超时，请确认当前浏览器已登录 KS'), 30000);
     window.postMessage({ type: KS_TOKEN_BRIDGE_REQUEST, requestId }, window.location.origin);
   });
@@ -13902,6 +14157,245 @@ function clearLsToken() {
   document.getElementById('lsTokenInput').value = '';
   document.getElementById('lsBaseUrlInput').value = '';
 }
+
+function configCompareSearchQuery() {
+  const input = document.getElementById('configCompareSearch');
+  return input ? input.value.trim().toLowerCase() : '';
+}
+
+function renderConfigCompareTables() {
+  const list = document.getElementById('configCompareTableList');
+  const count = document.getElementById('configCompareListCount');
+  const badge = document.getElementById('configCompareCount');
+  if (!list) return;
+  const query = configCompareSearchQuery();
+  const visible = configCompareTables.filter(item => {
+    if (!query) return true;
+    return String(item.name || '').toLowerCase().includes(query) ||
+      String(item.path || '').toLowerCase().includes(query);
+  });
+  if (count) count.textContent = String(visible.length);
+  if (badge) badge.textContent = query
+    ? '显示 ' + visible.length + ' / 共 ' + configCompareTables.length + ' 张'
+    : configCompareTables.length + ' 张配置表';
+  if (!configCompareTables.length) {
+    list.innerHTML = '<div class="empty" style="padding:22px">当前分支没有可对比的 xlsx / xlsm 配置表</div>';
+    return;
+  }
+  if (!visible.length) {
+    list.innerHTML = '<div class="empty" style="padding:22px">没有匹配的配置表</div>';
+    return;
+  }
+  list.innerHTML = visible.map(item => {
+    const active = item.path === configCompareSelectedPath ? ' active' : '';
+    return '<button class="config-compare-table-item' + active + '" type="button" data-path="' + esc(item.path || '') + '" onclick="selectConfigCompareFile(this.dataset.path)" title="' + esc(item.path || '') + '">' +
+      '<span class="material-symbols-outlined" aria-hidden="true">table_view</span>' +
+      '<span class="config-compare-table-copy">' +
+        '<span class="config-compare-table-name">' + esc(item.name || item.path || '-') + '</span>' +
+        '<span class="config-compare-table-path">' + esc(item.path || '') + '</span>' +
+      '</span>' +
+    '</button>';
+  }).join('');
+}
+
+function clearConfigCompareSearch() {
+  const input = document.getElementById('configCompareSearch');
+  if (input) input.value = '';
+  renderConfigCompareTables();
+}
+
+function renderConfigCompareEmpty(type) {
+  const empty = document.getElementById('configCompareEmpty');
+  const loading = document.getElementById('configCompareLoading');
+  const result = document.getElementById('configCompareResult');
+  if (result) result.style.display = 'none';
+  if (loading) loading.style.display = type === 'loading' ? 'flex' : 'none';
+  if (empty) {
+    empty.style.display = type === 'loading' ? 'none' : 'flex';
+    if (type === 'error') {
+      empty.innerHTML = '<span class="material-symbols-outlined">error</span><strong>配置表对比暂不可用</strong><span>请刷新配置表清单后重试。</span>';
+    } else if (type === 'empty') {
+      empty.innerHTML = '<span class="material-symbols-outlined">difference</span><strong>选择一张配置表开始对比</strong><span>结果只读取当前分支的 Git 历史，不会修改工作区。</span>';
+    }
+  }
+}
+
+async function loadConfigCompareTables() {
+  if (!isAdmin()) return;
+  const meta = document.getElementById('configCompareRepoMeta');
+  const list = document.getElementById('configCompareTableList');
+  if (meta) meta.textContent = '正在读取当前分支';
+  if (list) list.innerHTML = '<div class="empty" style="padding:22px">正在读取配置表清单</div>';
+  try {
+    const res = await fetch(CONFIG_COMPARE_API + '/tables', { cache: 'no-store' });
+    const data = await readJsonResponse(res, '配置表清单接口不可用，请重启工具服务后重试');
+    if (!res.ok || !data.ok) throw new Error(data.msg || '读取配置表清单失败');
+    configCompareTables = Array.isArray(data.items) ? data.items : [];
+    if (meta) meta.textContent = (data.branch || 'detached HEAD') + ' · 当前分支 HEAD';
+    renderConfigCompareTables();
+    if (configCompareSelectedPath && configCompareTables.some(item => item.path === configCompareSelectedPath)) {
+      await loadConfigCompareFile(configCompareSelectedPath);
+    } else {
+      configCompareSelectedPath = '';
+      renderConfigCompareTables();
+      renderConfigCompareEmpty('empty');
+    }
+  } catch (error) {
+    configCompareTables = [];
+    if (meta) meta.textContent = '读取失败';
+    renderConfigCompareTables();
+    renderConfigCompareEmpty('error');
+    toast(error.message || '读取配置表清单失败');
+  }
+}
+
+async function selectConfigCompareFile(path) {
+  const selected = String(path || '').trim();
+  if (!selected || selected === configCompareSelectedPath && configCompareRequestController) return;
+  configCompareSelectedPath = selected;
+  renderConfigCompareTables();
+  await loadConfigCompareFile(selected);
+}
+
+function configCompareCommitText(commit) {
+  if (!commit) return '-';
+  return (commit.short_hash || commit.hash || '-') + ' ' + (commit.subject || '');
+}
+
+function configCompareComparisonLabel(rank) {
+  return ({ 1: '前一版', 2: '前两版', 3: '前三版' })[rank] || '前 ' + rank + ' 个版本';
+}
+
+function configCompareVersionSummary(summary) {
+  if (!summary) return '';
+  return '<div class="config-compare-version-summary">' +
+    '<span>变化单元格 <strong>' + Number(summary.total_changes || 0) + '</strong></span>' +
+    '<span>新增 <strong>' + Number(summary.added_cells || 0) + '</strong></span>' +
+    '<span>删除 <strong>' + Number(summary.deleted_cells || 0) + '</strong></span>' +
+    '<span>修改 <strong>' + Number(summary.changed_cells || 0) + '</strong></span>' +
+    '<span>变化工作表 <strong>' + Number(summary.changed_sheet_count || 0) + '</strong></span>' +
+  '</div>';
+}
+
+function configCompareChangedSheets(summary) {
+  if (!summary) return '';
+  const parts = [];
+  const render = (label, values) => {
+    const items = Array.isArray(values) ? values.filter(Boolean) : [];
+    if (!items.length) return;
+    parts.push('<span>' + label + ' <code>' + esc(items.slice(0, 20).join('、')) + (items.length > 20 ? ' 等 ' + (items.length - 20) + ' 个' : '') + '</code></span>');
+  };
+  render('新增工作表：', summary.added_sheets);
+  render('删除工作表：', summary.deleted_sheets);
+  render('变化工作表：', summary.changed_sheets);
+  return parts.length ? '<div class="config-compare-sheet-changes"><b>工作表变化：</b>' + parts.join(' ') + '</div>' : '';
+}
+
+function configCompareChangedFields(summary) {
+  const fields = Array.isArray(summary && summary.changed_fields) ? summary.changed_fields : [];
+  const unique = [];
+  const seen = new Set();
+  fields.forEach(field => {
+    const key = String(field.sheet || '') + '!' + String(field.column || '');
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    unique.push(key);
+  });
+  if (!unique.length) return '';
+  const visible = unique.slice(0, 40).map(field => '<code>' + esc(field) + '</code>').join('、');
+  const more = unique.length > 40 ? ' 等 ' + (unique.length - 40) + ' 个字段' : '';
+  return '<div class="config-compare-fields"><b>变化字段：</b>' + visible + esc(more) + '</div>';
+}
+
+function renderConfigCompareVersion(comparison) {
+  const rank = Number(comparison.rank || 0);
+  const commit = comparison.previous_commit || {};
+  const summary = comparison.summary || {};
+  const ok = comparison.ok !== false;
+  const error = !ok
+    ? '<div class="config-compare-error">' + esc(comparison.error || '该历史版本读取失败') + '</div>'
+    : '';
+  const noChange = ok && !summary.total_changes
+    ? '<div class="config-compare-no-change"><span class="material-symbols-outlined" style="font-size:16px;vertical-align:-3px">check_circle</span> 与该版本相比没有检测到字段或数据变化</div>'
+    : '';
+  const sheets = ok && summary.total_changes
+    ? '<div class="config-compare-sheets">' + (comparison.sheets || []).map(renderExcelSheetDiff).join('') + '</div>'
+    : '';
+  const status = !ok ? '<span class="status warning">读取失败</span>' : (summary.total_changes ? '<span class="status">发现 ' + Number(summary.total_changes) + ' 处变化</span>' : '<span class="status">无变化</span>');
+  return '<section class="config-compare-version">' +
+    '<div class="config-compare-version-head">' +
+      '<div class="config-compare-version-title"><span>' + esc(configCompareComparisonLabel(rank)) + '</span>' + status + '</div>' +
+      '<div class="config-compare-version-meta"><span>历史提交 <code>' + esc(configCompareCommitText(commit)) + '</code></span>' +
+        '<span>提交人 <code>' + esc(commit.author || '-') + '</code></span>' +
+        '<span>时间 <code>' + esc(commit.time || '-') + '</code></span></div>' +
+      configCompareVersionSummary(summary) +
+      configCompareChangedSheets(summary) +
+    '</div>' +
+    error + configCompareChangedFields(summary) + noChange + sheets +
+  '</section>';
+}
+
+function renderConfigCompareResult(data) {
+  const result = document.getElementById('configCompareResult');
+  const empty = document.getElementById('configCompareEmpty');
+  const loading = document.getElementById('configCompareLoading');
+  if (!result) return;
+  if (empty) empty.style.display = 'none';
+  if (loading) loading.style.display = 'none';
+  result.style.display = 'block';
+  const comparisons = Array.isArray(data.comparisons) ? data.comparisons : [];
+  const available = Number(data.history_available != null ? data.history_available : comparisons.length);
+  const historyNote = data.history_error
+    ? '<div class="config-compare-history-note warning">历史读取提示：' + esc(data.history_error) + '</div>'
+    : (available < Number(data.history_limit || 3)
+      ? '<div class="config-compare-history-note warning">该配置表仅找到 ' + available + ' 个历史版本，已展示全部可用版本，无法补足前 ' + Number(data.history_limit || 3) + ' 个版本。</div>'
+      : '<div class="config-compare-history-note">已按当前分支 HEAD 与前 3 个历史版本比较。所有结果均为只读，不会修改工作区。</div>');
+  result.innerHTML = '<div class="config-compare-result">' +
+    '<div class="config-compare-file-head">' +
+      '<div>' +
+        '<div class="config-compare-file-title">' + esc(data.path || '-') + '</div>' +
+        '<div class="config-compare-file-path">' + esc((data.label || '配置表') + ' · ' + (data.branch || 'detached HEAD')) + '</div>' +
+        '<div class="config-compare-head-meta"><span>当前提交 <code>' + esc(configCompareCommitText(data.head)) + '</code></span><span>提交人 <code>' + esc((data.head && data.head.author) || '-') + '</code></span><span>时间 <code>' + esc((data.head && data.head.time) || '-') + '</code></span></div>' +
+      '</div>' +
+      '<div class="config-compare-branch"><span class="material-symbols-outlined" aria-hidden="true">account_tree</span><span>' + esc(data.branch || 'detached HEAD') + '</span></div>' +
+    '</div>' +
+    '<div class="config-compare-summary">' +
+      '<div class="config-compare-stat"><span class="config-compare-stat-label">当前工作表</span><strong class="config-compare-stat-value">' + Number(data.current_sheet_count || 0) + '</strong></div>' +
+      '<div class="config-compare-stat"><span class="config-compare-stat-label">可用历史版本</span><strong class="config-compare-stat-value">' + available + '</strong></div>' +
+      '<div class="config-compare-stat"><span class="config-compare-stat-label">对比范围</span><strong class="config-compare-stat-value">前 3 版</strong></div>' +
+      '<div class="config-compare-stat"><span class="config-compare-stat-label">比较模式</span><strong class="config-compare-stat-value">只读</strong></div>' +
+    '</div>' +
+    historyNote +
+    '<div class="config-compare-version-list">' + (comparisons.length ? comparisons.map(renderConfigCompareVersion).join('') : '<div class="empty" style="padding:22px">该配置表暂无可用历史版本</div>') + '</div>' +
+  '</div>';
+  queueReactBitsEnhance();
+}
+
+async function loadConfigCompareFile(path) {
+  const requestId = ++configCompareRequestId;
+  if (configCompareRequestController) configCompareRequestController.abort();
+  const controller = new AbortController();
+  configCompareRequestController = controller;
+  renderConfigCompareEmpty('loading');
+  try {
+    const res = await fetch(CONFIG_COMPARE_API + '/compare?path=' + encodeURIComponent(path), {
+      cache: 'no-store',
+      signal: controller.signal,
+    });
+    const data = await readJsonResponse(res, '配置表对比接口不可用，请重启工具服务后重试');
+    if (requestId !== configCompareRequestId) return;
+    if (!res.ok || !data.ok) throw new Error(data.msg || '配置表对比失败');
+    renderConfigCompareResult(data);
+  } catch (error) {
+    if (error && error.name === 'AbortError') return;
+    if (requestId !== configCompareRequestId) return;
+    renderConfigCompareEmpty('error');
+    toast(error.message || '配置表对比失败');
+  } finally {
+    if (configCompareRequestController === controller) configCompareRequestController = null;
+  }
+}
+
 async function loadGitRepos(refreshRemote = false) {
   if (gitBusy) {
     toast('Git 操作正在执行，请稍后再检查');
@@ -14043,6 +14537,7 @@ function filterGitReposByAuthor(items, query) {
 function renderGitFromCache() {
   const query = getGitAuthorQuery();
   const filtered = filterGitReposByAuthor(gitRepoCache, query);
+  renderGitUnifiedBranchOptions();
   renderGitRepos(filtered);
   renderGitCommitPanels(filtered, query);
   renderGitRecords(filtered, query);
@@ -14089,6 +14584,7 @@ function renderGitCommitPanels(items, query) {
   const order = ['client', 'excel'];
   const sorted = order.map(id => items.find(repo => repo.id === id)).filter(Boolean)
     .concat(items.filter(repo => !order.includes(repo.id)));
+  wrap.classList.toggle('git-layout-empty', !sorted.length);
   wrap.innerHTML = sorted.map(repo => renderGitCommitPanel(repo, query)).join('');
 }
 
@@ -14382,7 +14878,14 @@ function renderExcelSheetDiff(sheet) {
       }).join('') +
       '</tr>';
   }).join('');
-  const truncated = sheet.truncated ? '<div class="git-record-meta">变化范围较大，仅展示前 ' + sheet.shown_rows + ' 行；当前表共 ' + esc(sheet.total_cols || sheet.shown_cols || 0) + ' 列，本视图只展示有变化的字段。</div>' : '';
+  const notices = [];
+  if (sheet.truncated) {
+    notices.push('变化范围较大，当前仅展示 ' + Number(sheet.shown_rows || 0) + ' 行 × ' + Number(sheet.shown_cols || 0) + ' 列的预览；原表共 ' + esc(sheet.total_changes || 0) + ' 个变化单元格。');
+  }
+  if (sheet.cell_value_truncated) {
+    notices.push('部分单元格内容过长，已截断显示，避免详情页卡顿。');
+  }
+  const truncated = notices.length ? '<div class="git-detail-notice">' + notices.map(esc).join('<br>') + '</div>' : '';
   return '<div class="excel-diff-sheet">' +
     '<div class="excel-diff-sheet-title">Sheet：' + esc(sheet.name || '-') + ' / 变化单元格 ' + esc(sheet.total_changes || 0) + ' 个</div>' +
     renderExcelChangedColumns(sheet) +
@@ -14469,6 +14972,14 @@ function renderExcelDiffs(excelDiffs) {
   return gitDetailSection('Excel 表格对比', '字段 + 表头', '<div class="excel-diff">' + legend + files + '</div>', 'git-detail-section-wide');
 }
 
+function renderGitDiffPreview(data) {
+  const diff = data.diff || '无变更内容';
+  const notice = data.diff_truncated
+    ? '<div class="git-detail-notice">原始 Diff 共 ' + Number(data.diff_total_chars || 0).toLocaleString() + ' 个字符，详情页仅展示前 ' + Number(data.diff_preview_limit || 0).toLocaleString() + ' 个字符的预览；摘要和 Excel 结构化对比仍保留。</div>'
+    : '';
+  return notice + gitDetailPre(diff, 'is-raw');
+}
+
 async function openGitDetail(payloadText) {
   let payload;
   try { payload = JSON.parse(payloadText || '{}'); } catch (e) { return; }
@@ -14496,7 +15007,7 @@ async function openGitDetail(payloadText) {
         gitDetailSection('游戏内容影响', '分析', gitDetailPre(gameImpact || '未识别到明确的游戏内容影响', 'is-impact')) +
         excelDiff +
         gitDetailSection('中文说明', 'Diff 解析', gitDetailPre(chinese || '暂无中文说明', 'is-impact'), 'git-detail-section-wide') +
-        gitDetailSection('前后变更', '原始 Diff', gitDetailPre(data.diff || '无变更内容', 'is-raw'), 'git-detail-section-wide') +
+        gitDetailSection('前后变更', data.diff_truncated ? 'Diff 预览' : '原始 Diff', renderGitDiffPreview(data), 'git-detail-section-wide') +
       '</div>' +
       '</div>';
     document.getElementById('detailTitle').textContent = data.title || payload.title || '提交详情';
@@ -14651,12 +15162,79 @@ function renderGitBranchPanel(repo) {
   '</div>';
 }
 
+function getGitUnifiedBranchCandidates() {
+  const repoIds = ['client', 'excel'];
+  const repos = repoIds.map(id => gitRepoCache.find(repo => repo.id === id));
+  if (repos.some(repo => !repo || !repo.ok || repo.branch_list_ok === false)) return [];
+  const maps = repos.map(repo => {
+    const options = new Map();
+    (repo.local_branches || []).forEach(item => {
+      const branch = typeof item === 'string' ? item : (item.name || '');
+      if (branch && !options.has(branch)) options.set(branch, { branch, source: 'local', label: '本地' });
+    });
+    (repo.remote_branches || []).forEach(item => {
+      const branch = typeof item === 'string' ? item : (item.branch || '');
+      const remoteRef = typeof item === 'string' ? item : (item.name || '');
+      if (branch && remoteRef && !options.has(branch)) {
+        options.set(branch, { branch: remoteRef, source: 'remote', label: '远端' });
+      }
+    });
+    return options;
+  });
+  const names = [...maps[0].keys()].filter(branch => maps.every(options => options.has(branch)));
+  return names.sort((a, b) => a.localeCompare(b)).map(branch => ({
+    name: branch,
+    selections: maps.map(options => options.get(branch)),
+  }));
+}
+
+function renderGitUnifiedBranchOptions() {
+  const select = document.getElementById('gitUnifiedBranchSelect');
+  const search = document.getElementById('gitUnifiedBranchSearch');
+  const status = document.getElementById('gitUnifiedBranchStatus');
+  const message = document.getElementById('gitUnifiedBranchMessage');
+  const button = document.getElementById('gitUnifiedBranchButton');
+  if (!select || !status || !message || !button) return;
+  const currentValue = select.value;
+  gitUnifiedBranchCandidates = getGitUnifiedBranchCandidates();
+  const query = String(search ? search.value : '').trim().toLowerCase();
+  const filtered = gitUnifiedBranchCandidates.filter(item => item.name.toLowerCase().includes(query));
+  const hasBothRepos = ['client', 'excel'].every(id => gitRepoCache.some(repo => repo.id === id));
+  const statusByRepo = ['client', 'excel'].map(id => gitRepoCache.find(repo => repo.id === id));
+  if (!hasBothRepos) {
+    status.textContent = '等待客户端和配置表状态';
+    message.textContent = '请先点击“检查状态”，读取两个仓库的分支列表。';
+    message.className = 'git-unified-branch-message';
+  } else if (!gitUnifiedBranchCandidates.length) {
+    status.textContent = '没有共同分支';
+    message.textContent = statusByRepo.some(repo => !repo.ok || repo.branch_list_ok === false)
+      ? '至少一个仓库的分支列表读取失败，请先检查状态。'
+      : '客户端和配置表没有同名分支，请确认两个仓库的远端分支已刷新。';
+    message.className = 'git-unified-branch-message error';
+  } else {
+    status.textContent = '已找到 ' + gitUnifiedBranchCandidates.length + ' 个共同分支';
+    message.textContent = query
+      ? '当前筛选匹配 ' + filtered.length + ' 个共同分支。'
+      : '选择一次分支即可同时切换两个仓库。';
+    message.className = 'git-unified-branch-message';
+  }
+  const options = filtered.map(item => {
+    const summary = item.selections.map(selection => selection.label).join(' / ');
+    const selected = item.name === currentValue ? ' selected' : '';
+    return '<option value="' + esc(item.name) + '"' + selected + '>' + esc(item.name + '（' + summary + '）') + '</option>';
+  }).join('');
+  select.innerHTML = options || '<option value="">暂无匹配的共同分支</option>';
+  button.disabled = gitBusy || !filtered.length || !select.value;
+}
+
 function renderGitRepos(items) {
   const grid = document.getElementById('gitRepoGrid');
   if (!items.length) {
+    grid.classList.add('git-layout-empty');
     grid.innerHTML = '<div class="empty">暂无仓库配置</div>';
     return;
   }
+  grid.classList.remove('git-layout-empty');
   grid.innerHTML = items.map(repo => {
     const statusClass = !repo.ok ? 'error' : (repo.dirty ? 'dirty' : 'clean');
     const statusText = !repo.ok ? '异常' : (repo.dirty ? '待自动清理' : '干净');
@@ -14786,6 +15364,55 @@ async function switchGitBranch(repoId) {
   }
 }
 
+async function switchGitUnifiedBranch() {
+  if (gitBusy) return;
+  const select = document.getElementById('gitUnifiedBranchSelect');
+  const candidate = gitUnifiedBranchCandidates.find(item => item.name === (select ? select.value : ''));
+  if (!candidate) {
+    toast('请选择共同分支');
+    return;
+  }
+  const repos = ['client', 'excel'].map(id => gitRepoCache.find(repo => repo.id === id));
+  const discardCount = repos.reduce((total, repo) => total + Number(repo && repo.auto_discard_count || 0), 0);
+  const discardHint = discardCount ? '\n将永久丢弃两个仓库检测到的 ' + discardCount + ' 项 QA 工作区改动。' : '';
+  if (!confirm('确认将客户端和配置表同时切换到 ' + candidate.name + '？' + discardHint)) return;
+
+  gitBranchOperation = { repoId: 'unified', type: 'checkout' };
+  gitBusy = true;
+  renderGitFromCache();
+  try {
+    const res = await fetch(GIT_API + '/checkout-unified', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        selections: candidate.selections.map((selection, index) => ({
+          repo: ['client', 'excel'][index],
+          branch: selection.branch,
+          source: selection.source,
+        })),
+      }),
+    });
+    const data = await readJsonResponse(res, '统一切换接口不可用，请重启工具服务后重试');
+    (data.items || []).forEach(item => updateGitRepoStatus(item.status));
+    if (!res.ok || !data.ok) {
+      const details = (data.items || []).map(item => (item.label || item.id) + '：' + (item.ok ? '已切换' : (item.msg || '切换失败'))).join('\n');
+      throw new Error(details || data.msg || '统一切换失败');
+    }
+    data.items.forEach(item => {
+      gitBranchSelections[item.id] = { source: 'local', branch: item.current_branch || candidate.name };
+    });
+    renderGitBranchResult(true, '统一切换成功', '客户端和配置表已切换到 ' + candidate.name, data.items.map(item => item.output || '').filter(Boolean).join('\n\n'));
+    toast('客户端和配置表已切换到 ' + candidate.name);
+  } catch (error) {
+    renderGitBranchResult(false, '统一切换失败', error.message || String(error), error.message || String(error));
+    toast(error.message || '统一切换失败');
+  } finally {
+    gitBusy = false;
+    gitBranchOperation = null;
+    renderGitFromCache();
+  }
+}
+
 function gitPullTargetLabel(repo) {
   if (repo === 'all') return '全部仓库';
   const found = gitRepoCache.find(item => item.id === repo);
@@ -14813,6 +15440,7 @@ function gitProgressHtml(percent, stage, detail, state, title) {
 function renderGitStatusProgress(percent, stage, detail) {
   const grid = document.getElementById('gitRepoGrid');
   if (!grid) return;
+  grid.classList.remove('git-layout-empty');
   grid.innerHTML =
     '<div class="empty git-status-loading">' +
       '<div>正在检查仓库状态...</div>' +
@@ -14823,6 +15451,7 @@ function renderGitStatusProgress(percent, stage, detail) {
 function renderGitPullProgress(percent, stage, detail, state, title) {
   const grid = document.getElementById('gitRepoGrid');
   if (!grid) return;
+  grid.classList.remove('git-layout-empty');
   const heading = state === 'done' ? '处理完成' : (state === 'failed' ? '处理失败' : '正在拉取远端提交...');
   grid.innerHTML =
     '<div class="empty git-status-loading">' +
@@ -15825,8 +16454,8 @@ async function loadUsers() {
 function renderFilteredUsers(query) {
   const roleSelect = document.getElementById('userRoleFilter');
   const role = roleSelect ? roleSelect.value : '';
-  const globalSearch = document.getElementById('globalSearch');
-  const keyword = String(query != null ? query : (currentView === 'users' && globalSearch ? globalSearch.value : '')).trim().toLocaleLowerCase();
+  const userSearch = document.getElementById('userSearch');
+  const keyword = String(query != null ? query : (userSearch ? userSearch.value : '')).trim().toLocaleLowerCase();
   const filtered = userCache.filter(item => {
     if (role && item.role !== role) return false;
     if (!keyword) return true;

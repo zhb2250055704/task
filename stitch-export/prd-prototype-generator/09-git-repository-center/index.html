@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Git Pull Management - Mission Control</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&amp;family=JetBrains+Mono:wght@400&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "on-tertiary-fixed-variant": "#733600",
+                      "surface-container-highest": "#343535",
+                      "on-primary-fixed": "#001c3a",
+                      "success": "#52c41a",
+                      "background": "#121414",
+                      "primary-fixed": "#d4e3ff",
+                      "surface": "#121414",
+                      "on-surface": "#e3e2e2",
+                      "error": "#f5222d",
+                      "background-deep": "#141414",
+                      "on-primary-fixed-variant": "#004785",
+                      "inverse-surface": "#e3e2e2",
+                      "on-secondary-container": "#caa9ff",
+                      "secondary-container": "#600fc0",
+                      "primary-fixed-dim": "#a5c8ff",
+                      "surface-dim": "#121414",
+                      "background-elevated": "#1f1f1f",
+                      "primary-container": "#2492ff",
+                      "on-primary-container": "#002a53",
+                      "on-tertiary": "#512400",
+                      "surface-container-lowest": "#0d0e0f",
+                      "surface-container": "#1f2020",
+                      "surface-bright": "#383939",
+                      "on-tertiary-fixed": "#311300",
+                      "inverse-on-surface": "#2f3031",
+                      "tertiary-fixed": "#ffdbc7",
+                      "tertiary-container": "#e37103",
+                      "on-tertiary-container": "#471e00",
+                      "surface-variant": "#343535",
+                      "secondary-fixed": "#ecdcff",
+                      "on-error": "#690005",
+                      "on-surface-variant": "#c0c7d6",
+                      "inverse-primary": "#005fae",
+                      "warning": "#faad14",
+                      "primary": "#a5c8ff",
+                      "secondary-fixed-dim": "#d5baff",
+                      "surface-container-low": "#1b1c1c",
+                      "on-background": "#e3e2e2",
+                      "secondary": "#d5baff",
+                      "on-secondary-fixed": "#270057",
+                      "on-primary": "#00315e",
+                      "tertiary": "#ffb688",
+                      "tertiary-fixed-dim": "#ffb688",
+                      "surface-tint": "#a5c8ff",
+                      "outline": "#8a919f",
+                      "outline-variant": "#404753",
+                      "on-secondary": "#42008a",
+                      "border-subtle": "#303030",
+                      "surface-container-high": "#292a2a",
+                      "ks-executable": "#13c2c2",
+                      "error-container": "#93000a",
+                      "on-error-container": "#ffdad6",
+                      "on-secondary-fixed-variant": "#5e08bd"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.125rem",
+                      "lg": "0.25rem",
+                      "xl": "0.5rem",
+                      "full": "0.75rem"
+              },
+              "spacing": {
+                      "unit": "4px",
+                      "header-height": "56px",
+                      "gutter": "16px",
+                      "margin-page": "24px",
+                      "sidebar-width": "240px"
+              },
+              "fontFamily": {
+                      "headline-lg-mobile": [
+                              "Inter"
+                      ],
+                      "headline-md": [
+                              "Inter"
+                      ],
+                      "headline-lg": [
+                              "Inter"
+                      ],
+                      "body-md": [
+                              "Inter"
+                      ],
+                      "code-md": [
+                              "JetBrains Mono"
+                      ],
+                      "label-caps": [
+                              "Inter"
+                      ],
+                      "body-sm": [
+                              "Inter"
+                      ]
+              },
+              "fontSize": {
+                      "headline-lg-mobile": [
+                              "20px",
+                              {
+                                      "lineHeight": "28px",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "headline-md": [
+                              "20px",
+                              {
+                                      "lineHeight": "28px",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "headline-lg": [
+                              "24px",
+                              {
+                                      "lineHeight": "32px",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "body-md": [
+                              "14px",
+                              {
+                                      "lineHeight": "22px",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "code-md": [
+                              "13px",
+                              {
+                                      "lineHeight": "20px",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "label-caps": [
+                              "11px",
+                              {
+                                      "lineHeight": "16px",
+                                      "letterSpacing": "0.05em",
+                                      "fontWeight": "700"
+                              }
+                      ],
+                      "body-sm": [
+                              "12px",
+                              {
+                                      "lineHeight": "18px",
+                                      "fontWeight": "400"
+                              }
+                      ]
+              }
+            }
+          }
+        }
+    </script>
+<style>
+        /* Custom scrollbar for dark theme */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: theme('colors.background');
+        }
+        ::-webkit-scrollbar-thumb {
+            background: theme('colors.surface-container-highest');
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: theme('colors.outline');
+        }
+        
+        .bento-card {
+            background: linear-gradient(145deg, theme('colors.surface-container'), theme('colors.background-elevated'));
+            border: 1px solid theme('colors.border-subtle');
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        .bento-card:hover {
+            box-shadow: 0 4px 20px -2px rgba(0,0,0,0.4);
+            border-color: theme('colors.outline-variant');
+        }
+    </style>
+</head>
+<body class="bg-background text-on-surface font-body-md min-h-screen overflow-x-hidden selection:bg-primary-container selection:text-on-primary-container">
+<!-- TopNavBar -->
+<header class="bg-surface-container text-primary font-headline-md font-bold text-on-surface docked top-0 full-width h-header-height border-b border-border-subtle flat no shadows fixed top-0 right-0 left-sidebar-width z-40 flex justify-between items-center px-gutter">
+<div class="flex items-center gap-4">
+<span class="font-headline-md text-headline-md font-bold text-on-surface tracking-tight">Mission Control</span>
+<div class="hidden md:flex items-center bg-surface-container-high rounded-full px-3 py-1.5 ml-4 focus-within:ring-1 focus-within:ring-primary transition-all">
+<span class="material-symbols-outlined text-on-surface-variant text-[18px]" style="font-variation-settings: 'FILL' 0;">search</span>
+<input class="bg-transparent border-none text-body-sm focus:ring-0 w-48 text-on-surface placeholder:text-on-surface-variant ml-2 py-0" placeholder="Search resources..." type="text"/>
+</div>
+</div>
+<div class="flex items-center gap-3">
+<button aria-label="zoom_in" class="text-on-surface-variant hover:text-primary transition-colors p-2 rounded-full hover:bg-surface-container-highest">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0;">zoom_in</span>
+</button>
+<button aria-label="zoom_out" class="text-on-surface-variant hover:text-primary transition-colors p-2 rounded-full hover:bg-surface-container-highest">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0;">zoom_out</span>
+</button>
+<button aria-label="dark_mode" class="text-on-surface-variant hover:text-primary transition-colors p-2 rounded-full hover:bg-surface-container-highest">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">dark_mode</span>
+</button>
+<button aria-label="notifications" class="text-on-surface-variant hover:text-primary transition-colors p-2 rounded-full hover:bg-surface-container-highest relative">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0;">notifications</span>
+<span class="absolute top-1.5 right-1.5 w-2 h-2 bg-warning rounded-full border-2 border-surface-container"></span>
+</button>
+<div class="h-6 w-px bg-border-subtle mx-2"></div>
+<button class="bg-surface-container border border-outline-variant text-on-surface hover:bg-surface-container-highest font-label-caps text-label-caps px-4 py-2 rounded transition-colors hidden sm:block">Admin Console</button>
+<button class="bg-primary text-on-primary hover:opacity-90 font-label-caps text-label-caps px-4 py-2 rounded transition-opacity flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px]" style="font-variation-settings: 'FILL' 1;">play_arrow</span>
+                Execute
+            </button>
+<div class="ml-2 w-8 h-8 rounded-full bg-surface-container-highest overflow-hidden border border-border-subtle shrink-0">
+<img alt="User profile avatar" class="w-full h-full object-cover" data-alt="A macro photography shot of a sleek, abstract geometric sphere in dark space, lit by a vibrant blue rim light. The material appears to be brushed titanium, reflecting subtle, high-tech neon glints. The mood is professional, technical, and precise, perfectly suited for an enterprise software avatar." src="assets/image-01.jpg"/>
+</div>
+</div>
+</header>
+<!-- SideNavBar -->
+<nav class="bg-surface-container-low text-primary font-body-md text-body-md font-headline-md text-headline-md font-bold text-primary docked left-0 h-full w-sidebar-width border-r border-border-subtle flat no shadows fixed left-0 top-0 bottom-0 z-50 flex flex-col pt-header-height pb-8">
+<div class="px-6 py-5 border-b border-border-subtle mb-4">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded bg-primary-container text-on-primary-container flex items-center justify-center font-bold text-headline-md">
+                    G
+                </div>
+<div>
+<h2 class="font-headline-md text-headline-md text-on-surface">GameOps Engine</h2>
+<p class="font-code-md text-code-md text-on-surface-variant">v2.4.0-stable</p>
+</div>
+</div>
+</div>
+<div class="flex-1 overflow-y-auto px-3 space-y-1">
+<a class="text-on-surface-variant hover:bg-surface-container-high transition-colors flex items-center gap-3 px-3 py-2.5 rounded-lg group" href="#">
+<span class="material-symbols-outlined text-[20px] group-hover:text-on-surface" style="font-variation-settings: 'FILL' 0;">terminal</span>
+<span>Command</span>
+</a>
+<a class="text-on-surface-variant hover:bg-surface-container-high transition-colors flex items-center gap-3 px-3 py-2.5 rounded-lg group" href="#">
+<span class="material-symbols-outlined text-[20px] group-hover:text-on-surface" style="font-variation-settings: 'FILL' 0;">code</span>
+<span>Script</span>
+</a>
+<a class="text-on-surface-variant hover:bg-surface-container-high transition-colors flex items-center gap-3 px-3 py-2.5 rounded-lg group" href="#">
+<span class="material-symbols-outlined text-[20px] group-hover:text-on-surface" style="font-variation-settings: 'FILL' 0;">bug_report</span>
+<span>QA Design</span>
+</a>
+<a class="text-on-surface-variant hover:bg-surface-container-high transition-colors flex items-center gap-3 px-3 py-2.5 rounded-lg group" href="#">
+<span class="material-symbols-outlined text-[20px] group-hover:text-on-surface" style="font-variation-settings: 'FILL' 0;">bolt</span>
+<span>Skill</span>
+</a>
+<a class="text-on-surface-variant hover:bg-surface-container-high transition-colors flex items-center gap-3 px-3 py-2.5 rounded-lg group" href="#">
+<span class="material-symbols-outlined text-[20px] group-hover:text-on-surface" style="font-variation-settings: 'FILL' 0;">functions</span>
+<span>Formula</span>
+</a>
+<a class="text-on-surface-variant hover:bg-surface-container-high transition-colors flex items-center gap-3 px-3 py-2.5 rounded-lg group" href="#">
+<span class="material-symbols-outlined text-[20px] group-hover:text-on-surface" style="font-variation-settings: 'FILL' 0;">inventory_2</span>
+<span>Items</span>
+</a>
+<!-- Active Tab: Git -->
+<a class="bg-secondary-container text-on-secondary-container font-bold border-r-2 border-primary flex items-center gap-3 px-3 py-2.5 rounded-l-lg opacity-80 duration-100 relative" href="#">
+<span class="material-symbols-outlined text-[20px]" style="font-variation-settings: 'FILL' 1;">account_tree</span>
+<span>Git</span>
+<span class="absolute right-3 w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>
+</a>
+<a class="text-on-surface-variant hover:bg-surface-container-high transition-colors flex items-center gap-3 px-3 py-2.5 rounded-lg group" href="#">
+<span class="material-symbols-outlined text-[20px] group-hover:text-on-surface" style="font-variation-settings: 'FILL' 0;">sync</span>
+<span>KS Sync</span>
+</a>
+<a class="text-on-surface-variant hover:bg-surface-container-high transition-colors flex items-center gap-3 px-3 py-2.5 rounded-lg group" href="#">
+<span class="material-symbols-outlined text-[20px] group-hover:text-on-surface" style="font-variation-settings: 'FILL' 0;">group</span>
+<span>User Mgmt</span>
+</a>
+</div>
+<div class="px-6 mt-4">
+<button class="w-full bg-surface-container border border-primary text-primary hover:bg-primary-container hover:text-on-primary-container hover:border-transparent transition-all font-label-caps text-label-caps py-2.5 rounded flex justify-center items-center gap-2">
+                Launch Console
+                <span class="material-symbols-outlined text-[16px]" style="font-variation-settings: 'FILL' 0;">open_in_new</span>
+</button>
+</div>
+<div class="mt-6 px-3 space-y-1">
+<a class="text-on-surface-variant hover:bg-surface-container-high transition-colors flex items-center gap-3 px-3 py-2 rounded-lg group" href="#">
+<span class="material-symbols-outlined text-[18px] group-hover:text-on-surface" style="font-variation-settings: 'FILL' 0;">settings</span>
+<span class="font-body-sm text-body-sm">Settings</span>
+</a>
+<a class="text-on-surface-variant hover:bg-surface-container-high transition-colors flex items-center gap-3 px-3 py-2 rounded-lg group" href="#">
+<span class="material-symbols-outlined text-[18px] group-hover:text-on-surface" style="font-variation-settings: 'FILL' 0;">help</span>
+<span class="font-body-sm text-body-sm">Support</span>
+</a>
+</div>
+</nav>
+<!-- Main Content Canvas -->
+<main class="ml-[240px] pt-[56px] pb-[32px] px-margin-page min-h-screen flex flex-col gap-6">
+<!-- Page Header -->
+<div class="flex flex-col md:flex-row md:items-end justify-between gap-4 mt-6">
+<div>
+<div class="flex items-center gap-2 text-on-surface-variant font-label-caps text-label-caps mb-1">
+<span class="material-symbols-outlined text-[14px]">account_tree</span>
+<span>GIT OPERATIONS / PULL MANAGEMENT</span>
+</div>
+<h1 class="font-headline-lg text-headline-lg font-bold text-on-surface">Repository Sync</h1>
+<p class="font-body-md text-body-md text-on-surface-variant mt-1 max-w-2xl">Manage remote updates and local working trees for game configuration and client builds.</p>
+</div>
+<div class="flex gap-3">
+<button class="bg-surface-container border border-outline-variant text-on-surface hover:bg-surface-container-highest transition-colors font-label-caps text-label-caps px-5 py-2.5 rounded flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px]" style="font-variation-settings: 'FILL' 0;">refresh</span>
+                    Fetch All
+                </button>
+<button class="bg-primary text-on-primary hover:bg-primary-fixed hover:shadow-[0_0_15px_rgba(36,146,255,0.3)] transition-all font-label-caps text-label-caps px-5 py-2.5 rounded flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px]" style="font-variation-settings: 'FILL' 1;">download</span>
+                    Pull All Repos
+                </button>
+</div>
+</div>
+<!-- Global Status Alert (if pending commits) -->
+<div class="bg-surface-container-highest border-l-4 border-warning p-4 rounded-r shadow-sm flex items-start gap-4">
+<span class="material-symbols-outlined text-warning mt-0.5" style="font-variation-settings: 'FILL' 1;">warning</span>
+<div class="flex-1">
+<h3 class="font-headline-md text-headline-md text-on-surface text-[16px]">Updates Available</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-1">There are a total of <strong class="text-warning">12 commits</strong> pending to be pulled across monitored repositories. Review changes before executing pull.</p>
+</div>
+</div>
+<!-- Bento Grid Layout for Repos & History -->
+<div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+<!-- Left Column: Managed Repositories -->
+<div class="xl:col-span-2 flex flex-col gap-6">
+<h2 class="font-label-caps text-label-caps text-on-surface-variant tracking-widest border-b border-border-subtle pb-2">MANAGED REPOSITORIES</h2>
+<!-- Client Repo Card -->
+<div class="bento-card rounded-xl p-5 flex flex-col">
+<div class="flex justify-between items-start mb-4">
+<div class="flex items-center gap-3">
+<div class="w-12 h-12 rounded bg-tertiary-container/20 border border-tertiary-container flex items-center justify-center text-tertiary-container">
+<span class="material-symbols-outlined text-[24px]">desktop_windows</span>
+</div>
+<div>
+<h3 class="font-headline-md text-[18px] font-bold text-on-surface">Client-Core</h3>
+<div class="flex items-center gap-2 font-code-md text-code-md text-on-surface-variant mt-1">
+<span class="material-symbols-outlined text-[14px]">call_split</span>
+<span>main</span>
+<span class="text-border-subtle">•</span>
+<span class="text-primary-fixed-dim">a8f9b2c</span>
+</div>
+</div>
+</div>
+<!-- Status Tag -->
+<div class="flex flex-col items-end gap-2">
+<span class="bg-error-container/20 text-error border border-error/30 px-2 py-1 rounded font-label-caps text-[10px] flex items-center gap-1">
+<span class="material-symbols-outlined text-[12px]">edit_note</span>
+                                LOCAL CHANGES
+                            </span>
+</div>
+</div>
+<div class="bg-surface-container-lowest rounded border border-border-subtle p-4 mt-2 flex-1">
+<div class="flex justify-between items-center mb-3">
+<span class="font-body-sm text-body-sm text-on-surface-variant">Remote Status</span>
+<span class="font-code-md text-code-md text-warning flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">arrow_downward</span>
+                                5 commits behind origin/main
+                            </span>
+</div>
+<!-- Diff Preview (simulated) -->
+<div class="space-y-1 mb-4">
+<div class="flex items-center justify-between py-1 border-b border-border-subtle/50">
+<span class="font-code-md text-[12px] text-on-surface truncate pr-4">src/engine/render_pipeline.cpp</span>
+<span class="font-code-md text-[12px] text-success">+42</span>
+</div>
+<div class="flex items-center justify-between py-1 border-b border-border-subtle/50">
+<span class="font-code-md text-[12px] text-on-surface truncate pr-4">assets/shaders/bloom_pass.glsl</span>
+<span class="font-code-md text-[12px] text-warning">~18</span>
+</div>
+</div>
+<div class="bg-surface-container p-3 rounded border border-outline-variant/30 font-body-sm text-body-sm text-on-surface-variant flex items-start gap-2">
+<span class="material-symbols-outlined text-[16px] text-warning shrink-0 mt-0.5">info</span>
+<p>Pulling will require merging or stashing local changes in <span class="font-code-md text-[12px] text-on-surface">bloom_pass.glsl</span>.</p>
+</div>
+</div>
+<div class="mt-4 pt-4 border-t border-border-subtle flex justify-end gap-3">
+<button class="text-on-surface-variant hover:text-on-surface font-label-caps text-label-caps px-4 py-2 transition-colors">Stash &amp; Pull</button>
+<button class="bg-surface-container border border-primary text-primary hover:bg-primary/10 transition-colors font-label-caps text-label-caps px-4 py-2 rounded flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px]">download</span>
+                            Pull Individual
+                        </button>
+</div>
+</div>
+<!-- Config Repo Card -->
+<div class="bento-card rounded-xl p-5 flex flex-col">
+<div class="flex justify-between items-start mb-4">
+<div class="flex items-center gap-3">
+<div class="w-12 h-12 rounded bg-secondary-container/20 border border-secondary-container flex items-center justify-center text-secondary-container">
+<span class="material-symbols-outlined text-[24px]">settings_applications</span>
+</div>
+<div>
+<h3 class="font-headline-md text-[18px] font-bold text-on-surface">Game-Config-Data</h3>
+<div class="flex items-center gap-2 font-code-md text-code-md text-on-surface-variant mt-1">
+<span class="material-symbols-outlined text-[14px]">call_split</span>
+<span>release-v2.4</span>
+<span class="text-border-subtle">•</span>
+<span class="text-primary-fixed-dim">f4e109d</span>
+</div>
+</div>
+</div>
+<!-- Status Tag -->
+<div class="flex flex-col items-end gap-2">
+<span class="bg-success/10 text-success border border-success/30 px-2 py-1 rounded font-label-caps text-[10px] flex items-center gap-1">
+<span class="material-symbols-outlined text-[12px]">check_circle</span>
+                                CLEAN WORKTREE
+                            </span>
+</div>
+</div>
+<div class="bg-surface-container-lowest rounded border border-border-subtle p-4 mt-2 flex-1">
+<div class="flex justify-between items-center mb-3">
+<span class="font-body-sm text-body-sm text-on-surface-variant">Remote Status</span>
+<span class="font-code-md text-code-md text-warning flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">arrow_downward</span>
+                                7 commits behind origin/release-v2.4
+                            </span>
+</div>
+<!-- Commit preview list -->
+<div class="space-y-2">
+<div class="flex items-start gap-3 p-2 hover:bg-surface-container rounded transition-colors group cursor-default">
+<div class="w-6 h-6 rounded-full bg-surface-container-highest flex-shrink-0 overflow-hidden mt-0.5">
+<span class="material-symbols-outlined text-[14px] w-full h-full flex items-center justify-center text-on-surface-variant">person</span>
+</div>
+<div class="min-w-0 flex-1">
+<p class="font-body-sm text-[13px] text-on-surface truncate group-hover:text-primary transition-colors">Update loot tables for Event Horizon raid boss</p>
+<p class="font-code-md text-[11px] text-on-surface-variant">J. Chen • 2h ago</p>
+</div>
+</div>
+<div class="flex items-start gap-3 p-2 hover:bg-surface-container rounded transition-colors group cursor-default">
+<div class="w-6 h-6 rounded-full bg-surface-container-highest flex-shrink-0 overflow-hidden mt-0.5">
+<span class="material-symbols-outlined text-[14px] w-full h-full flex items-center justify-center text-on-surface-variant">person</span>
+</div>
+<div class="min-w-0 flex-1">
+<p class="font-body-sm text-[13px] text-on-surface truncate group-hover:text-primary transition-colors">Fix typo in quest dialog ID QST_4022</p>
+<p class="font-code-md text-[11px] text-on-surface-variant">S. Miller • 5h ago</p>
+</div>
+</div>
+<div class="text-center pt-1 pb-1">
+<span class="font-code-md text-[11px] text-on-surface-variant tracking-widest">+ 5 MORE COMMITS</span>
+</div>
+</div>
+</div>
+<div class="mt-4 pt-4 border-t border-border-subtle flex justify-end gap-3">
+<button class="bg-surface-container border border-primary text-primary hover:bg-primary/10 transition-colors font-label-caps text-label-caps px-4 py-2 rounded flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px]">download</span>
+                            Pull Individual
+                        </button>
+</div>
+</div>
+</div>
+<!-- Right Column: History & Filters -->
+<div class="xl:col-span-1 flex flex-col gap-6">
+<h2 class="font-label-caps text-label-caps text-on-surface-variant tracking-widest border-b border-border-subtle pb-2">PULL HISTORY</h2>
+<!-- Filter Section -->
+<div class="bg-surface-container rounded-lg border border-border-subtle p-4">
+<div class="flex items-center gap-2 mb-3 text-on-surface-variant font-label-caps text-label-caps">
+<span class="material-symbols-outlined text-[16px]">filter_list</span>
+                        FILTER LOGS
+                    </div>
+<div class="space-y-3">
+<div>
+<label class="block font-body-sm text-body-sm text-on-surface mb-1">Author</label>
+<select class="w-full bg-background-deep border border-outline-variant rounded px-3 py-2 text-body-sm text-on-surface focus:ring-1 focus:ring-primary focus:border-primary">
+<option value="all">All Authors</option>
+<option value="system">System (Auto-Pull)</option>
+<option value="jchen">J. Chen</option>
+<option value="admin">Admin (Current User)</option>
+</select>
+</div>
+</div>
+</div>
+<!-- History Feed -->
+<div class="flex-1 bg-surface-container rounded-lg border border-border-subtle overflow-hidden flex flex-col min-h-[400px]">
+<div class="overflow-y-auto flex-1 p-4 space-y-4">
+<!-- History Item 1 -->
+<div class="relative pl-6 pb-4 border-l border-border-subtle last:border-0 last:pb-0">
+<div class="absolute w-3 h-3 bg-success rounded-full -left-[6.5px] top-1 border-2 border-surface-container"></div>
+<div class="mb-1 flex justify-between items-start">
+<span class="font-label-caps text-[10px] text-on-surface-variant bg-surface-container-highest px-2 py-0.5 rounded">CONFIG</span>
+<span class="font-code-md text-[11px] text-on-surface-variant">10:42 AM</span>
+</div>
+<p class="font-body-sm text-[13px] text-on-surface font-bold">Fast-forward pull successful</p>
+<p class="font-code-md text-[12px] text-on-surface-variant mt-1">b3c99a..f4e109d</p>
+<div class="mt-2 flex items-center gap-2">
+<span class="w-4 h-4 rounded-full bg-surface-container-highest flex items-center justify-center">
+<span class="material-symbols-outlined text-[10px] text-on-surface">person</span>
+</span>
+<span class="font-body-sm text-[12px] text-on-surface-variant">Executed by: Admin</span>
+</div>
+</div>
+<!-- History Item 2 -->
+<div class="relative pl-6 pb-4 border-l border-border-subtle last:border-0 last:pb-0">
+<div class="absolute w-3 h-3 bg-error rounded-full -left-[6.5px] top-1 border-2 border-surface-container"></div>
+<div class="mb-1 flex justify-between items-start">
+<span class="font-label-caps text-[10px] text-on-surface-variant bg-surface-container-highest px-2 py-0.5 rounded">CLIENT</span>
+<span class="font-code-md text-[11px] text-on-surface-variant">Yesterday</span>
+</div>
+<p class="font-body-sm text-[13px] text-on-surface font-bold">Pull failed: Merge conflict</p>
+<p class="font-code-md text-[12px] text-error mt-1">Conflict in src/ui/hud.cpp</p>
+<div class="mt-2 flex items-center gap-2">
+<span class="w-4 h-4 rounded-full bg-surface-container-highest flex items-center justify-center">
+<span class="material-symbols-outlined text-[10px] text-on-surface">person</span>
+</span>
+<span class="font-body-sm text-[12px] text-on-surface-variant">Executed by: Admin</span>
+</div>
+</div>
+<!-- History Item 3 -->
+<div class="relative pl-6 pb-4 border-l border-border-subtle last:border-0 last:pb-0">
+<div class="absolute w-3 h-3 bg-success rounded-full -left-[6.5px] top-1 border-2 border-surface-container"></div>
+<div class="mb-1 flex justify-between items-start">
+<span class="font-label-caps text-[10px] text-on-surface-variant bg-surface-container-highest px-2 py-0.5 rounded">BOTH REPOS</span>
+<span class="font-code-md text-[11px] text-on-surface-variant">Oct 24</span>
+</div>
+<p class="font-body-sm text-[13px] text-on-surface font-bold">Nightly Sync Completed</p>
+<p class="font-code-md text-[12px] text-on-surface-variant mt-1">Pulled 28 commits total</p>
+<div class="mt-2 flex items-center gap-2">
+<span class="w-4 h-4 rounded-full bg-surface-container-highest flex items-center justify-center">
+<span class="material-symbols-outlined text-[10px] text-on-surface">smart_toy</span>
+</span>
+<span class="font-body-sm text-[12px] text-on-surface-variant">Executed by: System</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- Footer -->
+<footer class="bg-surface-container-lowest text-ks-executable font-code-md text-code-md font-label-caps text-label-caps text-on-surface-variant docked bottom-0 full-width h-8 border-t border-border-subtle flat no shadows fixed bottom-0 right-0 left-sidebar-width z-40 flex justify-between items-center px-gutter bg-opacity-90 backdrop-blur-sm">
+<div class="text-ks-executable transition-opacity duration-200">
+            Cocos WebSocket: Connected | Env: Production-A
+        </div>
+<div class="flex gap-4">
+<a class="text-on-surface-variant hover:text-on-surface transition-opacity duration-200 uppercase tracking-widest text-[10px]" href="#">System Logs</a>
+<a class="text-on-surface-variant hover:text-on-surface transition-opacity duration-200 uppercase tracking-widest text-[10px]" href="#">Network Status</a>
+<a class="text-on-surface-variant hover:text-on-surface transition-opacity duration-200 uppercase tracking-widest text-[10px]" href="#">API Docs</a>
+</div>
+</footer>
+</body></html>

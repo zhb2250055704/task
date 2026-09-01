@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Mission Control - Command Management</title>
+<!-- Material Symbols -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Google Fonts -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&amp;family=JetBrains+Mono:wght@400&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Tailwind Config injected -->
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-tertiary-fixed-variant": "#733600",
+                        "surface-container-highest": "#343535",
+                        "on-primary-fixed": "#001c3a",
+                        "success": "#52c41a",
+                        "background": "#121414",
+                        "primary-fixed": "#d4e3ff",
+                        "surface": "#121414",
+                        "on-surface": "#e3e2e2",
+                        "error": "#f5222d",
+                        "background-deep": "#141414",
+                        "on-primary-fixed-variant": "#004785",
+                        "inverse-surface": "#e3e2e2",
+                        "on-secondary-container": "#caa9ff",
+                        "secondary-container": "#600fc0",
+                        "primary-fixed-dim": "#a5c8ff",
+                        "surface-dim": "#121414",
+                        "background-elevated": "#1f1f1f",
+                        "primary-container": "#2492ff",
+                        "on-primary-container": "#002a53",
+                        "on-tertiary": "#512400",
+                        "surface-container-lowest": "#0d0e0f",
+                        "surface-container": "#1f2020",
+                        "surface-bright": "#383939",
+                        "on-tertiary-fixed": "#311300",
+                        "inverse-on-surface": "#2f3031",
+                        "tertiary-fixed": "#ffdbc7",
+                        "tertiary-container": "#e37103",
+                        "on-tertiary-container": "#471e00",
+                        "surface-variant": "#343535",
+                        "secondary-fixed": "#ecdcff",
+                        "on-error": "#690005",
+                        "on-surface-variant": "#c0c7d6",
+                        "inverse-primary": "#005fae",
+                        "warning": "#faad14",
+                        "primary": "#a5c8ff",
+                        "secondary-fixed-dim": "#d5baff",
+                        "surface-container-low": "#1b1c1c",
+                        "on-background": "#e3e2e2",
+                        "secondary": "#d5baff",
+                        "on-secondary-fixed": "#270057",
+                        "on-primary": "#00315e",
+                        "tertiary": "#ffb688",
+                        "tertiary-fixed-dim": "#ffb688",
+                        "surface-tint": "#a5c8ff",
+                        "outline": "#8a919f",
+                        "outline-variant": "#404753",
+                        "on-secondary": "#42008a",
+                        "border-subtle": "#303030",
+                        "surface-container-high": "#292a2a",
+                        "ks-executable": "#13c2c2",
+                        "error-container": "#93000a",
+                        "on-error-container": "#ffdad6",
+                        "on-secondary-fixed-variant": "#5e08bd"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "unit": "4px",
+                        "header-height": "56px",
+                        "gutter": "16px",
+                        "margin-page": "24px",
+                        "sidebar-width": "240px"
+                    },
+                    "fontFamily": {
+                        "headline-lg-mobile": ["Inter"],
+                        "headline-md": ["Inter"],
+                        "headline-lg": ["Inter"],
+                        "body-md": ["Inter"],
+                        "code-md": ["JetBrains Mono"],
+                        "label-caps": ["Inter"],
+                        "body-sm": ["Inter"]
+                    },
+                    "fontSize": {
+                        "headline-lg-mobile": ["20px", { "lineHeight": "28px", "fontWeight": "600" }],
+                        "headline-md": ["20px", { "lineHeight": "28px", "fontWeight": "600" }],
+                        "headline-lg": ["24px", { "lineHeight": "32px", "fontWeight": "600" }],
+                        "body-md": ["14px", { "lineHeight": "22px", "fontWeight": "400" }],
+                        "code-md": ["13px", { "lineHeight": "20px", "fontWeight": "400" }],
+                        "label-caps": ["11px", { "lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "700" }],
+                        "body-sm": ["12px", { "lineHeight": "18px", "fontWeight": "400" }]
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-background text-on-background font-body-md text-body-md antialiased min-h-screen flex">
+<!-- SideNavBar -->
+<nav class="hidden md:flex bg-surface-container-low border-r border-border-subtle fixed left-0 top-0 bottom-0 z-50 flex-col w-sidebar-width h-full">
+<!-- Brand Header -->
+<div class="h-header-height flex items-center px-gutter border-b border-border-subtle shrink-0">
+<div class="flex items-center gap-3 w-full">
+<div class="w-8 h-8 rounded bg-primary-container flex items-center justify-center text-on-primary-container">
+<span class="material-symbols-outlined font-bold">rocket_launch</span>
+</div>
+<div class="flex flex-col flex-1 overflow-hidden">
+<span class="font-headline-md text-headline-md font-bold text-primary truncate">GameOps Engine</span>
+<span class="font-label-caps text-label-caps text-on-surface-variant truncate">v2.4.0-stable</span>
+</div>
+</div>
+</div>
+<!-- Main Nav Tabs -->
+<div class="flex-1 overflow-y-auto py-4 flex flex-col gap-1 px-3">
+<a class="flex items-center gap-3 px-3 py-2 rounded-DEFAULT bg-secondary-container text-on-secondary-container font-bold border-r-2 border-primary active opacity-80 duration-100" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">terminal</span>
+<span>Command</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-DEFAULT text-on-surface-variant hover:bg-surface-container-high transition-colors" href="#">
+<span class="material-symbols-outlined">code</span>
+<span>Script</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-DEFAULT text-on-surface-variant hover:bg-surface-container-high transition-colors" href="#">
+<span class="material-symbols-outlined">bug_report</span>
+<span>QA Design</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-DEFAULT text-on-surface-variant hover:bg-surface-container-high transition-colors" href="#">
+<span class="material-symbols-outlined">bolt</span>
+<span>Skill</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-DEFAULT text-on-surface-variant hover:bg-surface-container-high transition-colors" href="#">
+<span class="material-symbols-outlined">functions</span>
+<span>Formula</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-DEFAULT text-on-surface-variant hover:bg-surface-container-high transition-colors" href="#">
+<span class="material-symbols-outlined">inventory_2</span>
+<span>Items</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-DEFAULT text-on-surface-variant hover:bg-surface-container-high transition-colors" href="#">
+<span class="material-symbols-outlined">account_tree</span>
+<span>Git</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-DEFAULT text-on-surface-variant hover:bg-surface-container-high transition-colors" href="#">
+<span class="material-symbols-outlined">sync</span>
+<span>KS Sync</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-DEFAULT text-on-surface-variant hover:bg-surface-container-high transition-colors" href="#">
+<span class="material-symbols-outlined">group</span>
+<span>User Mgmt</span>
+</a>
+</div>
+<!-- CTA & Footer Tabs -->
+<div class="p-4 border-t border-border-subtle flex flex-col gap-3 shrink-0">
+<button class="w-full bg-primary-container text-on-primary-container hover:bg-primary font-bold py-2 rounded-DEFAULT transition-colors flex items-center justify-center gap-2">
+<span class="material-symbols-outlined">terminal</span>
+                Launch Console
+            </button>
+<div class="flex flex-col gap-1 mt-2">
+<a class="flex items-center gap-3 px-3 py-2 rounded-DEFAULT text-on-surface-variant hover:bg-surface-container-highest transition-colors" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span>Settings</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-DEFAULT text-on-surface-variant hover:bg-surface-container-highest transition-colors" href="#">
+<span class="material-symbols-outlined">help</span>
+<span>Support</span>
+</a>
+</div>
+<!-- Admin Role Highlight -->
+<div class="mt-2 flex items-center gap-2 px-3 py-1.5 bg-tertiary-container/20 border border-tertiary-container rounded-DEFAULT">
+<span class="material-symbols-outlined text-tertiary-container text-sm">shield_person</span>
+<span class="font-label-caps text-label-caps text-tertiary-fixed">ADMIN ROLE ACTIVE</span>
+</div>
+</div>
+</nav>
+<!-- Main Content Wrapper -->
+<div class="flex-1 flex flex-col md:ml-sidebar-width min-w-0">
+<!-- TopNavBar -->
+<header class="bg-surface-container border-b border-border-subtle fixed top-0 right-0 left-0 md:left-sidebar-width z-40 flex justify-between items-center px-gutter h-header-height">
+<!-- Mobile Menu Toggle & Brand -->
+<div class="flex items-center gap-4 md:hidden">
+<button class="text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined">menu</span>
+</button>
+<span class="font-headline-md text-headline-md font-bold text-on-surface">Mission Control</span>
+</div>
+<!-- Desktop Search (on_left configuration) -->
+<div class="hidden md:flex items-center w-96 mr-auto">
+<div class="relative w-full">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant">search</span>
+<input class="w-full bg-surface-container-high border border-border-subtle rounded-DEFAULT pl-10 pr-4 py-1.5 text-on-surface focus:outline-none focus:border-primary transition-colors font-body-sm text-body-sm" placeholder="Search commands, scripts..." type="text"/>
+</div>
+</div>
+<!-- Trailing Actions -->
+<div class="flex items-center gap-4">
+<div class="hidden sm:flex items-center gap-1 border-r border-border-subtle pr-4 mr-1">
+<button class="p-1.5 text-on-surface-variant hover:text-primary transition-colors rounded hover:bg-surface-container-high">
+<span class="material-symbols-outlined">zoom_in</span>
+</button>
+<button class="p-1.5 text-on-surface-variant hover:text-primary transition-colors rounded hover:bg-surface-container-high">
+<span class="material-symbols-outlined">zoom_out</span>
+</button>
+<button class="p-1.5 text-on-surface-variant hover:text-primary transition-colors rounded hover:bg-surface-container-high">
+<span class="material-symbols-outlined">dark_mode</span>
+</button>
+<button class="p-1.5 text-on-surface-variant hover:text-primary transition-colors rounded hover:bg-surface-container-high relative">
+<span class="material-symbols-outlined">notifications</span>
+<span class="absolute top-1.5 right-1.5 w-2 h-2 bg-error rounded-full"></span>
+</button>
+</div>
+<div class="flex items-center gap-2">
+<button class="hidden sm:block px-3 py-1.5 border border-outline-variant text-on-surface-variant hover:text-primary hover:border-primary rounded-DEFAULT transition-colors font-body-sm text-body-sm">
+                        Admin Console
+                    </button>
+<button class="bg-primary text-on-primary font-bold px-4 py-1.5 rounded-DEFAULT hover:bg-primary-fixed-dim transition-colors scale-95 duration-75 font-body-sm text-body-sm">
+                        Execute
+                    </button>
+</div>
+<!-- Profile -->
+<div class="w-8 h-8 rounded-full bg-surface-container-highest border border-border-subtle overflow-hidden ml-2 cursor-pointer border hover:border-primary transition-colors">
+<img alt="User profile avatar" class="w-full h-full object-cover" data-alt="A futuristic minimalist avatar profile image featuring a geometric robotic face with soft blue glowing eyes against a deep black background. High contrast, technical aesthetic." src="assets/image-01.jpg"/>
+</div>
+</div>
+</header>
+<!-- Main Canvas -->
+<main class="flex-1 pt-header-height pb-16 overflow-y-auto px-gutter md:px-margin-page py-margin-page">
+<div class="flex flex-col gap-6 max-w-[1400px] mx-auto">
+<!-- Page Header & Filters -->
+<div class="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-border-subtle pb-4">
+<div>
+<h1 class="font-headline-lg text-headline-lg font-bold text-on-surface mb-1">Command Management</h1>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Administer, trace, and execute operational commands across target environments.</p>
+</div>
+<div class="flex flex-col sm:flex-row gap-3">
+<div class="relative w-full sm:w-64">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-sm">filter_alt</span>
+<select class="w-full bg-background-elevated border border-border-subtle rounded-DEFAULT pl-9 pr-8 py-1.5 text-on-surface appearance-none focus:outline-none focus:border-primary font-body-sm text-body-sm">
+<option value="all">All Categories</option>
+<option value="economy">Economy &amp; Items</option>
+<option value="progression">Player Progression</option>
+<option value="server">Server Ops</option>
+</select>
+<span class="material-symbols-outlined absolute right-2 top-1/2 -translate-y-1/2 text-on-surface-variant pointer-events-none text-sm">arrow_drop_down</span>
+</div>
+</div>
+</div>
+<!-- Dashboard Bento Grid -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-4">
+<!-- Account Selection Section (Span 4) -->
+<div class="lg:col-span-4 bg-background-elevated border border-border-subtle rounded-lg p-4 flex flex-col h-full">
+<div class="flex items-center justify-between mb-4">
+<h2 class="font-body-md text-body-md font-bold text-on-surface flex items-center gap-2">
+<span class="material-symbols-outlined text-sm">hub</span> Target Resolution
+                             </h2>
+<span class="px-2 py-0.5 bg-surface-container-high rounded text-on-surface-variant font-code-md text-code-md text-[10px]">PROD-A</span>
+</div>
+<div class="grid grid-cols-2 gap-3 mb-4 flex-1">
+<div class="bg-surface-container-low border border-border-subtle rounded p-3 flex flex-col justify-center">
+<span class="font-label-caps text-label-caps text-on-surface-variant mb-1">COCOS STATUS</span>
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-success animate-pulse"></span>
+<span class="font-body-sm text-body-sm text-success font-bold">Connected</span>
+</div>
+</div>
+<div class="bg-surface-container-low border border-border-subtle rounded p-3 flex flex-col justify-center">
+<span class="font-label-caps text-label-caps text-on-surface-variant mb-1">ENV COUNT</span>
+<span class="font-headline-md text-headline-md text-on-surface">04</span>
+</div>
+<div class="bg-surface-container-low border border-border-subtle rounded p-3 flex flex-col justify-center">
+<span class="font-label-caps text-label-caps text-on-surface-variant mb-1">TOTAL ACCOUNTS</span>
+<span class="font-headline-md text-headline-md text-on-surface">1,248</span>
+</div>
+<div class="bg-surface-container-low border border-primary/30 rounded p-3 flex flex-col justify-center ring-1 ring-primary/20">
+<span class="font-label-caps text-label-caps text-primary mb-1">SELECTED TARGETS</span>
+<span class="font-headline-md text-headline-md text-primary font-bold">03</span>
+</div>
+</div>
+<button class="w-full py-2 border border-outline-variant hover:border-primary text-on-surface-variant hover:text-primary rounded transition-colors font-body-sm text-body-sm flex items-center justify-center gap-2">
+<span class="material-symbols-outlined text-sm">edit</span> Edit Target Scope
+                        </button>
+</div>
+<!-- Account Cards (Span 8) -->
+<div class="lg:col-span-8 bg-background-elevated border border-border-subtle rounded-lg p-4 flex flex-col h-full overflow-hidden">
+<div class="flex items-center justify-between mb-4">
+<h2 class="font-body-md text-body-md font-bold text-on-surface flex items-center gap-2">
+<span class="material-symbols-outlined text-sm">group</span> Selected Accounts (3)
+                             </h2>
+<button class="text-on-surface-variant hover:text-primary font-body-sm text-body-sm flex items-center gap-1 transition-colors">
+                                 Clear All <span class="material-symbols-outlined text-xs">close</span>
+</button>
+</div>
+<div class="flex-1 overflow-x-auto">
+<div class="flex gap-3 pb-2 min-w-max">
+<!-- Card 1: KS Executable -->
+<div class="w-64 bg-surface-container border border-ks-executable/50 rounded flex flex-col p-3 relative overflow-hidden group">
+<div class="absolute top-0 right-0 w-16 h-16 bg-ks-executable/10 blur-xl rounded-full -mr-8 -mt-8"></div>
+<div class="flex justify-between items-start mb-3 relative z-10">
+<div class="flex flex-col">
+<span class="font-code-md text-code-md text-on-surface">UID: 948102</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Player_Alpha</span>
+</div>
+<button class="text-on-surface-variant hover:text-error transition-colors opacity-0 group-hover:opacity-100">
+<span class="material-symbols-outlined text-sm">remove_circle</span>
+</button>
+</div>
+<div class="mt-auto pt-3 border-t border-border-subtle relative z-10">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 bg-surface-container-highest text-ks-executable font-label-caps text-label-caps rounded">
+<span class="material-symbols-outlined text-[10px]">terminal</span> KS-Executable
+                                          </span>
+</div>
+</div>
+<!-- Card 2: Cocos Online -->
+<div class="w-64 bg-surface-container border border-border-subtle rounded flex flex-col p-3 relative group">
+<div class="flex justify-between items-start mb-3">
+<div class="flex flex-col">
+<span class="font-code-md text-code-md text-on-surface">UID: 883109</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Test_User_Beta</span>
+</div>
+<button class="text-on-surface-variant hover:text-error transition-colors opacity-0 group-hover:opacity-100">
+<span class="material-symbols-outlined text-sm">remove_circle</span>
+</button>
+</div>
+<div class="mt-auto pt-3 border-t border-border-subtle">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 bg-surface-container-highest text-success font-label-caps text-label-caps rounded">
+<span class="material-symbols-outlined text-[10px]">wifi</span> Cocos Online
+                                          </span>
+</div>
+</div>
+<!-- Card 3: Incomplete -->
+<div class="w-64 bg-surface-container border border-error/30 rounded flex flex-col p-3 relative group opacity-70">
+<div class="flex justify-between items-start mb-3">
+<div class="flex flex-col">
+<span class="font-code-md text-code-md text-on-surface">UID: 112093</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant italic">Unknown_State</span>
+</div>
+<button class="text-on-surface-variant hover:text-error transition-colors opacity-0 group-hover:opacity-100">
+<span class="material-symbols-outlined text-sm">remove_circle</span>
+</button>
+</div>
+<div class="mt-auto pt-3 border-t border-border-subtle flex justify-between items-center">
+<span class="inline-flex items-center gap-1 px-2 py-0.5 bg-surface-container-highest text-warning font-label-caps text-label-caps rounded">
+<span class="material-symbols-outlined text-[10px]">warning</span> Incomplete
+                                          </span>
+<button class="text-primary hover:text-primary-fixed-dim text-xs font-bold transition-colors">Sync</button>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Command List Area -->
+<div class="flex flex-col gap-4 mt-4">
+<h2 class="font-headline-md text-headline-md font-bold text-on-surface border-b border-border-subtle pb-2">Economy &amp; Items</h2>
+<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+<!-- Command Card 1 -->
+<div class="bg-background-elevated border border-border-subtle hover:border-outline-variant transition-colors rounded-lg overflow-hidden flex flex-col group">
+<div class="p-4 flex-1">
+<div class="flex justify-between items-start mb-2">
+<h3 class="font-body-md text-body-md font-bold text-on-surface group-hover:text-primary transition-colors flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-sm">monetization_on</span> Give Currency
+                                    </h3>
+<span class="font-label-caps text-label-caps text-on-surface-variant px-1.5 py-0.5 bg-surface-container rounded">Uses: 1.2k</span>
+</div>
+<div class="bg-surface-container-lowest border border-border-subtle rounded p-2 mt-3 font-code-md text-code-md text-on-surface-variant break-all">
+                                    /eco add {{uid}} {{currency_type}} {{amount}}
+                                </div>
+</div>
+<div class="bg-surface-container border-t border-border-subtle p-2 flex justify-between items-center gap-2">
+<div class="flex gap-1">
+<button class="p-1.5 text-on-surface-variant hover:text-primary hover:bg-surface-container-high rounded transition-colors" title="Copy String">
+<span class="material-symbols-outlined text-sm">content_copy</span>
+</button>
+<button class="p-1.5 text-on-surface-variant hover:text-primary hover:bg-surface-container-high rounded transition-colors" title="Edit Command Template">
+<span class="material-symbols-outlined text-sm">edit</span>
+</button>
+<button class="p-1.5 text-on-surface-variant hover:text-error hover:bg-surface-container-high rounded transition-colors" title="Delete Template">
+<span class="material-symbols-outlined text-sm">delete</span>
+</button>
+</div>
+<button class="px-4 py-1.5 bg-primary/10 text-primary border border-primary/30 hover:bg-primary hover:text-on-primary rounded font-body-sm text-body-sm font-bold transition-colors">
+                                    Use Template
+                                </button>
+</div>
+</div>
+<!-- Command Card 2 -->
+<div class="bg-background-elevated border border-border-subtle hover:border-outline-variant transition-colors rounded-lg overflow-hidden flex flex-col group">
+<div class="p-4 flex-1">
+<div class="flex justify-between items-start mb-2">
+<h3 class="font-body-md text-body-md font-bold text-on-surface group-hover:text-primary transition-colors flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-sm">inventory</span> Grant Item Set
+                                    </h3>
+<span class="font-label-caps text-label-caps text-on-surface-variant px-1.5 py-0.5 bg-surface-container rounded">Uses: 843</span>
+</div>
+<div class="bg-surface-container-lowest border border-border-subtle rounded p-2 mt-3 font-code-md text-code-md text-on-surface-variant break-all">
+                                    /item grant_set {{uid}} {{set_id}} --force
+                                </div>
+</div>
+<div class="bg-surface-container border-t border-border-subtle p-2 flex justify-between items-center gap-2">
+<div class="flex gap-1">
+<button class="p-1.5 text-on-surface-variant hover:text-primary hover:bg-surface-container-high rounded transition-colors" title="Copy String">
+<span class="material-symbols-outlined text-sm">content_copy</span>
+</button>
+<button class="p-1.5 text-on-surface-variant hover:text-primary hover:bg-surface-container-high rounded transition-colors" title="Edit Command Template">
+<span class="material-symbols-outlined text-sm">edit</span>
+</button>
+<button class="p-1.5 text-on-surface-variant hover:text-error hover:bg-surface-container-high rounded transition-colors" title="Delete Template">
+<span class="material-symbols-outlined text-sm">delete</span>
+</button>
+</div>
+<button class="px-4 py-1.5 bg-primary/10 text-primary border border-primary/30 hover:bg-primary hover:text-on-primary rounded font-body-sm text-body-sm font-bold transition-colors">
+                                    Use Template
+                                </button>
+</div>
+</div>
+</div>
+</div>
+<div class="flex flex-col gap-4 mt-6">
+<h2 class="font-headline-md text-headline-md font-bold text-on-surface border-b border-border-subtle pb-2">Server Ops</h2>
+<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+<!-- Command Card 3 - High Risk -->
+<div class="bg-background-elevated border border-error/50 hover:border-error transition-colors rounded-lg overflow-hidden flex flex-col group relative">
+<div class="absolute top-0 right-0 w-24 h-24 bg-error/5 blur-2xl rounded-full"></div>
+<div class="p-4 flex-1 relative z-10">
+<div class="flex justify-between items-start mb-2">
+<h3 class="font-body-md text-body-md font-bold text-error flex items-center gap-2">
+<span class="material-symbols-outlined text-sm">power_settings_new</span> Force Kick All
+                                    </h3>
+<span class="font-label-caps text-label-caps text-error px-1.5 py-0.5 bg-error/10 border border-error/20 rounded">DANGER</span>
+</div>
+<div class="bg-surface-container-lowest border border-border-subtle rounded p-2 mt-3 font-code-md text-code-md text-on-surface-variant break-all">
+                                    /server kick_all {{env_id}} "Maintenance"
+                                </div>
+</div>
+<div class="bg-surface-container border-t border-border-subtle p-2 flex justify-between items-center gap-2 relative z-10">
+<div class="flex gap-1">
+<button class="p-1.5 text-on-surface-variant hover:text-primary hover:bg-surface-container-high rounded transition-colors" title="Copy String">
+<span class="material-symbols-outlined text-sm">content_copy</span>
+</button>
+<button class="p-1.5 text-on-surface-variant hover:text-primary hover:bg-surface-container-high rounded transition-colors" title="Edit Command Template">
+<span class="material-symbols-outlined text-sm">edit</span>
+</button>
+</div>
+<button class="px-4 py-1.5 bg-transparent text-error border border-error/50 hover:bg-error hover:text-on-error rounded font-body-sm text-body-sm font-bold transition-colors">
+                                    Review &amp; Execute
+                                </button>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- Footer -->
+<footer class="bg-surface-container-lowest border-t border-border-subtle fixed bottom-0 right-0 left-0 md:left-sidebar-width z-40 flex justify-between items-center px-gutter h-8 bg-opacity-90 backdrop-blur-sm">
+<div class="font-code-md text-code-md text-ks-executable flex items-center gap-2">
+<span class="w-1.5 h-1.5 rounded-full bg-ks-executable animate-pulse"></span>
+                Cocos WebSocket: Connected | Env: Production-A
+            </div>
+<div class="flex items-center gap-4">
+<a class="font-label-caps text-label-caps text-on-surface-variant hover:text-on-surface transition-opacity duration-200" href="#">System Logs</a>
+<a class="font-label-caps text-label-caps text-on-surface-variant hover:text-on-surface transition-opacity duration-200" href="#">Network Status</a>
+<a class="font-label-caps text-label-caps text-on-surface-variant hover:text-on-surface transition-opacity duration-200" href="#">API Docs</a>
+</div>
+</footer>
+</div>
+</body></html>

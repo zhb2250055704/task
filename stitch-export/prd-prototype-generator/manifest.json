@@ -1,0 +1,144 @@
+{
+    "project":  {
+                    "title":  "PRD Prototype Generator",
+                    "id":  "1469742293694552308"
+                },
+    "exported_at":  "2026-07-27T12:19:38+08:00",
+    "source":  "Stitch MCP",
+    "requested_item_count":  12,
+    "items":  [
+                  {
+                      "order":  1,
+                      "id":  "4080565128025199197",
+                      "title":  "PRD.md",
+                      "type":  "screen",
+                      "folder":  "01-prd",
+                      "code":  "PRD.md",
+                      "screenshot":  null
+                  },
+                  {
+                      "order":  2,
+                      "id":  "asset-stub-assets_863a0236eb3944dcb10c86453514fb22",
+                      "source_asset":  "assets/863a0236eb3944dcb10c86453514fb22",
+                      "title":  "Design System",
+                      "type":  "design-system",
+                      "folder":  "02-design-system",
+                      "code":  [
+                                   "DESIGN.md",
+                                   "design-system.json",
+                                   "tokens.css"
+                               ],
+                      "screenshot":  null
+                  },
+                  {
+                      "order":  3,
+                      "id":  "4b22fc129a8a46cab3316004738831c2",
+                      "title":  "命令管理 - 核心枢纽",
+                      "type":  "screen",
+                      "folder":  "03-command-hub",
+                      "code":  "index.html",
+                      "screenshot":  "screenshot.png",
+                      "original_code":  "index.stitch.html",
+                      "localized_code":  "index.html"
+                  },
+                  {
+                      "order":  4,
+                      "id":  "45527b682d014ceda868e1670e5fc5c6",
+                      "title":  "登录页 - 登录与鉴权",
+                      "type":  "screen",
+                      "folder":  "04-login",
+                      "code":  "index.html",
+                      "screenshot":  "screenshot.png",
+                      "original_code":  "index.stitch.html",
+                      "localized_code":  "index.html"
+                  },
+                  {
+                      "order":  5,
+                      "id":  "57d047f67cdb47f8a28058b65fd94dd6",
+                      "title":  "脚本管理 - 多服配置",
+                      "type":  "screen",
+                      "folder":  "05-script-multiserver",
+                      "code":  "index.html",
+                      "screenshot":  "screenshot.png",
+                      "original_code":  "index.stitch.html",
+                      "localized_code":  "index.html"
+                  },
+                  {
+                      "order":  6,
+                      "id":  "476034cfdfac4e9aab3405bdad8786f5",
+                      "title":  "测试设计 - AI 辅助生成",
+                      "type":  "screen",
+                      "folder":  "06-qa-design",
+                      "code":  "index.html",
+                      "screenshot":  "screenshot.png",
+                      "original_code":  "index.stitch.html",
+                      "localized_code":  "index.html"
+                  },
+                  {
+                      "order":  7,
+                      "id":  "a5aadf1802e54c689f114c6c62cff6ba",
+                      "title":  "命令管理 - 参数输入与详情",
+                      "type":  "screen",
+                      "folder":  "07-command-params-detail",
+                      "code":  "index.html",
+                      "screenshot":  "screenshot.png",
+                      "original_code":  "index.stitch.html",
+                      "localized_code":  "index.html"
+                  },
+                  {
+                      "order":  8,
+                      "id":  "105bf3d8e3694252b29d63d6e28b77ba",
+                      "title":  "脚本管理 - 批量执行反馈",
+                      "type":  "screen",
+                      "folder":  "08-script-batch-feedback",
+                      "code":  "index.html",
+                      "screenshot":  "screenshot.png",
+                      "original_code":  "index.stitch.html",
+                      "localized_code":  "index.html"
+                  },
+                  {
+                      "order":  9,
+                      "id":  "240db4b28a8f4b3c96ba8c551156c1ef",
+                      "title":  "Git 拉取 - 仓库中心",
+                      "type":  "screen",
+                      "folder":  "09-git-repository-center",
+                      "code":  "index.html",
+                      "screenshot":  "screenshot.png",
+                      "original_code":  "index.stitch.html",
+                      "localized_code":  "index.html"
+                  },
+                  {
+                      "order":  10,
+                      "id":  "e2efd6b12c9849db8361ad441d5f6eb5",
+                      "title":  "环境同步 - KS 数据中心",
+                      "type":  "screen",
+                      "folder":  "10-ks-sync",
+                      "code":  "index.html",
+                      "screenshot":  "screenshot.png",
+                      "original_code":  "index.stitch.html",
+                      "localized_code":  "index.html"
+                  },
+                  {
+                      "order":  11,
+                      "id":  "26133260dc1f474b820fc22848a81476",
+                      "title":  "Git 拉取 - 冲突与占用处理",
+                      "type":  "screen",
+                      "folder":  "11-git-conflict-lock",
+                      "code":  "index.html",
+                      "screenshot":  "screenshot.png",
+                      "original_code":  "index.stitch.html",
+                      "localized_code":  "index.html"
+                  },
+                  {
+                      "order":  12,
+                      "id":  "2de85660b7904ce1b0eb2a65b9d2a901",
+                      "title":  "用户管理 - 权限控制",
+                      "type":  "screen",
+                      "folder":  "12-user-management",
+                      "code":  "index.html",
+                      "screenshot":  "screenshot.png",
+                      "original_code":  "index.stitch.html",
+                      "localized_code":  "index.html"
+                  }
+              ]
+}

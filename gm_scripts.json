@@ -8,5 +8,20 @@
     "description": "",
     "create_time": "2026-07-22 11:49:43",
     "update_time": "2026-07-22 11:49:43"
+  },
+  {
+    "id": "kvk40001a817",
+    "name": "跨服赛季配置（40001·2026-08-17）",
+    "content": "battleserver:\n    enabled: true\n    image:\n        repository: \"battle_server_test_season\"\n        tag: v20260611.20260609145055.15486\n\ndev:\n    enabled: true\n    init:\n        enabled: false\n    javaDebug:\n        enabled: false\n\ngameserver:\n    dev:\n        kvkSeason:\n            enabled: true\n            zkData:\n                '40001':\n                    /LS_V1/GameServers/219/openTimeMs: \"1731747620400\"\n                    /LS_V1/GameServers/101/openTimeMs: \"1731859679272\"\n                    /LS_V1/GameServers/325/openTimeMs: \"1731859679272\"\n                    /LS_V1/GameServers/289/openTimeMs: \"1731859679272\"\n                    /LS_V1/KvkSeasons/40001: |\n                      {\n                        \"drama\": 1013,\n                        \"endTime\": 1791129600000,\n                        \"kServerId\": 40001,\n                        \"matchShowTime\": 1790956800000,\n                        \"matchTime\": 1790784000000,\n                        \"oServerIds\": [\n                          219,\n                          101,\n                          325,\n                          289\n                        ],\n                        \"oServerToCamp\": {\n                          \"101\": 9,\n                          \"219\": 9,\n                          \"325\": 10,\n                          \"289\": 10\n                        },\n                        \"season\": 12,\n                        \"settleTime\": 1790524800000,\n                        \"startTime\": 1786896000000\n                      }\n\n    image:\n        repository: \"game_server_test_season\"\n        tag: v20260611.20260609145055.15486\n    jmxExporter:\n        enabled: true\n    logVolume:\n        size: 50Gi\n        type: pvc\n    servers:\n        -\n          id: 36958\n          javaDebug: true\n        -\n          id: 40001\n          javaDebug: true\n    sharedisk:\n        enabled: false\n    sidecar:\n        gamelog:\n            container:\n                env:\n                    ALIYUN_LOGTAIL_DEFINED_ID: \"138-sanguo2-argodev\"\n                    aliyun_logs_machinegroup: \"138-sanguo2-argodev\"\n            enabled: false\n    state: up\n\nglobal:\n    fakeTimeAgent:\n        enabled: true\n    timedelta: \"2026-05-11 00:00:00\"\n\nsharedisk:\n    enabled: false\n    repo:\n        branch: release/v20250403\n\nwebserver:\n    enabled: true\n    image:\n        repository: \"web_server_test_season\"\n        tag: v20260611.20260609145055.15486\n\ndbgate:\n    enabled: true",
+    "category": "跨服配置模板",
+    "tags": [
+      "跨服",
+      "赛季12",
+      "40001",
+      "YAML"
+    ],
+    "description": "KS/Helm 跨服赛季配置模板。赛季开始时间为 2026-08-17（周一），用于复制到 KS 配置，请勿作为游戏内 Groovy 脚本直接执行。",
+    "create_time": "2026-08-19 00:00:00",
+    "update_time": "2026-08-19 00:00:00"
   }
 ]

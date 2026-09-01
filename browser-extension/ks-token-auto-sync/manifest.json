@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "GM KS Token Auto Sync",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "登录 GM 工具时，从当前 KS 浏览器会话读取 Token 并自动同步个人环境与账号。",
   "permissions": [
     "scripting",

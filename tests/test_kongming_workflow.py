@@ -255,6 +255,28 @@ class KongmingWorkflowParsingTests(unittest.TestCase):
         self.assertIn(previous['targets'][0]['account_name'], expanded)
         self.assertTrue(kongming_workflow.is_kongming_workflow_request(expanded))
 
+    def test_read_only_follow_up_does_not_inherit_workflow_scope(self):
+        previous = kongming_workflow.build_kongming_workflow(
+            'owner-1', BULK_REWARD_TEXT, sample_bulk_reward_catalog(), sample_reward_commands(), []
+        )
+        conversation = {
+            'messages': [{
+                'role': 'assistant',
+                'content': '任务预览',
+                'metadata': {'workflow_id': previous['id']},
+            }],
+        }
+        question = '钓鱼篓第四期活动的配置表是哪一张'
+        with tempfile.TemporaryDirectory() as temp_dir, \
+                mock.patch.object(server, 'KONGMING_WORKFLOW_DIR', temp_dir):
+            kongming_workflow.save_kongming_workflow(temp_dir, previous)
+            expanded = server._kongming_workflow_question_with_context(
+                'owner-1', question, conversation
+            )
+
+        self.assertEqual(expanded, question)
+        self.assertFalse(kongming_workflow.is_kongming_workflow_request(expanded))
+
     def test_bulk_reward_count_mismatch_stops_preview(self):
         with self.assertRaisesRegex(ValueError, '识别到 2 个唯一账号.*请求中的 3 个账号不一致'):
             kongming_workflow.build_kongming_workflow(

@@ -150,6 +150,18 @@ GIT_REPOS = {
     },
 }
 GIT_TIMEOUT = 180
+GIT_DETAIL_DIFF_PREVIEW_CHARS = max(
+    20000,
+    min(200000, int(os.environ.get('GM_GIT_DETAIL_DIFF_PREVIEW_CHARS', '120000'))),
+)
+GIT_DETAIL_XLSX_MAX_CELLS = max(
+    600,
+    min(6000, int(os.environ.get('GM_GIT_DETAIL_XLSX_MAX_CELLS', '2400'))),
+)
+GIT_DETAIL_XLSX_CELL_VALUE_CHARS = max(
+    200,
+    min(3000, int(os.environ.get('GM_GIT_DETAIL_XLSX_CELL_VALUE_CHARS', '800'))),
+)
 GIT_STATUS_FETCH_TIMEOUT = max(
     10, int(os.environ.get('GM_GIT_STATUS_FETCH_TIMEOUT', '45'))
 )
@@ -160,6 +172,11 @@ KONGMING_ACCOUNT_REFRESH_INTERVAL = int(os.environ.get('GM_KONGMING_ACCOUNT_REFR
 KONGMING_INDEX_INTERVAL = int(os.environ.get('GM_KONGMING_INDEX_INTERVAL', '60'))
 KONGMING_MODEL_PROVIDER = os.environ.get('GM_KONGMING_MODEL_PROVIDER', 'taishi')
 KONGMING_MODEL = os.environ.get('GM_KONGMING_MODEL', 'gpt-5.5')
+KONGMING_REASONING_EFFORT = str(
+    os.environ.get('GM_KONGMING_REASONING_EFFORT', 'low')
+).strip().lower()
+if KONGMING_REASONING_EFFORT not in ('minimal', 'low', 'medium', 'high', 'xhigh'):
+    KONGMING_REASONING_EFFORT = 'low'
 KONGMING_PROVIDER_BASE_URL = os.environ.get(
     'GM_KONGMING_PROVIDER_BASE_URL',
     'https://relay.tuyoo.com/v1',
@@ -406,6 +423,7 @@ def _kongming_chat_runtime_status():
         'kongming_skill_ready': skill_ready,
         'search_acceleration': True,
         'answer_cache_ttl': KONGMING_CACHE_TTL,
+        'reasoning_effort': KONGMING_REASONING_EFFORT,
         'search_index': get_kongming_index_status(KONGMING_INDEX_FILE),
     }
 
@@ -874,12 +892,27 @@ def _xlsx_column_headers(before_cells, after_cells, max_col, header_rows):
     return columns
 
 
-def compare_xlsx_sheets(before_sheets, after_sheets, max_rows=80, max_cols=120):
+def _xlsx_display_value(value, limit=None):
+    text = str(value or '')
+    if not limit or len(text) <= limit:
+        return text, False
+    return f'{text[:limit]}\n...[内容过长，已截断，共{len(text)}字符]', True
+
+
+def compare_xlsx_sheets(
+    before_sheets,
+    after_sheets,
+    max_rows=80,
+    max_cols=120,
+    max_sheets=8,
+    max_table_cells=None,
+    cell_value_limit=None,
+):
     before_map = {s['name']: s for s in before_sheets}
     after_map = {s['name']: s for s in after_sheets}
     names = list(dict.fromkeys(list(before_map.keys()) + list(after_map.keys())))
     results = []
-    for name in names[:8]:
+    for name in names[:max_sheets]:
         before_cells = before_map.get(name, {}).get('cells', {})
         after_cells = after_map.get(name, {}).get('cells', {})
         coords = sorted(set(before_cells.keys()) | set(after_cells.keys()))
@@ -888,15 +921,22 @@ def compare_xlsx_sheets(before_sheets, after_sheets, max_rows=80, max_cols=120):
             continue
         changed_rows = sorted(set(r for r, _ in changed))
         changed_cols = sorted(set(c for _, c in changed))
-        rows_to_show = changed_rows[:max_rows]
         _, max_used_col = _xlsx_used_bounds(before_cells, after_cells)
         all_cols = list(range(1, max_used_col + 1))
         cols_to_show = all_cols[:max_cols]
+        row_limit = max_rows
+        if max_table_cells:
+            row_limit = min(
+                row_limit,
+                max(1, int(max_table_cells) // max(1, len(cols_to_show))),
+            )
+        rows_to_show = changed_rows[:row_limit]
         header_rows = _xlsx_header_rows(before_cells, after_cells, max_used_col)
         column_headers = _xlsx_column_headers(before_cells, after_cells, max_used_col, header_rows)
         column_header_map = {col['index']: col for col in column_headers}
         changed_col_set = set(changed_cols)
         table_rows = []
+        cell_value_truncated = False
         for rnum in rows_to_show:
             row_cells = []
             for cnum in cols_to_show:
@@ -911,10 +951,14 @@ def compare_xlsx_sheets(before_sheets, after_sheets, max_rows=80, max_cols=120):
                 else:
                     status = 'changed'
                 col_header = column_header_map.get(cnum, {})
+                before_display, before_truncated = _xlsx_display_value(before, cell_value_limit)
+                after_display, after_truncated = _xlsx_display_value(after, cell_value_limit)
+                cell_value_truncated = cell_value_truncated or before_truncated or after_truncated
                 row_cells.append({'col': cnum, 'label': _col_label(cnum),
                                   'header': col_header.get('header', ''),
                                   'headers': col_header.get('headers', []),
-                                  'before': before, 'after': after,
+                                  'before': before_display, 'after': after_display,
+                                  'value_truncated': before_truncated or after_truncated,
                                   'status': status, 'changed': cnum in changed_col_set})
             table_rows.append({'row': rnum, 'cells': row_cells})
         results.append({
@@ -922,9 +966,13 @@ def compare_xlsx_sheets(before_sheets, after_sheets, max_rows=80, max_cols=120):
             'total_changes': len(changed),
             'shown_rows': len(rows_to_show),
             'shown_cols': len(cols_to_show),
+            'shown_cells': len(rows_to_show) * len(cols_to_show),
             'total_cols': max_used_col,
             'changed_cols': [_col_label(c) for c in changed_cols],
-            'truncated': len(changed_rows) > max_rows or max_used_col > max_cols,
+            'truncated': len(changed_rows) > len(rows_to_show) or max_used_col > max_cols,
+            'cell_value_truncated': cell_value_truncated,
+            'max_table_cells': int(max_table_cells or 0),
+            'cell_value_limit': int(cell_value_limit or 0),
             'headers': header_rows,
             'columns': [column_header_map.get(c, {'index': c, 'label': _col_label(c), 'header': '', 'headers': []}) for c in cols_to_show],
             'rows': table_rows,
@@ -968,13 +1016,247 @@ def git_excel_diffs(repo_id, commit_hash):
         try:
             before_sheets = parse_xlsx_bytes(before_raw) if before_raw else []
             after_sheets = parse_xlsx_bytes(after_raw) if after_raw else []
-            sheets = compare_xlsx_sheets(before_sheets, after_sheets)
+            sheets = compare_xlsx_sheets(
+                before_sheets,
+                after_sheets,
+                max_table_cells=GIT_DETAIL_XLSX_MAX_CELLS,
+                cell_value_limit=GIT_DETAIL_XLSX_CELL_VALUE_CHARS,
+            )
             results.append({'file': path, 'old_file': old_path, 'status': status,
                             'sheet_count': len(sheets), 'sheets': sheets})
         except Exception as e:
             results.append({'file': path, 'old_file': old_path, 'status': status,
                             'sheet_count': 0, 'sheets': [], 'error': str(e)})
     return results
+
+
+CONFIG_COMPARE_ROOT = 'csv/common/'
+CONFIG_COMPARE_EXTENSIONS = ('.xlsx', '.xlsm')
+CONFIG_COMPARE_HISTORY_LIMIT = 3
+
+
+def _config_compare_path(value):
+    """Return a tracked-table relative path only when it stays in csv/common."""
+    path = str(value or '').strip().replace('\\', '/')
+    if not path or '\x00' in path or path.startswith('/'):
+        return ''
+    parts = path.split('/')
+    if any(part in ('', '.', '..') for part in parts):
+        return ''
+    normalized = '/'.join(parts)
+    if not normalized.startswith(CONFIG_COMPARE_ROOT):
+        return ''
+    if not normalized.lower().endswith(CONFIG_COMPARE_EXTENSIONS):
+        return ''
+    return normalized
+
+
+def _config_compare_commit_line(line):
+    parts = str(line or '').split('\t', 4)
+    if len(parts) < 5:
+        return None
+    commit_hash, short_hash, author, when, subject = parts
+    if not safe_git_hash(commit_hash):
+        return None
+    return {
+        'hash': commit_hash,
+        'short_hash': short_hash,
+        'author': author,
+        'time': when,
+        'subject': subject,
+    }
+
+
+def _config_compare_commit_history(repo, path, limit=CONFIG_COMPARE_HISTORY_LIMIT, ref='HEAD'):
+    result = run_git_command(repo, [
+        'log', '--follow', '-n', str(limit + 3),
+        '--pretty=format:%H%x09%h%x09%an%x09%aI%x09%s', ref, '--', path,
+    ], timeout=60)
+    if not result.get('ok'):
+        return [], result.get('output', '') or '无法读取配置表历史'
+    commits = []
+    for line in result.get('stdout', '').splitlines():
+        commit = _config_compare_commit_line(line)
+        if commit:
+            commits.append(commit)
+    # The newest entry is the current file version, even when unrelated commits
+    # were added after it. The following entries are the previous table versions.
+    return commits[1:limit + 1], ''
+
+
+def _config_compare_commit(repo, ref='HEAD'):
+    result = run_git_command(repo, [
+        'show', '-s', '--format=%H%x09%h%x09%an%x09%aI%x09%s', ref,
+    ], timeout=30)
+    if not result.get('ok'):
+        return None
+    return _config_compare_commit_line(result.get('stdout', '').strip())
+
+
+def _config_compare_tables_from_head(repo, ref='HEAD'):
+    result = run_git_command(repo, [
+        'ls-tree', '-r', '--name-only', ref, '--', CONFIG_COMPARE_ROOT.rstrip('/')
+    ], timeout=60)
+    if not result.get('ok'):
+        return [], result.get('output', '') or '无法读取当前分支的配置表清单'
+    paths = []
+    for line in result.get('stdout', '').splitlines():
+        path = _config_compare_path(line.strip())
+        if path and not os.path.basename(path).startswith('~$') and path not in paths:
+            paths.append(path)
+    paths.sort(key=str.casefold)
+    return paths, ''
+
+
+def _config_compare_counts(before_sheets, after_sheets):
+    before_map = {sheet.get('name', ''): sheet for sheet in before_sheets}
+    after_map = {sheet.get('name', ''): sheet for sheet in after_sheets}
+    names = list(dict.fromkeys(list(before_map.keys()) + list(after_map.keys())))
+    added_sheets = [name for name in names if name not in before_map]
+    deleted_sheets = [name for name in names if name not in after_map]
+    changed_sheets = []
+    added_cells = 0
+    deleted_cells = 0
+    changed_cells = 0
+    changed_fields = []
+    for name in names:
+        before_cells = before_map.get(name, {}).get('cells', {})
+        after_cells = after_map.get(name, {}).get('cells', {})
+        changed_coords = [
+            coord for coord in set(before_cells.keys()) | set(after_cells.keys())
+            if before_cells.get(coord, '') != after_cells.get(coord, '')
+        ]
+        if not changed_coords:
+            continue
+        changed_sheets.append(name)
+        field_indexes = sorted({coord[1] for coord in changed_coords})
+        changed_fields.extend({
+            'sheet': name,
+            'column': _col_label(index),
+        } for index in field_indexes)
+        for row, col in changed_coords:
+            before = before_cells.get((row, col), '')
+            after = after_cells.get((row, col), '')
+            if before == '':
+                added_cells += 1
+            elif after == '':
+                deleted_cells += 1
+            else:
+                changed_cells += 1
+    return {
+        'total_changes': added_cells + deleted_cells + changed_cells,
+        'added_cells': added_cells,
+        'deleted_cells': deleted_cells,
+        'changed_cells': changed_cells,
+        'changed_sheet_count': len(changed_sheets),
+        'changed_sheets': changed_sheets,
+        'added_sheets': added_sheets,
+        'deleted_sheets': deleted_sheets,
+        'previous_sheet_count': len(before_sheets),
+        'current_sheet_count': len(after_sheets),
+        'changed_fields': changed_fields,
+    }
+
+
+def git_config_compare_tables(repo_id='excel'):
+    if repo_id not in GIT_REPOS:
+        return {'ok': False, 'code': 'unknown_repo', 'msg': '未知仓库'}
+    repo = GIT_REPOS[repo_id]
+    branch = run_git_command(repo, ['symbolic-ref', '--quiet', '--short', 'HEAD'], timeout=30)
+    head = _config_compare_commit(repo)
+    paths, error = _config_compare_tables_from_head(repo, head['hash'] if head else 'HEAD')
+    if error or not head:
+        return {
+            'ok': False,
+            'code': 'git_read_failed',
+            'repo': repo_id,
+            'label': repo.get('label', repo_id),
+            'branch': branch.get('stdout', '').strip() if branch.get('ok') else 'detached HEAD',
+            'msg': error or '无法读取当前分支提交',
+            'items': [],
+        }
+    return {
+        'ok': True,
+        'repo': repo_id,
+        'label': repo.get('label', repo_id),
+        'path': repo.get('path', ''),
+        'branch': branch.get('stdout', '').strip() if branch.get('ok') else 'detached HEAD',
+        'head': head,
+        'items': [
+            {'path': path, 'name': os.path.basename(path)}
+            for path in paths
+        ],
+    }
+
+
+def git_config_compare_file(path, repo_id='excel'):
+    if repo_id not in GIT_REPOS:
+        return {'ok': False, 'code': 'unknown_repo', 'msg': '未知仓库'}
+    path = _config_compare_path(path)
+    if not path:
+        return {'ok': False, 'code': 'invalid_path', 'msg': '配置表路径必须位于 csv/common 且为 xlsx 或 xlsm 文件'}
+    repo = GIT_REPOS[repo_id]
+    head = _config_compare_commit(repo)
+    paths, error = _config_compare_tables_from_head(repo, head['hash'] if head else 'HEAD')
+    if error:
+        return {'ok': False, 'code': 'git_read_failed', 'msg': error}
+    if path not in paths:
+        return {'ok': False, 'code': 'not_found', 'msg': '当前分支未找到该配置表'}
+    if not head:
+        return {'ok': False, 'code': 'git_read_failed', 'msg': '无法读取当前分支提交'}
+    current_raw = git_show_file_bytes(repo, f'{head["hash"]}:{path}')
+    if not current_raw.get('ok'):
+        return {'ok': False, 'code': 'file_read_failed', 'msg': current_raw.get('output', '') or '无法读取当前版本配置表'}
+    try:
+        current_sheets = parse_xlsx_bytes(current_raw.get('stdout', b''))
+    except Exception as exc:
+        return {'ok': False, 'code': 'parse_failed', 'msg': f'当前版本配置表解析失败：{exc}'}
+
+    history, history_error = _config_compare_commit_history(repo, path, ref=head['hash'])
+    comparisons = []
+    for rank, commit in enumerate(history, 1):
+        previous_raw = git_show_file_bytes(repo, f'{commit["hash"]}:{path}')
+        comparison = {
+            'rank': rank,
+            'label': f'前{rank}个版本',
+            'previous_commit': commit,
+            'current_commit': head,
+            'ok': bool(previous_raw.get('ok')),
+            'sheets': [],
+        }
+        if not previous_raw.get('ok'):
+            comparison['error'] = previous_raw.get('output', '') or '无法读取历史版本配置表'
+            comparisons.append(comparison)
+            continue
+        try:
+            previous_sheets = parse_xlsx_bytes(previous_raw.get('stdout', b''))
+            comparison['summary'] = _config_compare_counts(previous_sheets, current_sheets)
+            comparison['sheets'] = compare_xlsx_sheets(
+                previous_sheets,
+                current_sheets,
+                max_rows=120,
+                max_cols=200,
+                max_sheets=100,
+            )
+            comparisons.append(comparison)
+        except Exception as exc:
+            comparison['ok'] = False
+            comparison['error'] = f'历史版本配置表解析失败：{exc}'
+            comparisons.append(comparison)
+    return {
+        'ok': True,
+        'repo': repo_id,
+        'label': repo.get('label', repo_id),
+        'path': path,
+        'branch': run_git_command(repo, ['symbolic-ref', '--quiet', '--short', 'HEAD'], timeout=30).get('stdout', '').strip() or 'detached HEAD',
+        'head': head,
+        'current_sheet_count': len(current_sheets),
+        'history_count': len(comparisons),
+        'history_available': len(comparisons),
+        'history_limit': CONFIG_COMPARE_HISTORY_LIMIT,
+        'history_error': history_error,
+        'comparisons': comparisons,
+    }
 
 
 def load_items():
@@ -1676,6 +1958,19 @@ def safe_git_hash(value):
     return bool(re.fullmatch(r'[0-9a-fA-F]{6,40}', str(value or '').strip()))
 
 
+def git_detail_diff_preview(value, limit=GIT_DETAIL_DIFF_PREVIEW_CHARS):
+    text = str(value or '')
+    total_chars = len(text)
+    if total_chars <= limit:
+        return text, total_chars, False
+    preview = text[:limit]
+    boundary = preview.rfind('\n')
+    if boundary >= int(limit * 0.75):
+        preview = preview[:boundary]
+    preview += f'\n\n[原始 Diff 共 {total_chars} 个字符，详情页仅展示前 {len(preview)} 个字符的预览。]'
+    return preview, total_chars, True
+
+
 def git_commit_detail(repo_id, commit_hash):
     if repo_id not in GIT_REPOS or not safe_git_hash(commit_hash):
         return {'ok': False, 'msg': '参数错误'}
@@ -1683,12 +1978,16 @@ def git_commit_detail(repo_id, commit_hash):
     stat = run_git_command(repo, ['show', '--stat', '--summary', '--find-renames', '--format=fuller', str(commit_hash)], timeout=60)
     patch = run_git_command(repo, ['show', '--find-renames', '--format=', '--patch', '--stat', str(commit_hash)], timeout=60)
     excel_diffs = git_excel_diffs(repo_id, commit_hash)
+    diff, diff_total_chars, diff_truncated = git_detail_diff_preview(patch.get('output', ''))
     return {
         'ok': stat.get('ok') and patch.get('ok'),
         'repo': repo_id,
         'title': f'{repo["label"]} {commit_hash}',
         'summary': stat.get('output', ''),
-        'diff': patch.get('output', ''),
+        'diff': diff,
+        'diff_total_chars': diff_total_chars,
+        'diff_truncated': diff_truncated,
+        'diff_preview_limit': GIT_DETAIL_DIFF_PREVIEW_CHARS,
         'excel_diffs': excel_diffs,
         'msg': stat.get('output', '') if not stat.get('ok') else patch.get('output', ''),
     }
@@ -1703,12 +2002,16 @@ def git_change_detail(repo_id, change_line):
     diff = run_git_command(repo, args, timeout=60)
     if not diff.get('output') and rel:
         diff = run_git_command(repo, ['diff', '--cached', '--', rel], timeout=60)
+    diff_text, diff_total_chars, diff_truncated = git_detail_diff_preview(diff.get('output', ''))
     return {
         'ok': diff.get('ok'),
         'repo': repo_id,
         'title': f'{repo["label"]} 本地改动 {rel or ""}'.strip(),
         'summary': change_line,
-        'diff': diff.get('output', '') or '没有可显示的 diff，可能是未跟踪文件或二进制文件。',
+        'diff': diff_text or '没有可显示的 diff，可能是未跟踪文件或二进制文件。',
+        'diff_total_chars': diff_total_chars,
+        'diff_truncated': diff_truncated,
+        'diff_preview_limit': GIT_DETAIL_DIFF_PREVIEW_CHARS,
         'msg': diff.get('output', ''),
     }
 
@@ -2203,7 +2506,7 @@ def git_fetch_repo_result(repo_id):
         _git_operation_lock.release()
 
 
-def git_checkout_branch(repo_id, branch_name, source='local'):
+def git_checkout_branch(repo_id, branch_name, source='local', _lock_held=False):
     if repo_id not in GIT_REPOS:
         return {'ok': False, 'code': 'unknown_repo', 'msg': '未知仓库'}
     source = str(source or 'local').strip().lower()
@@ -2212,8 +2515,11 @@ def git_checkout_branch(repo_id, branch_name, source='local'):
         return {'ok': False, 'code': 'invalid_branch', 'msg': '请选择有效分支'}
 
     repo = GIT_REPOS[repo_id]
-    if not _git_operation_lock.acquire(blocking=False):
-        return {'ok': False, 'code': 'git_busy', 'msg': '另一个 Git 操作正在执行，请稍后重试'}
+    lock_acquired = False
+    if not _lock_held:
+        if not _git_operation_lock.acquire(blocking=False):
+            return {'ok': False, 'code': 'git_busy', 'msg': '另一个 Git 操作正在执行，请稍后重试'}
+        lock_acquired = True
     try:
         active = git_active_pull_job([repo_id])
         if active:
@@ -2328,6 +2634,51 @@ def git_checkout_branch(repo_id, branch_name, source='local'):
             ))),
             'discard': discarded,
             'status': status,
+        }
+    finally:
+        if lock_acquired:
+            _git_operation_lock.release()
+
+
+def git_checkout_unified_branch(selections):
+    """Switch the client and spreadsheet repositories as one guarded operation."""
+    if not isinstance(selections, list):
+        return {'ok': False, 'code': 'invalid_selections', 'msg': '统一切换缺少仓库分支选择'}
+
+    normalized = []
+    seen = set()
+    for item in selections:
+        if not isinstance(item, dict):
+            return {'ok': False, 'code': 'invalid_selections', 'msg': '统一切换参数格式无效'}
+        repo_id = str(item.get('repo', '')).strip()
+        branch = str(item.get('branch', '')).strip()
+        source = str(item.get('source', 'local')).strip().lower()
+        if repo_id not in ('client', 'excel') or repo_id in seen:
+            return {'ok': False, 'code': 'invalid_selections', 'msg': '统一切换必须分别选择客户端和配置表分支'}
+        if not branch or source not in ('local', 'remote'):
+            return {'ok': False, 'code': 'invalid_selections', 'msg': '统一切换包含无效分支'}
+        normalized.append({'repo': repo_id, 'branch': branch, 'source': source})
+        seen.add(repo_id)
+
+    if seen != {'client', 'excel'}:
+        return {'ok': False, 'code': 'invalid_selections', 'msg': '统一切换必须同时包含客户端和配置表'}
+    normalized.sort(key=lambda item: ('client', 'excel').index(item['repo']))
+
+    if not _git_operation_lock.acquire(blocking=False):
+        return {'ok': False, 'code': 'git_busy', 'msg': '另一个 Git 操作正在执行，请稍后重试'}
+    try:
+        items = [
+            git_checkout_branch(
+                item['repo'], item['branch'], item['source'], _lock_held=True
+            )
+            for item in normalized
+        ]
+        ok = all(item.get('ok') for item in items)
+        return {
+            'ok': ok,
+            'code': '' if ok else 'partial_checkout',
+            'msg': '' if ok else '部分仓库分支切换失败，请根据明细处理',
+            'items': items,
         }
     finally:
         _git_operation_lock.release()
@@ -4082,20 +4433,34 @@ def ks_request_json(base_url, token, path, params=None, method='GET', payload=No
         headers=headers,
         method=str(method or 'GET').upper(),
     )
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as response:
-            raw = response.read(8 * 1024 * 1024)
-            content_type = str(response.headers.get('Content-Type') or '')
-    except urllib.error.HTTPError as exc:
+    for attempt in range(3):
         try:
-            detail = exc.read(4096).decode('utf-8', errors='replace')
-        except OSError:
-            detail = ''
-        if exc.code == 401:
-            raise ValueError('KS Token 已失效或无访问权限') from exc
-        raise ValueError(f'KS 接口请求失败（HTTP {exc.code}）：{detail[:240]}') from exc
-    except urllib.error.URLError as exc:
-        raise ValueError(f'无法连接 KS：{exc.reason}') from exc
+            with urllib.request.urlopen(req, timeout=timeout) as response:
+                raw = response.read(8 * 1024 * 1024)
+                content_type = str(response.headers.get('Content-Type') or '')
+            break
+        except urllib.error.HTTPError as exc:
+            try:
+                detail = exc.read(4096).decode('utf-8', errors='replace')
+            except OSError:
+                detail = ''
+            if exc.code == 401:
+                raise ValueError('KS Token 已失效或无访问权限') from exc
+            raise ValueError(f'KS 接口请求失败（HTTP {exc.code}）：{detail[:240]}') from exc
+        except (urllib.error.URLError, OSError) as exc:
+            reason = getattr(exc, 'reason', exc)
+            reason_text = str(reason or '').lower()
+            retryable = isinstance(reason, OSError) or any(
+                marker in reason_text
+                for marker in (
+                    'timed out', 'temporary', 'connection reset',
+                    'connection aborted', 'no such file', 'name or service not known',
+                )
+            )
+            if attempt < 2 and retryable:
+                time.sleep(0.35 * (attempt + 1))
+                continue
+            raise ValueError(f'无法连接 KS：{reason}') from exc
     text = raw.decode('utf-8-sig', errors='replace')
     try:
         data = json.loads(text)
@@ -6971,7 +7336,7 @@ def _kongming_codex_exec_args(cli_path, workdir):
         '-c',
         f'model={json.dumps(KONGMING_MODEL)}',
         '-c',
-        'model_reasoning_effort="low"',
+        f'model_reasoning_effort={json.dumps(KONGMING_REASONING_EFFORT)}',
         '-c',
         f'model_providers.{KONGMING_MODEL_PROVIDER}.name={json.dumps(KONGMING_MODEL_PROVIDER)}',
         '-c',
@@ -7246,6 +7611,7 @@ def run_kongming_chat(owner_id, question, conversation_id=''):
                 KONGMING_JSON_ROOT,
                 context=_kongming_search_context(conversation),
                 index_path=KONGMING_INDEX_FILE,
+                gm_commands_path=DATA_FILE,
             )
         except Exception as exc:
             print(f'[KONGMING] local evidence search failed: {exc}')
@@ -7253,6 +7619,7 @@ def run_kongming_chat(owner_id, question, conversation_id=''):
                 'keywords': [],
                 'table_candidates': [],
                 'client_candidates': [],
+                'gm_command_candidates': [],
                 'message': '本地预检索失败，请进行定向只读检索。',
             }
         search_duration_ms = int((time.time() - evidence_started_at) * 1000)
@@ -7305,6 +7672,7 @@ def run_kongming_chat(owner_id, question, conversation_id=''):
             'model_duration_ms': model_duration_ms,
             'table_candidate_count': len(evidence.get('table_candidates') or []),
             'client_candidate_count': len(evidence.get('client_candidates') or []),
+            'gm_command_candidate_count': len(evidence.get('gm_command_candidates') or []),
             'table_search_source': (evidence.get('table_search') or {}).get('source', 'rg'),
             'index_generation': int((evidence.get('table_search') or {}).get('index_generation') or 0),
             'cache_hit': False,
@@ -7329,6 +7697,7 @@ def run_kongming_chat(owner_id, question, conversation_id=''):
                 'keywords': evidence.get('keywords') or [],
                 'table_candidate_count': len(evidence.get('table_candidates') or []),
                 'client_candidate_count': len(evidence.get('client_candidates') or []),
+                'gm_command_candidate_count': len(evidence.get('gm_command_candidates') or []),
             },
             'bridge': bridge_status,
         }
@@ -7537,6 +7906,14 @@ class GMHandler(SimpleHTTPRequestHandler):
                 if self._require_admin() is None:
                     return
                 self._git_pull_progress(parse_qs(parsed.query))
+            elif path == '/api/config-compare/tables':
+                if self._require_admin() is None:
+                    return
+                self._config_compare_tables()
+            elif path == '/api/config-compare/compare':
+                if self._require_admin() is None:
+                    return
+                self._config_compare_file(parse_qs(parsed.query))
             elif path == '/api/categories':
                 self._list_categories()
             else:
@@ -7622,6 +7999,8 @@ class GMHandler(SimpleHTTPRequestHandler):
             self._git_status_refresh()
         elif path == '/api/git/checkout':
             self._git_checkout()
+        elif path == '/api/git/checkout-unified':
+            self._git_checkout_unified()
         elif path == '/api/git/resolve-excel-pull':
             self._git_resolve_excel_pull()
         elif path == '/api/ls/token-envs':
@@ -8337,6 +8716,13 @@ class GMHandler(SimpleHTTPRequestHandler):
         result = git_checkout_branch(repo_id, branch, source)
         self._send_json(result, status=200 if result.get('ok') else 409)
 
+    def _git_checkout_unified(self):
+        data = self._read_json()
+        if data is None:
+            return
+        result = git_checkout_unified_branch(data.get('selections'))
+        self._send_json(result, status=200 if result.get('ok') else 409)
+
     def _git_resolve_excel_pull(self):
         try:
             job_id = start_git_pull_job(['excel'], resolve_excel=True)
@@ -8344,6 +8730,22 @@ class GMHandler(SimpleHTTPRequestHandler):
             self._send_json({'ok': False, 'code': 'git_busy', 'msg': str(exc)}, status=409)
             return
         self._send_json({'ok': True, 'job_id': job_id, 'state': 'queued'}, status=202)
+
+    # ---------- 配置表版本对比 ----------
+    def _config_compare_tables(self):
+        data = git_config_compare_tables()
+        self._send_json(data, status=200 if data.get('ok') else 409)
+
+    def _config_compare_file(self, params):
+        path = params.get('path', [''])[0]
+        data = git_config_compare_file(path)
+        if data.get('code') == 'not_found':
+            status = 404
+        elif data.get('ok'):
+            status = 200
+        else:
+            status = 400
+        self._send_json(data, status=status)
 
     def _ls_token_envs(self):
         data = self._read_json()

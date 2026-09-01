@@ -389,7 +389,11 @@ def is_kongming_account_command_workflow_request(text):
         '设置', '设为', '改成', '修改', '调整', '升到', '降低', '增加',
         '删除', '开启', '关闭', '解锁', '完成', '重置', '执行',
     )
-    return '#' in source or any(marker in source for marker in action_markers)
+    # A previous workflow may append a validated scope to a follow-up question.
+    # Classify the user's intent before that synthetic context, otherwise the
+    # word "执行" in the scope label can turn a read-only query into a workflow.
+    intent_source = _command_intent_text(source)
+    return '#' in intent_source or any(marker in intent_source for marker in action_markers)
 
 
 def _normalized_command_text(value):

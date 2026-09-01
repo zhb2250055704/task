@@ -1,0 +1,137 @@
+{
+    "designSystems":  [
+                          {
+                              "designSystem":  {
+                                                   "displayName":  "Nexus Operational System",
+                                                   "styleGuidelines":  "## Brand \u0026 Style\n\nThe design system is a high-utility, technical framework designed for Game Management and Operations. It prioritizes information density, operational safety, and clear system feedback over decorative elements. The brand personality is **Technical, Utilitarian, and Reliable**, serving as a \"Mission Control\" for developers and QA engineers.\n\nThe system employs a **Corporate / Modern** aesthetic with **Minimalist** influences to maximize cognitive bandwidth for complex data tasks. It uses a rigorous grid, subtle tonal layering, and highly legible typography to ensure that critical status changes are never missed. Every visual element serves a functional purpose, with intentional \"design friction\" applied to high-risk operations to prevent catastrophic errors in live environments.\n\n## Layout \u0026 Spacing\n\nThe layout is a **Fixed Sidebar + Top Header** structure, designed to provide a persistent frame for global controls. The main content area utilizes a **Fluid Grid** system that prioritizes horizontal space for dense data tables.\n\n- **Grid Model:** 12-column layout on desktop, reflowing to 4-columns or a single column on mobile.\n- **Rhythm:** An 8px (base unit) grid is used for component alignment, with a 4px sub-unit for tight data clusters inside cards and tables.\n- **Responsive Behavior:** \n  - **Desktop (\u003e1200px):** Multi-column card grids and full data tables.\n  - **Tablet (768px - 1199px):** Sidebar collapses to icons; cards stack into two columns.\n  - **Mobile (\u003c767px):** Single column layout. Sidebar becomes a drawer. Horizontal scrolling is permitted for data tables to preserve cell integrity.\n\n## Elevation \u0026 Depth\n\nVisual hierarchy is established through **Tonal Layers** rather than heavy shadows, ensuring the UI feels \"flat\" and efficient.\n\n- **Level 0 (Base):** Deep neutral background (#141414).\n- **Level 1 (Cards/Containers):** Elevated background (#1f1f1f) with a subtle 1px border (#303030).\n- **Level 2 (Popovers/Tooltips):** Slightly lighter tonal shift with a soft ambient shadow (10% opacity) for separation.\n- **Level 3 (Modals):** High-contrast background with a 60% opacity dark mask. \n- **Interactions:** Hover states are indicated by a subtle brightening of the surface color or a 1px primary-colored border.\n\n## Components\n\n- **Data Tables:** Dense layout with fixed headers and 12px typography. Use zebra-striping and 1px horizontal borders. Row hover states must be distinct.\n- **Command Cards:** Compact containers showing title, execution status (Tag), and \"Last Used\" metadata. Buttons are placed in a bottom-aligned toolbar within the card.\n- **Status Tags:** High-contrast background with white text. Green for Online, Red for Offline, and Teal for KS-Executable. Always include an icon for redundant signaling.\n- **Primary Buttons:** Solid blue fill. Use a loading spinner and \"Disabled\" state (reduced opacity) during execution to prevent double-submissions.\n- **Danger Buttons:** Ghost style (red border) by default; solid red only on hover or within confirmation modals.\n- **Input Fields:** Dark background with subtle borders. Labels should be top-aligned for better vertical scanning in dense forms.\n- **Modal Dialogs:** Used for \"high-risk\" confirmations. These must require an explicit interaction (e.g., typing \"CONFIRM\" or a toggle) for destructive game operations.\n- **Progress Indicators:** Linear bars for long-running Git/Sync tasks; circular spinners for instantaneous API polling.",
+                                                   "theme":  {
+                                                                 "bodyFont":  "INTER",
+                                                                 "bodyFontFamily":  "Inter",
+                                                                 "colorMode":  "DARK",
+                                                                 "colorVariant":  "FIDELITY",
+                                                                 "customColor":  "#1890ff",
+                                                                 "designMd":  "---\nname: Nexus Operational System\ncolors:\n  surface: \u0027#121414\u0027\n  surface-dim: \u0027#121414\u0027\n  surface-bright: \u0027#383939\u0027\n  surface-container-lowest: \u0027#0d0e0f\u0027\n  surface-container-low: \u0027#1b1c1c\u0027\n  surface-container: \u0027#1f2020\u0027\n  surface-container-high: \u0027#292a2a\u0027\n  surface-container-highest: \u0027#343535\u0027\n  on-surface: \u0027#e3e2e2\u0027\n  on-surface-variant: \u0027#c0c7d6\u0027\n  inverse-surface: \u0027#e3e2e2\u0027\n  inverse-on-surface: \u0027#2f3031\u0027\n  outline: \u0027#8a919f\u0027\n  outline-variant: \u0027#404753\u0027\n  surface-tint: \u0027#a5c8ff\u0027\n  primary: \u0027#a5c8ff\u0027\n  on-primary: \u0027#00315e\u0027\n  primary-container: \u0027#2492ff\u0027\n  on-primary-container: \u0027#002a53\u0027\n  inverse-primary: \u0027#005fae\u0027\n  secondary: \u0027#d5baff\u0027\n  on-secondary: \u0027#42008a\u0027\n  secondary-container: \u0027#600fc0\u0027\n  on-secondary-container: \u0027#caa9ff\u0027\n  tertiary: \u0027#ffb688\u0027\n  on-tertiary: \u0027#512400\u0027\n  tertiary-container: \u0027#e37103\u0027\n  on-tertiary-container: \u0027#471e00\u0027\n  error: \u0027#f5222d\u0027\n  on-error: \u0027#690005\u0027\n  error-container: \u0027#93000a\u0027\n  on-error-container: \u0027#ffdad6\u0027\n  primary-fixed: \u0027#d4e3ff\u0027\n  primary-fixed-dim: \u0027#a5c8ff\u0027\n  on-primary-fixed: \u0027#001c3a\u0027\n  on-primary-fixed-variant: \u0027#004785\u0027\n  secondary-fixed: \u0027#ecdcff\u0027\n  secondary-fixed-dim: \u0027#d5baff\u0027\n  on-secondary-fixed: \u0027#270057\u0027\n  on-secondary-fixed-variant: \u0027#5e08bd\u0027\n  tertiary-fixed: \u0027#ffdbc7\u0027\n  tertiary-fixed-dim: \u0027#ffb688\u0027\n  on-tertiary-fixed: \u0027#311300\u0027\n  on-tertiary-fixed-variant: \u0027#733600\u0027\n  background: \u0027#121414\u0027\n  on-background: \u0027#e3e2e2\u0027\n  surface-variant: \u0027#343535\u0027\n  success: \u0027#52c41a\u0027\n  warning: \u0027#faad14\u0027\n  background-deep: \u0027#141414\u0027\n  background-elevated: \u0027#1f1f1f\u0027\n  border-subtle: \u0027#303030\u0027\n  ks-executable: \u0027#13c2c2\u0027\ntypography:\n  headline-lg:\n    fontFamily: Inter\n    fontSize: 24px\n    fontWeight: \u0027600\u0027\n    lineHeight: 32px\n  headline-md:\n    fontFamily: Inter\n    fontSize: 20px\n    fontWeight: \u0027600\u0027\n    lineHeight: 28px\n  body-md:\n    fontFamily: Inter\n    fontSize: 14px\n    fontWeight: \u0027400\u0027\n    lineHeight: 22px\n  body-sm:\n    fontFamily: Inter\n    fontSize: 12px\n    fontWeight: \u0027400\u0027\n    lineHeight: 18px\n  code-md:\n    fontFamily: JetBrains Mono\n    fontSize: 13px\n    fontWeight: \u0027400\u0027\n    lineHeight: 20px\n  label-caps:\n    fontFamily: Inter\n    fontSize: 11px\n    fontWeight: \u0027700\u0027\n    lineHeight: 16px\n    letterSpacing: 0.05em\n  headline-lg-mobile:\n    fontFamily: Inter\n    fontSize: 20px\n    fontWeight: \u0027600\u0027\n    lineHeight: 28px\nrounded:\n  sm: 0.125rem\n  DEFAULT: 0.25rem\n  md: 0.375rem\n  lg: 0.5rem\n  xl: 0.75rem\n  full: 9999px\nspacing:\n  unit: 4px\n  gutter: 16px\n  margin-page: 24px\n  sidebar-width: 240px\n  header-height: 56px\n---\n\n## Brand \u0026 Style\n\nThe design system is a high-utility, technical framework designed for Game Management and Operations. It prioritizes information density, operational safety, and clear system feedback over decorative elements. The brand personality is **Technical, Utilitarian, and Reliable**, serving as a \"Mission Control\" for developers and QA engineers.\n\nThe system employs a **Corporate / Modern** aesthetic with **Minimalist** influences to maximize cognitive bandwidth for complex data tasks. It uses a rigorous grid, subtle tonal layering, and highly legible typography to ensure that critical status changes are never missed. Every visual element serves a functional purpose, with intentional \"design friction\" applied to high-risk operations to prevent catastrophic errors in live environments.\n\n## Colors\n\nThe color system is optimized for a high-contrast **Dark Mode** by default to reduce eye strain during long operational sessions, though it maintains a robust **Light Mode** counterpart. \n\n- **Primary (Admin Blue):** Used for primary actions, active navigation states, and focus indicators.\n- **Operational Status:** Success (Green), Warning (Amber), and Error (Red) colors are reserved strictly for system feedback and execution states. They must always be accompanied by text labels or icons for accessibility.\n- **Neutral Scale:** A comprehensive gray scale is used for structural UI—borders, backgrounds, and secondary text—to create a clear visual hierarchy between the interface and the data content.\n- **Special States:** Specific colors are allocated for platform-specific states, such as `ks-executable` for specific API permissions and `secondary` (Purple) for administrative-only features.\n\n## Typography\n\nThe typography system focuses on clarity at small scales to support data density. **Inter** is the primary typeface for its exceptional legibility and neutral character. For technical content—including GM commands, JSON payloads, and Git diffs—**JetBrains Mono** is used to ensure character distinction (e.g., 0 vs O).\n\n- **Headlines:** Used sparingly for page titles and section headers to maintain vertical space.\n- **Body Text:** The standard 14px size is the workhorse of the system. 12px is used for metadata and supplementary info.\n- **Code/Monospace:** Essential for all command inputs and script blocks.\n- **Labels:** Uppercase labels with slight tracking are used for status tags and category headers to provide visual differentiation from body content.\n\n## Layout \u0026 Spacing\n\nThe layout is a **Fixed Sidebar + Top Header** structure, designed to provide a persistent frame for global controls. The main content area utilizes a **Fluid Grid** system that prioritizes horizontal space for dense data tables.\n\n- **Grid Model:** 12-column layout on desktop, reflowing to 4-columns or a single column on mobile.\n- **Rhythm:** An 8px (base unit) grid is used for component alignment, with a 4px sub-unit for tight data clusters inside cards and tables.\n- **Responsive Behavior:** \n  - **Desktop (\u003e1200px):** Multi-column card grids and full data tables.\n  - **Tablet (768px - 1199px):** Sidebar collapses to icons; cards stack into two columns.\n  - **Mobile (\u003c767px):** Single column layout. Sidebar becomes a drawer. Horizontal scrolling is permitted for data tables to preserve cell integrity.\n\n## Elevation \u0026 Depth\n\nVisual hierarchy is established through **Tonal Layers** rather than heavy shadows, ensuring the UI feels \"flat\" and efficient.\n\n- **Level 0 (Base):** Deep neutral background (#141414).\n- **Level 1 (Cards/Containers):** Elevated background (#1f1f1f) with a subtle 1px border (#303030).\n- **Level 2 (Popovers/Tooltips):** Slightly lighter tonal shift with a soft ambient shadow (10% opacity) for separation.\n- **Level 3 (Modals):** High-contrast background with a 60% opacity dark mask. \n- **Interactions:** Hover states are indicated by a subtle brightening of the surface color or a 1px primary-colored border.\n\n## Shapes\n\nThe shape language is **Soft (0.25rem)**, providing a clean, professional look that doesn\u0027t feel overly playful or aggressive. \n\n- **Inputs \u0026 Buttons:** 4px (0.25rem) radius.\n- **Cards \u0026 Modals:** 8px (0.5rem) radius for distinct containment.\n- **Tags/Chips:** Fully rounded (pill) shapes for status indicators to distinguish them from interactive buttons.\n- **Selection:** Selected cards should use a 2px primary border with a subtle inner glow or tonal shift.\n\n## Components\n\n- **Data Tables:** Dense layout with fixed headers and 12px typography. Use zebra-striping and 1px horizontal borders. Row hover states must be distinct.\n- **Command Cards:** Compact containers showing title, execution status (Tag), and \"Last Used\" metadata. Buttons are placed in a bottom-aligned toolbar within the card.\n- **Status Tags:** High-contrast background with white text. Green for Online, Red for Offline, and Teal for KS-Executable. Always include an icon for redundant signaling.\n- **Primary Buttons:** Solid blue fill. Use a loading spinner and \"Disabled\" state (reduced opacity) during execution to prevent double-submissions.\n- **Danger Buttons:** Ghost style (red border) by default; solid red only on hover or within confirmation modals.\n- **Input Fields:** Dark background with subtle borders. Labels should be top-aligned for better vertical scanning in dense forms.\n- **Modal Dialogs:** Used for \"high-risk\" confirmations. These must require an explicit interaction (e.g., typing \"CONFIRM\" or a toggle) for destructive game operations.\n- **Progress Indicators:** Linear bars for long-running Git/Sync tasks; circular spinners for instantaneous API polling.",
+                                                                 "font":  "INTER",
+                                                                 "headlineFont":  "INTER",
+                                                                 "headlineFontFamily":  "Inter",
+                                                                 "labelFont":  "JETBRAINS_MONO",
+                                                                 "labelFontFamily":  "Jetbrains Mono",
+                                                                 "namedColors":  {
+                                                                                     "background":  "#121414",
+                                                                                     "background-deep":  "#141414",
+                                                                                     "background-elevated":  "#1f1f1f",
+                                                                                     "border-subtle":  "#303030",
+                                                                                     "error":  "#f5222d",
+                                                                                     "error_container":  "#93000a",
+                                                                                     "inverse_on_surface":  "#2f3031",
+                                                                                     "inverse_primary":  "#005fae",
+                                                                                     "inverse_surface":  "#e3e2e2",
+                                                                                     "ks-executable":  "#13c2c2",
+                                                                                     "on_background":  "#e3e2e2",
+                                                                                     "on_error":  "#690005",
+                                                                                     "on_error_container":  "#ffdad6",
+                                                                                     "on_primary":  "#00315e",
+                                                                                     "on_primary_container":  "#002a53",
+                                                                                     "on_primary_fixed":  "#001c3a",
+                                                                                     "on_primary_fixed_variant":  "#004785",
+                                                                                     "on_secondary":  "#42008a",
+                                                                                     "on_secondary_container":  "#caa9ff",
+                                                                                     "on_secondary_fixed":  "#270057",
+                                                                                     "on_secondary_fixed_variant":  "#5e08bd",
+                                                                                     "on_surface":  "#e3e2e2",
+                                                                                     "on_surface_variant":  "#c0c7d6",
+                                                                                     "on_tertiary":  "#512400",
+                                                                                     "on_tertiary_container":  "#471e00",
+                                                                                     "on_tertiary_fixed":  "#311300",
+                                                                                     "on_tertiary_fixed_variant":  "#733600",
+                                                                                     "outline":  "#8a919f",
+                                                                                     "outline_variant":  "#404753",
+                                                                                     "primary":  "#a5c8ff",
+                                                                                     "primary_container":  "#2492ff",
+                                                                                     "primary_fixed":  "#d4e3ff",
+                                                                                     "primary_fixed_dim":  "#a5c8ff",
+                                                                                     "secondary":  "#d5baff",
+                                                                                     "secondary_container":  "#600fc0",
+                                                                                     "secondary_fixed":  "#ecdcff",
+                                                                                     "secondary_fixed_dim":  "#d5baff",
+                                                                                     "success":  "#52c41a",
+                                                                                     "surface":  "#121414",
+                                                                                     "surface_bright":  "#383939",
+                                                                                     "surface_container":  "#1f2020",
+                                                                                     "surface_container_high":  "#292a2a",
+                                                                                     "surface_container_highest":  "#343535",
+                                                                                     "surface_container_low":  "#1b1c1c",
+                                                                                     "surface_container_lowest":  "#0d0e0f",
+                                                                                     "surface_dim":  "#121414",
+                                                                                     "surface_tint":  "#a5c8ff",
+                                                                                     "surface_variant":  "#343535",
+                                                                                     "tertiary":  "#ffb688",
+                                                                                     "tertiary_container":  "#e37103",
+                                                                                     "tertiary_fixed":  "#ffdbc7",
+                                                                                     "tertiary_fixed_dim":  "#ffb688",
+                                                                                     "warning":  "#faad14"
+                                                                                 },
+                                                                 "overrideNeutralColor":  "#8c8c8c",
+                                                                 "overridePrimaryColor":  "#1890ff",
+                                                                 "overrideSecondaryColor":  "#722ed1",
+                                                                 "roundness":  "ROUND_FOUR",
+                                                                 "spacing":  {
+                                                                                 "gutter":  "16px",
+                                                                                 "header-height":  "56px",
+                                                                                 "margin-page":  "24px",
+                                                                                 "sidebar-width":  "240px",
+                                                                                 "unit":  "4px"
+                                                                             },
+                                                                 "spacingScale":  2,
+                                                                 "typography":  {
+                                                                                    "body-md":  {
+                                                                                                    "fontFamily":  "Inter",
+                                                                                                    "fontSize":  "14px",
+                                                                                                    "fontWeight":  "400",
+                                                                                                    "lineHeight":  "22px"
+                                                                                                },
+                                                                                    "body-sm":  {
+                                                                                                    "fontFamily":  "Inter",
+                                                                                                    "fontSize":  "12px",
+                                                                                                    "fontWeight":  "400",
+                                                                                                    "lineHeight":  "18px"
+                                                                                                },
+                                                                                    "code-md":  {
+                                                                                                    "fontFamily":  "JetBrains Mono",
+                                                                                                    "fontSize":  "13px",
+                                                                                                    "fontWeight":  "400",
+                                                                                                    "lineHeight":  "20px"
+                                                                                                },
+                                                                                    "headline-lg":  {
+                                                                                                        "fontFamily":  "Inter",
+                                                                                                        "fontSize":  "24px",
+                                                                                                        "fontWeight":  "600",
+                                                                                                        "lineHeight":  "32px"
+                                                                                                    },
+                                                                                    "headline-lg-mobile":  {
+                                                                                                               "fontFamily":  "Inter",
+                                                                                                               "fontSize":  "20px",
+                                                                                                               "fontWeight":  "600",
+                                                                                                               "lineHeight":  "28px"
+                                                                                                           },
+                                                                                    "headline-md":  {
+                                                                                                        "fontFamily":  "Inter",
+                                                                                                        "fontSize":  "20px",
+                                                                                                        "fontWeight":  "600",
+                                                                                                        "lineHeight":  "28px"
+                                                                                                    },
+                                                                                    "label-caps":  {
+                                                                                                       "fontFamily":  "Inter",
+                                                                                                       "fontSize":  "11px",
+                                                                                                       "fontWeight":  "700",
+                                                                                                       "letterSpacing":  "0.05em",
+                                                                                                       "lineHeight":  "16px"
+                                                                                                   }
+                                                                                }
+                                                             }
+                                               },
+                              "name":  "assets/863a0236eb3944dcb10c86453514fb22",
+                              "version":  "1"
+                          }
+                      ]
+}

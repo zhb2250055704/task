@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>QA Design - Mission Control</title>
+<!-- Material Symbols -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Google Fonts -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&amp;family=JetBrains+Mono:wght@400;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Tailwind Config -->
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-tertiary-fixed-variant": "#733600",
+                        "surface-container-highest": "#343535",
+                        "on-primary-fixed": "#001c3a",
+                        "success": "#52c41a",
+                        "background": "#121414",
+                        "primary-fixed": "#d4e3ff",
+                        "surface": "#121414",
+                        "on-surface": "#e3e2e2",
+                        "error": "#f5222d",
+                        "background-deep": "#141414",
+                        "on-primary-fixed-variant": "#004785",
+                        "inverse-surface": "#e3e2e2",
+                        "on-secondary-container": "#caa9ff",
+                        "secondary-container": "#600fc0",
+                        "primary-fixed-dim": "#a5c8ff",
+                        "surface-dim": "#121414",
+                        "background-elevated": "#1f1f1f",
+                        "primary-container": "#2492ff",
+                        "on-primary-container": "#002a53",
+                        "on-tertiary": "#512400",
+                        "surface-container-lowest": "#0d0e0f",
+                        "surface-container": "#1f2020",
+                        "surface-bright": "#383939",
+                        "on-tertiary-fixed": "#311300",
+                        "inverse-on-surface": "#2f3031",
+                        "tertiary-fixed": "#ffdbc7",
+                        "tertiary-container": "#e37103",
+                        "on-tertiary-container": "#471e00",
+                        "surface-variant": "#343535",
+                        "secondary-fixed": "#ecdcff",
+                        "on-error": "#690005",
+                        "on-surface-variant": "#c0c7d6",
+                        "inverse-primary": "#005fae",
+                        "warning": "#faad14",
+                        "primary": "#a5c8ff",
+                        "secondary-fixed-dim": "#d5baff",
+                        "surface-container-low": "#1b1c1c",
+                        "on-background": "#e3e2e2",
+                        "secondary": "#d5baff",
+                        "on-secondary-fixed": "#270057",
+                        "on-primary": "#00315e",
+                        "tertiary": "#ffb688",
+                        "tertiary-fixed-dim": "#ffb688",
+                        "surface-tint": "#a5c8ff",
+                        "outline": "#8a919f",
+                        "outline-variant": "#404753",
+                        "on-secondary": "#42008a",
+                        "border-subtle": "#303030",
+                        "surface-container-high": "#292a2a",
+                        "ks-executable": "#13c2c2",
+                        "error-container": "#93000a",
+                        "on-error-container": "#ffdad6",
+                        "on-secondary-fixed-variant": "#5e08bd"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "unit": "4px",
+                        "header-height": "56px",
+                        "gutter": "16px",
+                        "margin-page": "24px",
+                        "sidebar-width": "240px"
+                    },
+                    "fontFamily": {
+                        "headline-lg-mobile": ["Inter"],
+                        "headline-md": ["Inter"],
+                        "headline-lg": ["Inter"],
+                        "body-md": ["Inter"],
+                        "code-md": ["JetBrains Mono"],
+                        "label-caps": ["Inter"],
+                        "body-sm": ["Inter"]
+                    },
+                    "fontSize": {
+                        "headline-lg-mobile": ["20px", { "lineHeight": "28px", "fontWeight": "600" }],
+                        "headline-md": ["20px", { "lineHeight": "28px", "fontWeight": "600" }],
+                        "headline-lg": ["24px", { "lineHeight": "32px", "fontWeight": "600" }],
+                        "body-md": ["14px", { "lineHeight": "22px", "fontWeight": "400" }],
+                        "code-md": ["13px", { "lineHeight": "20px", "fontWeight": "400" }],
+                        "label-caps": ["11px", { "lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "700" }],
+                        "body-sm": ["12px", { "lineHeight": "18px", "fontWeight": "400" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        body { background-color: #121414; color: #e3e2e2; }
+        .drag-active { border-color: #a5c8ff !important; background-color: rgba(165, 200, 255, 0.05) !important; }
+        
+        /* Markdown Preview Styles */
+        .prose h1 { color: #e3e2e2; font-size: 20px; font-weight: 600; margin-top: 24px; margin-bottom: 16px; border-bottom: 1px solid #303030; padding-bottom: 8px;}
+        .prose h2 { color: #a5c8ff; font-size: 16px; font-weight: 600; margin-top: 20px; margin-bottom: 12px; }
+        .prose p { margin-bottom: 12px; line-height: 1.6; color: #c0c7d6; font-size: 14px;}
+        .prose ul { list-style-type: disc; padding-left: 24px; margin-bottom: 16px; color: #c0c7d6; font-size: 14px;}
+        .prose li { margin-bottom: 4px; }
+        .prose code { background-color: #1b1c1c; padding: 2px 6px; border-radius: 2px; font-family: 'JetBrains Mono', monospace; font-size: 13px; color: #ffb688; border: 1px solid #303030;}
+        .prose pre code { display: block; padding: 12px; overflow-x: auto; color: #e3e2e2; background: transparent; border: none;}
+        .prose pre { background-color: #0d0e0f; border: 1px solid #303030; border-radius: 4px; margin-bottom: 16px; overflow: hidden;}
+        .prose table { w-full; text-left; border-collapse: collapse; margin-bottom: 16px; font-size: 13px;}
+        .prose th { border-bottom: 1px solid #303030; padding: 8px; font-weight: 600; color: #e3e2e2; background-color: #1b1c1c;}
+        .prose td { border-bottom: 1px solid #303030; padding: 8px; color: #c0c7d6;}
+        
+        /* Custom scrollbar */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #121414; }
+        ::-webkit-scrollbar-thumb { background: #343535; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #404753; }
+    </style>
+</head>
+<body class="antialiased min-h-screen flex selection:bg-primary selection:text-on-primary">
+<!-- SideNavBar -->
+<nav class="docked left-0 h-full w-sidebar-width bg-surface-container-low dark:bg-surface-container-low border-r border-border-subtle fixed left-0 top-0 bottom-0 z-50 flex flex-col hidden md:flex">
+<!-- Header -->
+<div class="p-gutter border-b border-border-subtle flex items-center gap-3">
+<div class="w-8 h-8 rounded bg-primary-container flex items-center justify-center shrink-0">
+<img alt="User profile" class="w-full h-full object-cover rounded opacity-80" data-alt="A highly detailed, modern isometric 3D render of a futuristic gaming console or server core. The core glows with intense neon blue and teal lights against a matte dark grey metallic casing. The lighting is dramatic and cinematic, highlighting technical details and vents. Studio lighting, dark background, technical aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBHEIY7kAGWdts_9FRL8uAHQJTz2QbnBrnUUR8k_JE7ACUXItGnGRPwXleawJwUgmJP0oO9Bt2scYayoqU_NBse6f-sNhOOQER7v0I5-8jGp4eppa_zPrV1x2qJq2vRCww21C03iOxGpB3hFNGx60bwr9KFD4KAxJrzOhAnqWKGLgSBsD6waNfuSOiz4dKkZJwPZKHp53sp-vPdzrCk-Ez-h0Iqg7r1OBz0CyD1K5C5UXrYeY5ORq_ByvarjMJYbPa-p482RsDRjzk"/>
+</div>
+<div class="flex-1 min-w-0">
+<div class="font-headline-md text-headline-md font-bold text-primary truncate">GameOps Engine</div>
+<div class="font-code-md text-code-md text-on-surface-variant truncate">v2.4.0-stable</div>
+</div>
+</div>
+<!-- Main Nav -->
+<div class="flex-1 overflow-y-auto py-4 flex flex-col gap-1 px-2">
+<a class="flex items-center gap-3 px-3 py-2 rounded-DEFAULT text-on-surface-variant hover:bg-surface-container-high transition-colors font-body-md text-body-md group" href="#">
+<span class="material-symbols-outlined text-[20px] group-hover:text-primary transition-colors">terminal</span>
+<span>Command</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-DEFAULT text-on-surface-variant hover:bg-surface-container-high transition-colors font-body-md text-body-md group" href="#">
+<span class="material-symbols-outlined text-[20px] group-hover:text-primary transition-colors">code</span>
+<span>Script</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-DEFAULT bg-secondary-container text-on-secondary-container font-bold border-r-2 border-primary font-body-md text-body-md opacity-80 duration-100" href="#">
+<span class="material-symbols-outlined text-[20px]">bug_report</span>
+<span>QA Design</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-DEFAULT text-on-surface-variant hover:bg-surface-container-high transition-colors font-body-md text-body-md group" href="#">
+<span class="material-symbols-outlined text-[20px] group-hover:text-primary transition-colors">bolt</span>
+<span>Skill</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-DEFAULT text-on-surface-variant hover:bg-surface-container-high transition-colors font-body-md text-body-md group" href="#">
+<span class="material-symbols-outlined text-[20px] group-hover:text-primary transition-colors">functions</span>
+<span>Formula</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-DEFAULT text-on-surface-variant hover:bg-surface-container-high transition-colors font-body-md text-body-md group" href="#">
+<span class="material-symbols-outlined text-[20px] group-hover:text-primary transition-colors">inventory_2</span>
+<span>Items</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-DEFAULT text-on-surface-variant hover:bg-surface-container-high transition-colors font-body-md text-body-md group" href="#">
+<span class="material-symbols-outlined text-[20px] group-hover:text-primary transition-colors">account_tree</span>
+<span>Git</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-DEFAULT text-on-surface-variant hover:bg-surface-container-high transition-colors font-body-md text-body-md group" href="#">
+<span class="material-symbols-outlined text-[20px] group-hover:text-primary transition-colors">sync</span>
+<span>KS Sync</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-DEFAULT text-on-surface-variant hover:bg-surface-container-high transition-colors font-body-md text-body-md group" href="#">
+<span class="material-symbols-outlined text-[20px] group-hover:text-primary transition-colors">group</span>
+<span>User Mgmt</span>
+</a>
+</div>
+<!-- CTA & Footer -->
+<div class="p-gutter border-t border-border-subtle flex flex-col gap-4">
+<button class="w-full bg-primary-container text-on-primary-container hover:bg-primary font-body-md text-body-md font-bold py-2 px-4 rounded-DEFAULT transition-colors flex items-center justify-center gap-2">
+<span class="material-symbols-outlined text-[18px]">rocket_launch</span>
+                Launch Console
+            </button>
+<div class="flex flex-col gap-1">
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-DEFAULT text-on-surface-variant hover:bg-surface-container-highest transition-colors font-body-sm text-body-sm" href="#">
+<span class="material-symbols-outlined text-[18px]">settings</span>
+<span>Settings</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-1.5 rounded-DEFAULT text-on-surface-variant hover:bg-surface-container-highest transition-colors font-body-sm text-body-sm" href="#">
+<span class="material-symbols-outlined text-[18px]">help</span>
+<span>Support</span>
+</a>
+</div>
+</div>
+</nav>
+<!-- Main Content Wrapper -->
+<div class="flex-1 flex flex-col md:ml-sidebar-width min-h-screen relative">
+<!-- TopNavBar -->
+<header class="docked top-0 full-width h-header-height bg-surface-container dark:bg-surface-container border-b border-border-subtle fixed top-0 right-0 left-sidebar-width z-40 flex justify-between items-center px-gutter">
+<!-- Left: Brand / Title -->
+<div class="flex items-center gap-4">
+<div class="font-headline-md text-headline-md font-bold text-on-surface">Mission Control</div>
+<div class="h-6 w-px bg-border-subtle mx-2 hidden sm:block"></div>
+<div class="hidden sm:flex items-center text-on-surface-variant">
+<span class="material-symbols-outlined mr-2">bug_report</span>
+<span class="font-body-md text-body-md">QA Design Generator</span>
+</div>
+</div>
+<!-- Right: Actions -->
+<div class="flex items-center gap-2">
+<button class="w-8 h-8 flex items-center justify-center rounded-DEFAULT text-on-surface-variant hover:text-primary hover:bg-surface-container-highest transition-colors" title="zoom_in">
+<span class="material-symbols-outlined text-[20px]">zoom_in</span>
+</button>
+<button class="w-8 h-8 flex items-center justify-center rounded-DEFAULT text-on-surface-variant hover:text-primary hover:bg-surface-container-highest transition-colors" title="zoom_out">
+<span class="material-symbols-outlined text-[20px]">zoom_out</span>
+</button>
+<button class="w-8 h-8 flex items-center justify-center rounded-DEFAULT text-on-surface-variant hover:text-primary hover:bg-surface-container-highest transition-colors" title="dark_mode">
+<span class="material-symbols-outlined text-[20px]">dark_mode</span>
+</button>
+<button class="w-8 h-8 flex items-center justify-center rounded-DEFAULT text-on-surface-variant hover:text-primary hover:bg-surface-container-highest transition-colors relative" title="notifications">
+<span class="material-symbols-outlined text-[20px]">notifications</span>
+<span class="absolute top-1 right-1 w-2 h-2 bg-error rounded-full"></span>
+</button>
+<div class="h-6 w-px bg-border-subtle mx-2"></div>
+<button class="hidden lg:flex items-center justify-center px-3 py-1.5 border border-border-subtle rounded-DEFAULT text-on-surface hover:border-primary hover:text-primary transition-colors font-body-sm text-body-sm font-semibold">
+                    Admin Console
+                </button>
+<button class="flex items-center justify-center px-4 py-1.5 bg-primary text-on-primary rounded-DEFAULT hover:bg-primary-fixed transition-colors font-body-sm text-body-sm font-bold shadow-[0_0_10px_rgba(165,200,255,0.2)]">
+<span class="material-symbols-outlined text-[16px] mr-1" data-weight="fill" style="font-variation-settings: 'FILL' 1;">play_arrow</span>
+                    Execute
+                </button>
+</div>
+</header>
+<!-- Canvas -->
+<main class="flex-1 pt-header-height pb-8 px-gutter md:px-margin-page overflow-x-hidden flex flex-col gap-6 w-full max-w-[1600px] mx-auto mt-6">
+<div class="flex flex-col lg:flex-row gap-6 items-start w-full">
+<!-- Left Column: Configuration & Inputs (Bento Grid Style) -->
+<div class="w-full lg:w-5/12 flex flex-col gap-6">
+<!-- Requirement Config Card -->
+<div class="bg-background-elevated border border-border-subtle rounded-xl p-5 flex flex-col gap-5 relative overflow-hidden group">
+<!-- Decorative subtle gradient -->
+<div class="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none"></div>
+<div class="flex items-center gap-2 border-b border-border-subtle pb-3">
+<span class="material-symbols-outlined text-primary text-[20px]">tune</span>
+<h2 class="font-headline-md text-headline-md text-on-surface m-0">Requirement Config</h2>
+</div>
+<div class="flex flex-col gap-4">
+<!-- Engine Switch -->
+<div class="flex items-center justify-between bg-surface-container-low p-1 rounded-lg border border-border-subtle">
+<button class="flex-1 py-1.5 px-3 rounded-DEFAULT bg-surface-variant text-on-surface font-body-sm text-body-sm font-semibold flex items-center justify-center gap-2 border border-border-subtle shadow-sm">
+<span class="material-symbols-outlined text-[16px] text-ks-executable">memory</span>
+                                    Local Qwen3
+                                </button>
+<button class="flex-1 py-1.5 px-3 rounded-DEFAULT text-on-surface-variant hover:text-on-surface font-body-sm text-body-sm flex items-center justify-center gap-2 transition-colors">
+<span class="material-symbols-outlined text-[16px]">cloud</span>
+                                    Codex Cloud
+                                </button>
+</div>
+<div class="space-y-1">
+<label class="font-label-caps text-label-caps text-on-surface-variant block uppercase">Requirement Title</label>
+<input class="w-full bg-surface-container-low border border-border-subtle rounded-DEFAULT px-3 py-2 text-on-surface font-body-md text-body-md focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all placeholder-on-surface-variant/50" placeholder="e.g. Guild War Matchmaking" type="text" value="Combat System Revision v1.2"/>
+</div>
+<div class="grid grid-cols-2 gap-4">
+<div class="space-y-1">
+<label class="font-label-caps text-label-caps text-on-surface-variant block uppercase">Domain</label>
+<div class="relative">
+<select class="w-full bg-surface-container-low border border-border-subtle rounded-DEFAULT px-3 py-2 text-on-surface font-body-md text-body-md focus:border-primary focus:ring-1 focus:ring-primary outline-none appearance-none transition-all">
+<option>Core Gameplay</option>
+<option selected="">Combat Mechanics</option>
+<option>Economy &amp; Meta</option>
+<option>UI / UX Flow</option>
+</select>
+<span class="material-symbols-outlined absolute right-2 top-2 text-on-surface-variant pointer-events-none">arrow_drop_down</span>
+</div>
+</div>
+<div class="space-y-1">
+<label class="font-label-caps text-label-caps text-on-surface-variant block uppercase">Depth</label>
+<div class="relative">
+<select class="w-full bg-surface-container-low border border-border-subtle rounded-DEFAULT px-3 py-2 text-on-surface font-body-md text-body-md focus:border-primary focus:ring-1 focus:ring-primary outline-none appearance-none transition-all">
+<option>High-Level (Smoke)</option>
+<option selected="">Standard Coverage</option>
+<option>Exhaustive (Edge Cases)</option>
+</select>
+<span class="material-symbols-outlined absolute right-2 top-2 text-on-surface-variant pointer-events-none">arrow_drop_down</span>
+</div>
+</div>
+</div>
+<div class="space-y-2 pt-2">
+<label class="font-label-caps text-label-caps text-on-surface-variant block uppercase">Delivery Mode</label>
+<div class="flex gap-2">
+<label class="flex-1 cursor-pointer">
+<input checked="" class="peer sr-only" name="delivery" type="radio"/>
+<div class="border border-primary bg-primary/10 rounded-DEFAULT p-2 text-center peer-checked:bg-primary-container peer-checked:text-on-primary-container peer-checked:border-primary peer-checked:font-bold transition-all flex flex-col items-center justify-center gap-1 h-16">
+<span class="material-symbols-outlined text-[18px]">description</span>
+<span class="font-label-caps text-label-caps leading-tight">Complete Design</span>
+</div>
+</label>
+<label class="flex-1 cursor-pointer">
+<input class="peer sr-only" name="delivery" type="radio"/>
+<div class="border border-border-subtle bg-surface-container-low rounded-DEFAULT p-2 text-center text-on-surface-variant peer-checked:bg-primary-container peer-checked:text-on-primary-container peer-checked:border-primary peer-checked:font-bold hover:border-outline transition-all flex flex-col items-center justify-center gap-1 h-16">
+<span class="material-symbols-outlined text-[18px]">checklist</span>
+<span class="font-label-caps text-label-caps leading-tight">Test Points Only</span>
+</div>
+</label>
+<label class="flex-1 cursor-pointer">
+<input class="peer sr-only" name="delivery" type="radio"/>
+<div class="border border-border-subtle bg-surface-container-low rounded-DEFAULT p-2 text-center text-on-surface-variant peer-checked:bg-primary-container peer-checked:text-on-primary-container peer-checked:border-primary peer-checked:font-bold hover:border-outline transition-all flex flex-col items-center justify-center gap-1 h-16">
+<span class="material-symbols-outlined text-[18px]">automation</span>
+<span class="font-label-caps text-label-caps leading-tight">Gherkin BDD</span>
+</div>
+</label>
+</div>
+</div>
+</div>
+</div>
+<!-- File Upload Card -->
+<div class="bg-background-elevated border border-border-subtle rounded-xl p-5 flex flex-col gap-4">
+<div class="flex items-center gap-2 border-b border-border-subtle pb-3">
+<span class="material-symbols-outlined text-secondary text-[20px]">upload_file</span>
+<h2 class="font-headline-md text-headline-md text-on-surface m-0">Reference Documents</h2>
+</div>
+<div class="border-2 border-dashed border-border-subtle rounded-lg bg-surface-container-low p-6 flex flex-col items-center justify-center gap-3 transition-colors hover:border-outline hover:bg-surface-container cursor-pointer min-h-[140px]" id="dropzone">
+<span class="material-symbols-outlined text-4xl text-on-surface-variant opacity-50">note_add</span>
+<div class="text-center">
+<p class="font-body-md text-body-md text-on-surface font-semibold mb-1">Drag and drop PRD files here</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Supports PDF, Word (.docx), Excel (.xlsx) up to 10MB</p>
+</div>
+<button class="mt-2 px-4 py-1.5 bg-surface-container-highest border border-border-subtle rounded-DEFAULT text-on-surface font-body-sm text-body-sm hover:bg-surface-bright transition-colors">
+                                Browse Files
+                            </button>
+</div>
+<!-- Uploaded List (Mock) -->
+<div class="flex flex-col gap-2">
+<div class="flex items-center justify-between p-2 rounded-DEFAULT bg-surface-container-low border border-border-subtle">
+<div class="flex items-center gap-2 overflow-hidden">
+<span class="material-symbols-outlined text-error text-[18px] shrink-0">picture_as_pdf</span>
+<span class="font-body-sm text-body-sm text-on-surface truncate">Combat_Design_Doc_v1.2.pdf</span>
+</div>
+<div class="flex items-center gap-2 shrink-0">
+<span class="font-code-md text-code-md text-on-surface-variant text-[11px]">2.4 MB</span>
+<button class="text-on-surface-variant hover:text-error transition-colors">
+<span class="material-symbols-outlined text-[16px]">close</span>
+</button>
+</div>
+</div>
+<div class="flex items-center justify-between p-2 rounded-DEFAULT bg-surface-container-low border border-border-subtle">
+<div class="flex items-center gap-2 overflow-hidden">
+<span class="material-symbols-outlined text-success text-[18px] shrink-0">table</span>
+<span class="font-body-sm text-body-sm text-on-surface truncate">Damage_Scaling_Tables.xlsx</span>
+</div>
+<div class="flex items-center gap-2 shrink-0">
+<span class="font-code-md text-code-md text-on-surface-variant text-[11px]">156 KB</span>
+<button class="text-on-surface-variant hover:text-error transition-colors">
+<span class="material-symbols-outlined text-[16px]">close</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Action Bar -->
+<button class="w-full flex items-center justify-center gap-2 px-4 py-3 bg-primary-container text-on-primary-container rounded-lg hover:bg-primary transition-colors font-body-md text-body-md font-bold shadow-lg shadow-primary/10 border border-primary/20 group">
+<span class="material-symbols-outlined group-hover:scale-110 transition-transform">model_training</span>
+                        Generate QA Design
+                    </button>
+</div>
+<!-- Right Column: Results Area -->
+<div class="w-full lg:w-7/12 bg-background-elevated border border-border-subtle rounded-xl flex flex-col h-full min-h-[600px] lg:sticky lg:top-[80px]">
+<!-- Toolbar -->
+<div class="flex items-center justify-between p-3 border-b border-border-subtle bg-surface-container-low rounded-t-xl">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-success text-[20px]">check_circle</span>
+<span class="font-headline-md text-[16px] font-bold text-on-surface">Generation Result</span>
+<span class="bg-surface-container-high border border-border-subtle px-2 py-0.5 rounded font-code-md text-[11px] text-on-surface-variant flex items-center gap-1">
+<span class="w-1.5 h-1.5 rounded-full bg-success"></span>
+                                Completed in 4.2s
+                            </span>
+</div>
+<div class="flex items-center gap-2">
+<button class="p-1.5 text-on-surface-variant hover:text-primary hover:bg-surface-container-highest rounded transition-colors flex items-center gap-1 group" title="Copy Markdown">
+<span class="material-symbols-outlined text-[18px]">content_copy</span>
+<span class="font-label-caps text-label-caps hidden sm:block opacity-0 group-hover:opacity-100 transition-opacity">Copy</span>
+</button>
+<button class="p-1.5 text-on-surface-variant hover:text-primary hover:bg-surface-container-highest rounded transition-colors flex items-center gap-1 group" title="Download as File">
+<span class="material-symbols-outlined text-[18px]">download</span>
+<span class="font-label-caps text-label-caps hidden sm:block opacity-0 group-hover:opacity-100 transition-opacity">Save</span>
+</button>
+<div class="h-4 w-px bg-border-subtle mx-1"></div>
+<button class="p-1.5 text-on-surface-variant hover:text-primary hover:bg-surface-container-highest rounded transition-colors" title="Expand View">
+<span class="material-symbols-outlined text-[18px]">open_in_full</span>
+</button>
+</div>
+</div>
+<!-- Markdown Content -->
+<div class="p-6 overflow-y-auto flex-1 prose prose-invert max-w-none bg-surface-dim rounded-b-xl relative">
+<!-- Watermark/Background hint -->
+<div class="absolute inset-0 flex items-center justify-center pointer-events-none opacity-5">
+<span class="material-symbols-outlined text-[200px]">bug_report</span>
+</div>
+<div class="relative z-10">
+<h1>Test Design: Combat System Revision v1.2</h1>
+<p>This document outlines the test cases generated based on <code>Combat_Design_Doc_v1.2.pdf</code> and <code>Damage_Scaling_Tables.xlsx</code>. The focus is on standard coverage for core combat mechanics.</p>
+<h2>1. Feature Overview</h2>
+<p>The revised combat system introduces dynamic damage scaling based on character agility vs. enemy armor rating, and a new "stagger" state triggered by consecutive heavy attacks.</p>
+<h2>2. Pre-conditions</h2>
+<ul>
+<li>Test environment must be running game server version &gt;= 2.4.0.</li>
+<li>Test accounts equipped with baseline gear sets (ID: 4001, 4002).</li>
+<li>Combat logging must be enabled (<code>/cmd combat_log 1</code>).</li>
+</ul>
+<h2>3. Test Case Matrix</h2>
+<table>
+<thead>
+<tr>
+<th>TC ID</th>
+<th>Scenario Description</th>
+<th>Expected Result</th>
+<th>Priority</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>TC-COM-001</td>
+<td>Basic Light Attack on unarmored target</td>
+<td>Base damage applied, no scaling penalty.</td>
+<td><span style="color:#faad14;">High</span></td>
+</tr>
+<tr>
+<td>TC-COM-002</td>
+<td>Heavy Attack (x3) sequence</td>
+<td>Target enters "Staggered" state for 2.5s.</td>
+<td><span style="color:#f5222d;">Critical</span></td>
+</tr>
+<tr>
+<td>TC-COM-003</td>
+<td>Agility Scaling: Low Agi vs High Armor</td>
+<td>Damage reduced by calculated scaling factor (approx 45%).</td>
+<td><span style="color:#faad14;">High</span></td>
+</tr>
+<tr>
+<td>TC-COM-004</td>
+<td>Stagger interrupt via consumable use</td>
+<td>Consumable use fails, stagger duration unaffected.</td>
+<td><span style="color:#a5c8ff;">Medium</span></td>
+</tr>
+</tbody>
+</table>
+<h2>4. Automated Script (Draft)</h2>
+<p>Draft API sequence for triggering the sequence programmatically:</p>
+<pre><code>// Invoke combat simulator macro
+const player = Engine.SpawnEntity('player', { agi: 15, str: 20 });
+const enemy = Engine.SpawnEntity('mob_golem', { armor: 150 });
+
+// Execute heavy attack chain
+await player.executeAction('attack_heavy', enemy);
+await System.wait(800); // gcd
+await player.executeAction('attack_heavy', enemy);
+await System.wait(800);
+await player.executeAction('attack_heavy', enemy);
+
+// Assert state
+Assert.isTrue(enemy.hasState('staggered'));
+Assert.equal(enemy.getStateDuration('staggered'), 2500);</code></pre>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- Footer -->
+<footer class="docked bottom-0 full-width h-8 bg-surface-container-lowest dark:bg-surface-container-lowest border-t border-border-subtle fixed bottom-0 right-0 left-sidebar-width z-40 flex justify-between items-center px-gutter bg-opacity-90 backdrop-blur-sm">
+<div class="font-label-caps text-label-caps text-on-surface-variant">
+                Cocos WebSocket: Connected | Env: Production-A
+            </div>
+<div class="flex items-center gap-4">
+<a class="font-code-md text-code-md text-on-surface-variant hover:text-on-surface Transition-opacity duration-200" href="#">System Logs</a>
+<a class="font-code-md text-code-md text-on-surface-variant hover:text-on-surface Transition-opacity duration-200" href="#">Network Status</a>
+<a class="font-code-md text-code-md text-on-surface-variant hover:text-on-surface Transition-opacity duration-200" href="#">API Docs</a>
+</div>
+</footer>
+</div>
+<!-- Drag and Drop interaction script -->
+<script>
+        const dropzone = document.getElementById('dropzone');
+        
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropzone.addEventListener(eventName, preventDefaults, false);
+        });
+
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropzone.addEventListener(eventName, highlight, false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropzone.addEventListener(eventName, unhighlight, false);
+        });
+
+        function highlight(e) {
+            dropzone.classList.add('drag-active');
+        }
+
+        function unhighlight(e) {
+            dropzone.classList.remove('drag-active');
+        }
+    </script>
+</body></html>

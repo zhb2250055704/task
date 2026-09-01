@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Login - Mission Control</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&amp;family=JetBrains+Mono:wght@400&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-tertiary-fixed-variant": "#733600",
+                        "surface-container-highest": "#343535",
+                        "on-primary-fixed": "#001c3a",
+                        "success": "#52c41a",
+                        "background": "#121414",
+                        "primary-fixed": "#d4e3ff",
+                        "surface": "#121414",
+                        "on-surface": "#e3e2e2",
+                        "error": "#f5222d",
+                        "background-deep": "#141414",
+                        "on-primary-fixed-variant": "#004785",
+                        "inverse-surface": "#e3e2e2",
+                        "on-secondary-container": "#caa9ff",
+                        "secondary-container": "#600fc0",
+                        "primary-fixed-dim": "#a5c8ff",
+                        "surface-dim": "#121414",
+                        "background-elevated": "#1f1f1f",
+                        "primary-container": "#2492ff",
+                        "on-primary-container": "#002a53",
+                        "on-tertiary": "#512400",
+                        "surface-container-lowest": "#0d0e0f",
+                        "surface-container": "#1f2020",
+                        "surface-bright": "#383939",
+                        "on-tertiary-fixed": "#311300",
+                        "inverse-on-surface": "#2f3031",
+                        "tertiary-fixed": "#ffdbc7",
+                        "tertiary-container": "#e37103",
+                        "on-tertiary-container": "#471e00",
+                        "surface-variant": "#343535",
+                        "secondary-fixed": "#ecdcff",
+                        "on-error": "#690005",
+                        "on-surface-variant": "#c0c7d6",
+                        "inverse-primary": "#005fae",
+                        "warning": "#faad14",
+                        "primary": "#a5c8ff",
+                        "secondary-fixed-dim": "#d5baff",
+                        "surface-container-low": "#1b1c1c",
+                        "on-background": "#e3e2e2",
+                        "secondary": "#d5baff",
+                        "on-secondary-fixed": "#270057",
+                        "on-primary": "#00315e",
+                        "tertiary": "#ffb688",
+                        "tertiary-fixed-dim": "#ffb688",
+                        "surface-tint": "#a5c8ff",
+                        "outline": "#8a919f",
+                        "outline-variant": "#404753",
+                        "on-secondary": "#42008a",
+                        "border-subtle": "#303030",
+                        "surface-container-high": "#292a2a",
+                        "ks-executable": "#13c2c2",
+                        "error-container": "#93000a",
+                        "on-error-container": "#ffdad6",
+                        "on-secondary-fixed-variant": "#5e08bd"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "unit": "4px",
+                        "header-height": "56px",
+                        "gutter": "16px",
+                        "margin-page": "24px",
+                        "sidebar-width": "240px"
+                    },
+                    "fontFamily": {
+                        "headline-lg-mobile": ["Inter"],
+                        "headline-md": ["Inter"],
+                        "headline-lg": ["Inter"],
+                        "body-md": ["Inter"],
+                        "code-md": ["JetBrains Mono"],
+                        "label-caps": ["Inter"],
+                        "body-sm": ["Inter"]
+                    },
+                    "fontSize": {
+                        "headline-lg-mobile": ["20px", { "lineHeight": "28px", "fontWeight": "600" }],
+                        "headline-md": ["20px", { "lineHeight": "28px", "fontWeight": "600" }],
+                        "headline-lg": ["24px", { "lineHeight": "32px", "fontWeight": "600" }],
+                        "body-md": ["14px", { "lineHeight": "22px", "fontWeight": "400" }],
+                        "code-md": ["13px", { "lineHeight": "20px", "fontWeight": "400" }],
+                        "label-caps": ["11px", { "lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "700" }],
+                        "body-sm": ["12px", { "lineHeight": "18px", "fontWeight": "400" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        body {
+            background-color: theme('colors.background');
+            color: theme('colors.on-background');
+            font-family: 'Inter', sans-serif;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            overflow: hidden;
+        }
+
+        .login-container {
+            background-color: theme('colors.background-elevated');
+            border: 1px solid theme('colors.border-subtle');
+            border-radius: theme('borderRadius.DEFAULT');
+            width: 100%;
+            max-width: 400px;
+            padding: theme('spacing.margin-page');
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            position: relative;
+            z-index: 10;
+        }
+
+        .input-group {
+            margin-bottom: 16px;
+        }
+
+        .input-label {
+            display: block;
+            color: theme('colors.on-surface-variant');
+            margin-bottom: 8px;
+            font-family: theme('fontFamily.body-sm');
+            font-size: theme('fontSize.body-sm')[0];
+            line-height: theme('fontSize.body-sm')[1].lineHeight;
+            font-weight: theme('fontSize.body-sm')[1].fontWeight;
+        }
+
+        .input-field {
+            width: 100%;
+            background-color: theme('colors.surface-container');
+            border: 1px solid theme('colors.border-subtle');
+            color: theme('colors.on-surface');
+            border-radius: theme('borderRadius.DEFAULT');
+            padding: 10px 12px;
+            font-family: theme('fontFamily.body-md');
+            font-size: theme('fontSize.body-md')[0];
+            transition: border-color 0.2s, background-color 0.2s;
+        }
+
+        .input-field:focus {
+            outline: none;
+            border-color: theme('colors.primary');
+            background-color: theme('colors.surface-container-high');
+        }
+
+        .btn-primary {
+            width: 100%;
+            background-color: theme('colors.primary-container');
+            color: theme('colors.on-primary-container');
+            border: none;
+            border-radius: theme('borderRadius.DEFAULT');
+            padding: 12px;
+            font-family: theme('fontFamily.body-md');
+            font-size: theme('fontSize.body-md')[0];
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s, opacity 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .btn-primary:hover {
+            background-color: theme('colors.primary');
+        }
+
+        .btn-primary:active {
+            opacity: 0.8;
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .error-message {
+            background-color: theme('colors.error-container');
+            color: theme('colors.on-error-container');
+            border: 1px solid theme('colors.error');
+            border-radius: theme('borderRadius.DEFAULT');
+            padding: 12px;
+            margin-bottom: 16px;
+            display: none;
+            align-items: center;
+            gap: 8px;
+            font-family: theme('fontFamily.body-sm');
+            font-size: theme('fontSize.body-sm')[0];
+        }
+
+        .error-message.visible {
+            display: flex;
+        }
+
+        .note-text {
+            color: theme('colors.on-surface-variant');
+            text-align: center;
+            margin-top: 16px;
+            font-family: theme('fontFamily.body-sm');
+            font-size: theme('fontSize.body-sm')[0];
+            line-height: theme('fontSize.body-sm')[1].lineHeight;
+        }
+
+        /* Ambient Background */
+        .ambient-bg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+            overflow: hidden;
+            pointer-events: none;
+        }
+        
+        .ambient-blob {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(80px);
+            opacity: 0.15;
+            animation: float 20s infinite ease-in-out alternate;
+        }
+
+        .blob-1 {
+            width: 40vw;
+            height: 40vw;
+            background-color: theme('colors.primary');
+            top: -10vw;
+            left: -10vw;
+        }
+
+        .blob-2 {
+            width: 30vw;
+            height: 30vw;
+            background-color: theme('colors.ks-executable');
+            bottom: -5vw;
+            right: -5vw;
+            animation-delay: -10s;
+        }
+
+        @keyframes float {
+            0% { transform: translate(0, 0) scale(1); }
+            50% { transform: translate(5vw, 5vw) scale(1.1); }
+            100% { transform: translate(-5vw, 10vw) scale(0.9); }
+        }
+
+        .spinner {
+            animation: spin 1s linear infinite;
+            display: none;
+        }
+
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+    </style>
+</head>
+<body class="bg-background text-on-background">
+<!-- Ambient Background Elements -->
+<div class="ambient-bg">
+<div class="ambient-blob blob-1"></div>
+<div class="ambient-blob blob-2"></div>
+</div>
+<div class="login-container flex flex-col">
+<!-- Header -->
+<div class="flex flex-col items-center mb-8">
+<span class="material-symbols-outlined text-primary mb-4" data-icon="terminal" style="font-size: 48px; font-variation-settings: 'FILL' 1;">terminal</span>
+<h1 class="font-headline-lg text-headline-lg text-on-surface text-center">GM命令管理工具</h1>
+<p class="font-body-md text-body-md text-on-surface-variant mt-2 text-center">Mission Control Authentication</p>
+</div>
+<!-- Error Area -->
+<div class="error-message" id="errorBox">
+<span class="material-symbols-outlined" data-icon="error">error</span>
+<span id="errorText">Invalid credentials. Please verify your access level.</span>
+</div>
+<!-- Login Form -->
+<form class="flex flex-col" id="loginForm">
+<div class="input-group">
+<label class="input-label" for="username">Username</label>
+<input autocomplete="username" class="input-field" id="username" name="username" placeholder="Operator ID" required="" type="text"/>
+</div>
+<div class="input-group mb-6">
+<label class="input-label" for="password">Password</label>
+<input autocomplete="current-password" class="input-field" id="password" name="password" placeholder="••••••••" required="" type="password"/>
+</div>
+<button class="btn-primary" id="loginBtn" type="submit">
+<span class="btn-text">Login</span>
+<span class="material-symbols-outlined spinner" data-icon="progress_activity">progress_activity</span>
+</button>
+</form>
+<!-- PRD Note -->
+<div class="note-text flex items-center justify-center gap-2 mt-6 p-3 bg-surface-container-low border border-border-subtle rounded">
+<span class="material-symbols-outlined text-warning" data-icon="info" style="font-size: 16px;">info</span>
+<span>First-time users: Default password is provided by system administrator (PRD 9.1.1).</span>
+</div>
+</div>
+<!-- JavaScript for Interactions -->
+<script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const form = document.getElementById('loginForm');
+            const loginBtn = document.getElementById('loginBtn');
+            const btnText = loginBtn.querySelector('.btn-text');
+            const spinner = loginBtn.querySelector('.spinner');
+            const errorBox = document.getElementById('errorBox');
+            const errorText = document.getElementById('errorText');
+
+            form.addEventListener('submit', (e) => {
+                e.preventDefault();
+                
+                // Hide error if visible
+                errorBox.classList.remove('visible');
+                
+                // Set loading state
+                loginBtn.disabled = true;
+                btnText.textContent = 'Authenticating...';
+                spinner.style.display = 'inline-block';
+
+                const username = document.getElementById('username').value;
+                const password = document.getElementById('password').value;
+
+                // Simulate API call
+                setTimeout(() => {
+                    // Reset button state
+                    loginBtn.disabled = false;
+                    btnText.textContent = 'Login';
+                    spinner.style.display = 'none';
+
+                    // Simple demo logic: fail if username is 'error'
+                    if (username.toLowerCase() === 'error') {
+                        errorText.textContent = 'System rejected authentication attempt. Invalid credentials.';
+                        errorBox.classList.add('visible');
+                        
+                        // Add shake effect to container
+                        const container = document.querySelector('.login-container');
+                        container.animate([
+                            { transform: 'translateX(0)' },
+                            { transform: 'translateX(-5px)' },
+                            { transform: 'translateX(5px)' },
+                            { transform: 'translateX(-5px)' },
+                            { transform: 'translateX(5px)' },
+                            { transform: 'translateX(0)' }
+                        ], { duration: 400, easing: 'ease-in-out' });
+                        
+                    } else {
+                        // Success state demo (normally would redirect)
+                        loginBtn.classList.replace('bg-primary-container', 'bg-success');
+                        loginBtn.classList.replace('text-on-primary-container', 'text-background');
+                        btnText.textContent = 'Authorized';
+                        
+                        // Demo redirect simulation
+                        setTimeout(() => {
+                            btnText.textContent = 'Redirecting...';
+                        }, 1000);
+                    }
+                }, 1500);
+            });
+            
+            // Clear error on input change
+            const inputs = document.querySelectorAll('.input-field');
+            inputs.forEach(input => {
+                input.addEventListener('input', () => {
+                    if(errorBox.classList.contains('visible')) {
+                        errorBox.classList.remove('visible');
+                    }
+                });
+            });
+        });
+    </script>
+</body></html>

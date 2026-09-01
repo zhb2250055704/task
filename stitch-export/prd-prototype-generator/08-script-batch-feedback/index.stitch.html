@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Script Execution Result - GameOps Engine</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&amp;family=JetBrains+Mono:wght@400&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-tertiary-fixed-variant": "#733600",
+                        "surface-container-highest": "#343535",
+                        "on-primary-fixed": "#001c3a",
+                        "success": "#52c41a",
+                        "background": "#121414",
+                        "primary-fixed": "#d4e3ff",
+                        "surface": "#121414",
+                        "on-surface": "#e3e2e2",
+                        "error": "#f5222d",
+                        "background-deep": "#141414",
+                        "on-primary-fixed-variant": "#004785",
+                        "inverse-surface": "#e3e2e2",
+                        "on-secondary-container": "#caa9ff",
+                        "secondary-container": "#600fc0",
+                        "primary-fixed-dim": "#a5c8ff",
+                        "surface-dim": "#121414",
+                        "background-elevated": "#1f1f1f",
+                        "primary-container": "#2492ff",
+                        "on-primary-container": "#002a53",
+                        "on-tertiary": "#512400",
+                        "surface-container-lowest": "#0d0e0f",
+                        "surface-container": "#1f2020",
+                        "surface-bright": "#383939",
+                        "on-tertiary-fixed": "#311300",
+                        "inverse-on-surface": "#2f3031",
+                        "tertiary-fixed": "#ffdbc7",
+                        "tertiary-container": "#e37103",
+                        "on-tertiary-container": "#471e00",
+                        "surface-variant": "#343535",
+                        "secondary-fixed": "#ecdcff",
+                        "on-error": "#690005",
+                        "on-surface-variant": "#c0c7d6",
+                        "inverse-primary": "#005fae",
+                        "warning": "#faad14",
+                        "primary": "#a5c8ff",
+                        "secondary-fixed-dim": "#d5baff",
+                        "surface-container-low": "#1b1c1c",
+                        "on-background": "#e3e2e2",
+                        "secondary": "#d5baff",
+                        "on-secondary-fixed": "#270057",
+                        "on-primary": "#00315e",
+                        "tertiary": "#ffb688",
+                        "tertiary-fixed-dim": "#ffb688",
+                        "surface-tint": "#a5c8ff",
+                        "outline": "#8a919f",
+                        "outline-variant": "#404753",
+                        "on-secondary": "#42008a",
+                        "border-subtle": "#303030",
+                        "surface-container-high": "#292a2a",
+                        "ks-executable": "#13c2c2",
+                        "error-container": "#93000a",
+                        "on-error-container": "#ffdad6",
+                        "on-secondary-fixed-variant": "#5e08bd"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "unit": "4px",
+                        "header-height": "56px",
+                        "gutter": "16px",
+                        "margin-page": "24px",
+                        "sidebar-width": "240px"
+                    },
+                    "fontFamily": {
+                        "headline-lg-mobile": ["Inter"],
+                        "headline-md": ["Inter"],
+                        "headline-lg": ["Inter"],
+                        "body-md": ["Inter"],
+                        "code-md": ["JetBrains Mono"],
+                        "label-caps": ["Inter"],
+                        "body-sm": ["Inter"]
+                    },
+                    "fontSize": {
+                        "headline-lg-mobile": ["20px", { "lineHeight": "28px", "fontWeight": "600" }],
+                        "headline-md": ["20px", { "lineHeight": "28px", "fontWeight": "600" }],
+                        "headline-lg": ["24px", { "lineHeight": "32px", "fontWeight": "600" }],
+                        "body-md": ["14px", { "lineHeight": "22px", "fontWeight": "400" }],
+                        "code-md": ["13px", { "lineHeight": "20px", "fontWeight": "400" }],
+                        "label-caps": ["11px", { "lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "700" }],
+                        "body-sm": ["12px", { "lineHeight": "18px", "fontWeight": "400" }]
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-background text-on-surface font-body-md h-screen overflow-hidden flex">
+<!-- SideNavBar -->
+<nav class="fixed left-0 top-0 bottom-0 z-50 flex flex-col docked left-0 h-full w-sidebar-width border-r border-border-subtle bg-surface-container-low dark:bg-surface-container-low hidden md:flex">
+<div class="p-4 border-b border-border-subtle flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-primary-container flex items-center justify-center shrink-0">
+<img alt="User profile" class="w-full h-full object-cover rounded-full" data-alt="Abstract geometric dark blue avatar for system admin, futuristic, clean vector art style, minimalist, glowing edges, high contrast, cyber aesthetic, 8k resolution, flat lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBQnMvZBTt-Rvq1jOCtbO51ond_C544dejVLNAbO2ewTPYy7txiGJ-7gAg53fvgqXLprroGXzoadA57awRVx76WYsbIoUwUNo0QJuYyK-Yl0QHx1HO6T1AwSF0Xkva_ICGa2dRlF4S93TewxUZEGsZwatNgWZCAWkxbwTmdKFmOBwSfFenB5WMs2FH0nOT36ocIgKlO_yuaXTouENIY8JpCV5wrJftkafd0Opc60I6Oh4CuLSqmU-4PU1S93Q0H7n9qnkAnZ8TpfEs"/>
+</div>
+<div class="overflow-hidden">
+<h1 class="font-headline-md text-headline-md font-bold text-primary truncate">GameOps Engine</h1>
+<p class="font-body-sm text-body-sm text-on-surface-variant truncate">v2.4.0-stable</p>
+</div>
+</div>
+<div class="flex-1 overflow-y-auto py-4 flex flex-col gap-1 px-2">
+<a class="flex items-center gap-3 px-3 py-2 rounded-DEFAULT text-on-surface-variant hover:bg-surface-container-high transition-colors font-body-md text-body-md group" href="#">
+<span class="material-symbols-outlined text-[20px]">terminal</span>
+<span>Command</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-DEFAULT bg-secondary-container text-on-secondary-container font-bold border-r-2 border-primary font-body-md text-body-md opacity-80 duration-100" href="#">
+<span class="material-symbols-outlined text-[20px]" style="font-variation-settings: 'FILL' 1;">code</span>
+<span>Script</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-DEFAULT text-on-surface-variant hover:bg-surface-container-high transition-colors font-body-md text-body-md group" href="#">
+<span class="material-symbols-outlined text-[20px]">bug_report</span>
+<span>QA Design</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-DEFAULT text-on-surface-variant hover:bg-surface-container-high transition-colors font-body-md text-body-md group" href="#">
+<span class="material-symbols-outlined text-[20px]">bolt</span>
+<span>Skill</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-DEFAULT text-on-surface-variant hover:bg-surface-container-high transition-colors font-body-md text-body-md group" href="#">
+<span class="material-symbols-outlined text-[20px]">functions</span>
+<span>Formula</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-DEFAULT text-on-surface-variant hover:bg-surface-container-high transition-colors font-body-md text-body-md group" href="#">
+<span class="material-symbols-outlined text-[20px]">inventory_2</span>
+<span>Items</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-DEFAULT text-on-surface-variant hover:bg-surface-container-high transition-colors font-body-md text-body-md group" href="#">
+<span class="material-symbols-outlined text-[20px]">account_tree</span>
+<span>Git</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-DEFAULT text-on-surface-variant hover:bg-surface-container-high transition-colors font-body-md text-body-md group" href="#">
+<span class="material-symbols-outlined text-[20px]">sync</span>
+<span>KS Sync</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-DEFAULT text-on-surface-variant hover:bg-surface-container-high transition-colors font-body-md text-body-md group" href="#">
+<span class="material-symbols-outlined text-[20px]">group</span>
+<span>User Mgmt</span>
+</a>
+</div>
+<div class="p-4 border-t border-border-subtle">
+<button class="w-full bg-primary text-on-primary py-2 px-4 rounded-DEFAULT font-body-md text-body-md font-semibold hover:bg-primary-fixed-dim transition-colors flex items-center justify-center gap-2">
+<span class="material-symbols-outlined text-[18px]">rocket_launch</span>
+                Launch Console
+            </button>
+<div class="mt-4 flex flex-col gap-1">
+<a class="flex items-center gap-3 px-3 py-2 rounded-DEFAULT text-on-surface-variant hover:bg-surface-container-high transition-colors font-body-md text-body-md" href="#">
+<span class="material-symbols-outlined text-[20px]">settings</span>
+<span>Settings</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-DEFAULT text-on-surface-variant hover:bg-surface-container-high transition-colors font-body-md text-body-md" href="#">
+<span class="material-symbols-outlined text-[20px]">help</span>
+<span>Support</span>
+</a>
+</div>
+</div>
+</nav>
+<!-- Main Content Area -->
+<div class="flex-1 flex flex-col md:ml-sidebar-width w-full relative">
+<!-- TopNavBar -->
+<header class="fixed top-0 right-0 left-0 md:left-sidebar-width z-40 flex justify-between items-center px-gutter docked top-0 full-width h-header-height border-b border-border-subtle bg-surface-container dark:bg-surface-container">
+<div class="flex items-center gap-4">
+<button class="md:hidden text-on-surface-variant p-1 rounded-DEFAULT hover:bg-surface-container-high transition-colors">
+<span class="material-symbols-outlined">menu</span>
+</button>
+<div class="font-headline-md text-headline-md font-bold text-on-surface flex items-center gap-2">
+                    Mission Control
+                </div>
+</div>
+<div class="flex items-center gap-2">
+<div class="relative hidden sm:block mr-4">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-[18px]">search</span>
+<input class="bg-background-elevated border border-border-subtle rounded-full py-1.5 pl-9 pr-4 text-body-md focus:outline-none focus:border-primary w-64 text-on-surface" placeholder="Search..." type="text"/>
+</div>
+<button class="p-2 text-on-surface-variant hover:text-primary transition-colors rounded-full hover:bg-surface-container-high">
+<span class="material-symbols-outlined">zoom_in</span>
+</button>
+<button class="p-2 text-on-surface-variant hover:text-primary transition-colors rounded-full hover:bg-surface-container-high">
+<span class="material-symbols-outlined">zoom_out</span>
+</button>
+<button class="p-2 text-on-surface-variant hover:text-primary transition-colors rounded-full hover:bg-surface-container-high">
+<span class="material-symbols-outlined">dark_mode</span>
+</button>
+<button class="p-2 text-on-surface-variant hover:text-primary transition-colors rounded-full hover:bg-surface-container-high relative mr-2">
+<span class="material-symbols-outlined">notifications</span>
+<span class="absolute top-1.5 right-1.5 w-2 h-2 bg-error rounded-full"></span>
+</button>
+<button class="hidden lg:block px-4 py-1.5 rounded-DEFAULT border border-border-subtle text-on-surface hover:bg-surface-container-high transition-colors font-body-md text-body-md">
+                    Admin Console
+                </button>
+<button class="px-4 py-1.5 rounded-DEFAULT bg-primary text-on-primary hover:bg-primary-fixed-dim transition-colors font-body-md text-body-md font-semibold">
+                    Execute
+                </button>
+</div>
+</header>
+<!-- Canvas -->
+<main class="flex-1 overflow-auto mt-header-height mb-8 p-margin-page">
+<div class="max-w-7xl mx-auto space-y-6">
+<!-- Page Header & Summary Bento -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-4">
+<!-- Title Area -->
+<div class="lg:col-span-5 bg-background-elevated rounded-lg p-6 border border-border-subtle flex flex-col justify-between">
+<div>
+<div class="flex items-center gap-2 mb-2">
+<span class="material-symbols-outlined text-warning text-[20px]">warning</span>
+<span class="font-label-caps text-label-caps text-warning uppercase tracking-wider">Partial Failure</span>
+</div>
+<h2 class="font-headline-lg text-headline-lg text-on-surface mb-1">Batch Script Execution</h2>
+<p class="font-code-md text-code-md text-on-surface-variant">Target: PRD 9.4.9 Cluster</p>
+</div>
+<div class="mt-6 flex gap-3">
+<button class="px-4 py-2 bg-primary text-on-primary rounded-DEFAULT font-body-md text-body-md font-semibold flex items-center gap-2 hover:bg-primary-fixed-dim transition-colors">
+<span class="material-symbols-outlined text-[18px]">refresh</span>
+                                Re-execute Failed
+                            </button>
+<button class="px-4 py-2 border border-border-subtle text-on-surface rounded-DEFAULT font-body-md text-body-md flex items-center gap-2 hover:bg-surface-container-high transition-colors">
+<span class="material-symbols-outlined text-[18px]">link</span>
+                                Link to Record
+                            </button>
+</div>
+</div>
+<!-- Stats Area -->
+<div class="lg:col-span-7 grid grid-cols-3 gap-4">
+<div class="bg-background-elevated rounded-lg p-6 border border-border-subtle flex flex-col justify-center relative overflow-hidden">
+<div class="absolute -right-4 -top-4 opacity-5">
+<span class="material-symbols-outlined text-[120px]">dns</span>
+</div>
+<span class="font-label-caps text-label-caps text-on-surface-variant mb-2">Total Servers</span>
+<span class="text-4xl font-code-md font-bold text-on-surface">124</span>
+</div>
+<div class="bg-surface-container-low rounded-lg p-6 border border-success/30 flex flex-col justify-center relative overflow-hidden">
+<div class="absolute -right-4 -top-4 opacity-10">
+<span class="material-symbols-outlined text-[120px] text-success">check_circle</span>
+</div>
+<span class="font-label-caps text-label-caps text-success mb-2">Success</span>
+<span class="text-4xl font-code-md font-bold text-success">118</span>
+</div>
+<div class="bg-error-container/20 rounded-lg p-6 border border-error/30 flex flex-col justify-center relative overflow-hidden">
+<div class="absolute -right-4 -top-4 opacity-10">
+<span class="material-symbols-outlined text-[120px] text-error">cancel</span>
+</div>
+<span class="font-label-caps text-label-caps text-error mb-2">Failed</span>
+<span class="text-4xl font-code-md font-bold text-error">6</span>
+</div>
+</div>
+</div>
+<!-- Data Table -->
+<div class="bg-background-elevated rounded-lg border border-border-subtle overflow-hidden flex flex-col">
+<div class="p-4 border-b border-border-subtle flex justify-between items-center bg-surface-container-lowest">
+<h3 class="font-headline-md text-headline-md text-on-surface text-[16px]">Node Execution Details</h3>
+<div class="flex gap-2">
+<select class="bg-background border border-border-subtle rounded-DEFAULT px-3 py-1 text-body-sm text-on-surface focus:outline-none focus:border-primary">
+<option>All Statuses</option>
+<option>Failed Only</option>
+<option>Success Only</option>
+<option>Running</option>
+</select>
+<input class="bg-background border border-border-subtle rounded-DEFAULT px-3 py-1 text-body-sm text-on-surface focus:outline-none focus:border-primary w-48" placeholder="Filter by Node ID..." type="text"/>
+</div>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-surface-container-low border-b border-border-subtle">
+<th class="py-3 px-4 font-label-caps text-label-caps text-on-surface-variant w-1/6">Server ID</th>
+<th class="py-3 px-4 font-label-caps text-label-caps text-on-surface-variant w-1/6">Status</th>
+<th class="py-3 px-4 font-label-caps text-label-caps text-on-surface-variant w-1/6">Task ID</th>
+<th class="py-3 px-4 font-label-caps text-label-caps text-on-surface-variant w-2/6">Return Message</th>
+<th class="py-3 px-4 font-label-caps text-label-caps text-on-surface-variant w-1/6 text-right">Actions</th>
+</tr>
+</thead>
+<tbody class="font-code-md text-code-md text-on-surface divide-y divide-border-subtle">
+<tr class="hover:bg-surface-container-highest transition-colors group">
+<td class="py-3 px-4">prd-game-srv-001</td>
+<td class="py-3 px-4">
+<div class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-success/10 text-success text-[11px] font-bold border border-success/20">
+<span class="material-symbols-outlined text-[14px]">check_circle</span>
+                                            SUCCESS
+                                        </div>
+</td>
+<td class="py-3 px-4 text-on-surface-variant">tsk-949-a1b2</td>
+<td class="py-3 px-4 text-on-surface-variant truncate max-w-[200px]" title="Script executed successfully in 0.4s. Config synced.">Script executed successfully in 0.4s. Config synced.</td>
+<td class="py-3 px-4 text-right">
+<button class="text-on-surface-variant hover:text-primary p-1"><span class="material-symbols-outlined text-[18px]">terminal</span></button>
+</td>
+</tr>
+<tr class="hover:bg-surface-container-highest transition-colors bg-error-container/5 group">
+<td class="py-3 px-4">prd-game-srv-042</td>
+<td class="py-3 px-4">
+<div class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-error/10 text-error text-[11px] font-bold border border-error/20">
+<span class="material-symbols-outlined text-[14px]">error</span>
+                                            FAILED
+                                        </div>
+</td>
+<td class="py-3 px-4 text-on-surface-variant">tsk-949-a1b2</td>
+<td class="py-3 px-4 text-error truncate max-w-[200px]" title="ERR_TIMEOUT: Cannot connect to redis cluster at port 6379">ERR_TIMEOUT: Cannot connect to redis cluster at port 6379</td>
+<td class="py-3 px-4 text-right">
+<button class="text-on-surface-variant hover:text-primary p-1"><span class="material-symbols-outlined text-[18px]">terminal</span></button>
+<button class="text-on-surface-variant hover:text-warning p-1 ml-1"><span class="material-symbols-outlined text-[18px]">refresh</span></button>
+</td>
+</tr>
+<tr class="hover:bg-surface-container-highest transition-colors group">
+<td class="py-3 px-4">prd-game-srv-089</td>
+<td class="py-3 px-4">
+<div class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-warning/10 text-warning text-[11px] font-bold border border-warning/20">
+<span class="material-symbols-outlined text-[14px] animate-spin">sync</span>
+                                            RUNNING
+                                        </div>
+</td>
+<td class="py-3 px-4 text-on-surface-variant">tsk-949-a1b2</td>
+<td class="py-3 px-4 text-on-surface-variant truncate max-w-[200px]" title="Executing step 3/5: Validating data integrity...">Executing step 3/5: Validating data integrity...</td>
+<td class="py-3 px-4 text-right">
+<button class="text-on-surface-variant hover:text-error p-1"><span class="material-symbols-outlined text-[18px]">stop_circle</span></button>
+</td>
+</tr>
+<tr class="hover:bg-surface-container-highest transition-colors group">
+<td class="py-3 px-4">prd-game-srv-112</td>
+<td class="py-3 px-4">
+<div class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-success/10 text-success text-[11px] font-bold border border-success/20">
+<span class="material-symbols-outlined text-[14px]">check_circle</span>
+                                            SUCCESS
+                                        </div>
+</td>
+<td class="py-3 px-4 text-on-surface-variant">tsk-949-a1b2</td>
+<td class="py-3 px-4 text-on-surface-variant truncate max-w-[200px]" title="Script executed successfully in 0.3s. Config synced.">Script executed successfully in 0.3s. Config synced.</td>
+<td class="py-3 px-4 text-right">
+<button class="text-on-surface-variant hover:text-primary p-1"><span class="material-symbols-outlined text-[18px]">terminal</span></button>
+</td>
+</tr>
+<tr class="hover:bg-surface-container-highest transition-colors bg-error-container/5 group">
+<td class="py-3 px-4">prd-game-srv-124</td>
+<td class="py-3 px-4">
+<div class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-error/10 text-error text-[11px] font-bold border border-error/20">
+<span class="material-symbols-outlined text-[14px]">error</span>
+                                            FAILED
+                                        </div>
+</td>
+<td class="py-3 px-4 text-on-surface-variant">tsk-949-a1b2</td>
+<td class="py-3 px-4 text-error truncate max-w-[200px]" title="ERR_AUTH: Invalid credentials for database connection">ERR_AUTH: Invalid credentials for database connection</td>
+<td class="py-3 px-4 text-right">
+<button class="text-on-surface-variant hover:text-primary p-1"><span class="material-symbols-outlined text-[18px]">terminal</span></button>
+<button class="text-on-surface-variant hover:text-warning p-1 ml-1"><span class="material-symbols-outlined text-[18px]">refresh</span></button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="p-3 border-t border-border-subtle bg-surface-container-lowest flex justify-between items-center text-body-sm text-on-surface-variant">
+<span>Showing 5 of 124 entries</span>
+<div class="flex gap-1">
+<button class="px-2 py-1 rounded-DEFAULT hover:bg-surface-container-high disabled:opacity-50" disabled="">Prev</button>
+<button class="px-2 py-1 rounded-DEFAULT bg-primary/20 text-primary font-bold">1</button>
+<button class="px-2 py-1 rounded-DEFAULT hover:bg-surface-container-high">2</button>
+<button class="px-2 py-1 rounded-DEFAULT hover:bg-surface-container-high">3</button>
+<span class="px-2 py-1">...</span>
+<button class="px-2 py-1 rounded-DEFAULT hover:bg-surface-container-high">Next</button>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- Footer -->
+<footer class="fixed bottom-0 right-0 left-0 md:left-sidebar-width z-40 flex justify-between items-center px-gutter bg-surface-container-lowest dark:bg-surface-container-lowest docked bottom-0 full-width h-8 border-t border-border-subtle bg-opacity-90 backdrop-blur-sm transition-opacity duration-200">
+<div class="font-label-caps text-label-caps text-on-surface-variant">
+                Cocos WebSocket: Connected | Env: Production-A
+            </div>
+<div class="flex gap-4">
+<a class="font-code-md text-code-md text-on-surface-variant hover:text-on-surface transition-colors" href="#">System Logs</a>
+<a class="font-code-md text-code-md text-on-surface-variant hover:text-on-surface transition-colors" href="#">Network Status</a>
+<a class="font-code-md text-code-md text-on-surface-variant hover:text-on-surface transition-colors" href="#">API Docs</a>
+</div>
+</footer>
+</div>
+</body></html>

@@ -3,6 +3,59 @@ const LOCAL_GM_ORIGINS = new Set([
   'http://localhost:9092',
   'http://127.0.0.1:9092'
 ]);
+const TOKEN_STORAGE_KEYS = ['TOKEN', 'token', 'accessToken', 'access_token'];
+
+function normalizeToken(value) {
+  let text = String(value || '').trim();
+  if (!text) return '';
+  if (/^Bearer\s+/i.test(text)) text = text.replace(/^Bearer\s+/i, '').trim();
+  try {
+    const parsed = JSON.parse(text);
+    if (typeof parsed === 'string') return normalizeToken(parsed);
+    if (parsed && typeof parsed === 'object') {
+      for (const key of TOKEN_STORAGE_KEYS) {
+        const nested = normalizeToken(parsed[key]);
+        if (nested) return nested;
+      }
+    }
+  } catch (_) {
+    // KS stores the JWT as a plain string in the normal case.
+  }
+  return text;
+}
+
+async function readTokenFromTab(tabId) {
+  const results = await chrome.scripting.executeScript({
+    target: { tabId },
+    func: keys => {
+      for (const key of keys) {
+        const localValue = window.localStorage.getItem(key);
+        if (localValue) return localValue;
+        const sessionValue = window.sessionStorage.getItem(key);
+        if (sessionValue) return sessionValue;
+      }
+      return '';
+    },
+    args: [TOKEN_STORAGE_KEYS]
+  });
+  return normalizeToken(results[0] && results[0].result);
+}
+
+async function readTokenFromOpenKsTab() {
+  const tabs = await chrome.tabs.query({
+    url: ['https://zxty.tuyoo.com/keystone/*']
+  });
+  for (const tab of tabs) {
+    if (tab.id == null) continue;
+    try {
+      const token = await readTokenFromTab(tab.id);
+      if (token) return token;
+    } catch (_) {
+      // A tab can disappear or still be loading while the request is handled.
+    }
+  }
+  return '';
+}
 
 function waitForTabComplete(tabId, timeoutMs) {
   return new Promise((resolve, reject) => {
@@ -27,6 +80,8 @@ function waitForTabComplete(tabId, timeoutMs) {
 }
 
 async function readCurrentKsToken() {
+  const openTabToken = await readTokenFromOpenKsTab();
+  if (openTabToken) return openTabToken;
   const tab = await chrome.tabs.create({ url: KS_TOKEN_PAGE, active: false });
   try {
     await waitForTabComplete(tab.id, 20000);
@@ -35,11 +90,7 @@ async function readCurrentKsToken() {
     if (!String(currentTab.url || '').startsWith('https://zxty.tuyoo.com/keystone/')) {
       throw new Error('KS Token 页面跳转到了不受支持的地址');
     }
-    const results = await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      func: () => String(window.localStorage.getItem('TOKEN') || '').trim()
-    });
-    const token = String(results[0] && results[0].result || '').trim();
+    const token = await readTokenFromTab(tab.id);
     if (!token) {
       throw new Error('当前浏览器没有 KS Token，请先在同一浏览器登录 KS');
     }

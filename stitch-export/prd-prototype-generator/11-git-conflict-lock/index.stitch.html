@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Git Error Recovery</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-tertiary-fixed-variant": "#733600",
+                        "surface-container-highest": "#343535",
+                        "on-primary-fixed": "#001c3a",
+                        "success": "#52c41a",
+                        "background": "#121414",
+                        "primary-fixed": "#d4e3ff",
+                        "surface": "#121414",
+                        "on-surface": "#e3e2e2",
+                        "error": "#f5222d",
+                        "background-deep": "#141414",
+                        "on-primary-fixed-variant": "#004785",
+                        "inverse-surface": "#e3e2e2",
+                        "on-secondary-container": "#caa9ff",
+                        "secondary-container": "#600fc0",
+                        "primary-fixed-dim": "#a5c8ff",
+                        "surface-dim": "#121414",
+                        "background-elevated": "#1f1f1f",
+                        "primary-container": "#2492ff",
+                        "on-primary-container": "#002a53",
+                        "on-tertiary": "#512400",
+                        "surface-container-lowest": "#0d0e0f",
+                        "surface-container": "#1f2020",
+                        "surface-bright": "#383939",
+                        "on-tertiary-fixed": "#311300",
+                        "inverse-on-surface": "#2f3031",
+                        "tertiary-fixed": "#ffdbc7",
+                        "tertiary-container": "#e37103",
+                        "on-tertiary-container": "#471e00",
+                        "surface-variant": "#343535",
+                        "secondary-fixed": "#ecdcff",
+                        "on-error": "#690005",
+                        "on-surface-variant": "#c0c7d6",
+                        "inverse-primary": "#005fae",
+                        "warning": "#faad14",
+                        "primary": "#a5c8ff",
+                        "secondary-fixed-dim": "#d5baff",
+                        "surface-container-low": "#1b1c1c",
+                        "on-background": "#e3e2e2",
+                        "secondary": "#d5baff",
+                        "on-secondary-fixed": "#270057",
+                        "on-primary": "#00315e",
+                        "tertiary": "#ffb688",
+                        "tertiary-fixed-dim": "#ffb688",
+                        "surface-tint": "#a5c8ff",
+                        "outline": "#8a919f",
+                        "outline-variant": "#404753",
+                        "on-secondary": "#42008a",
+                        "border-subtle": "#303030",
+                        "surface-container-high": "#292a2a",
+                        "ks-executable": "#13c2c2",
+                        "error-container": "#93000a",
+                        "on-error-container": "#ffdad6",
+                        "on-secondary-fixed-variant": "#5e08bd"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "unit": "4px",
+                        "header-height": "56px",
+                        "gutter": "16px",
+                        "margin-page": "24px",
+                        "sidebar-width": "240px"
+                    },
+                    "fontFamily": {
+                        "headline-lg-mobile": ["Inter"],
+                        "headline-md": ["Inter"],
+                        "headline-lg": ["Inter"],
+                        "body-md": ["Inter"],
+                        "code-md": ["JetBrains Mono"],
+                        "label-caps": ["Inter"],
+                        "body-sm": ["Inter"]
+                    },
+                    "fontSize": {
+                        "headline-lg-mobile": ["20px", { "lineHeight": "28px", "fontWeight": "600" }],
+                        "headline-md": ["20px", { "lineHeight": "28px", "fontWeight": "600" }],
+                        "headline-lg": ["24px", { "lineHeight": "32px", "fontWeight": "600" }],
+                        "body-md": ["14px", { "lineHeight": "22px", "fontWeight": "400" }],
+                        "code-md": ["13px", { "lineHeight": "20px", "fontWeight": "400" }],
+                        "label-caps": ["11px", { "lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "700" }],
+                        "body-sm": ["12px", { "lineHeight": "18px", "fontWeight": "400" }]
+                    }
+                }
+            }
+        }
+    </script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@400&display=swap');
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .material-symbols-outlined[data-weight="fill"] {
+            font-variation-settings: 'FILL' 1;
+        }
+    </style>
+</head>
+<body class="bg-background text-on-surface font-body-md h-screen w-screen overflow-hidden flex flex-col antialiased">
+<!-- TopNavBar -->
+<header class="fixed top-0 right-0 left-sidebar-width z-40 flex justify-between items-center px-gutter bg-surface-container dark:bg-surface-container h-header-height border-b border-border-subtle hidden md:flex">
+<div class="flex items-center gap-4">
+<h1 class="font-headline-md text-headline-md font-bold text-on-surface">Mission Control</h1>
+</div>
+<div class="flex items-center gap-4 text-on-surface-variant">
+<div class="relative">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-[18px]">search</span>
+<input class="bg-surface-container-high border border-border-subtle rounded text-body-sm pl-9 pr-3 py-1.5 focus:outline-none focus:border-primary w-64 text-on-surface placeholder-outline-variant" placeholder="Search operations..." type="text"/>
+</div>
+<button class="p-2 rounded hover:text-primary transition-colors hover:bg-surface-container-highest">
+<span class="material-symbols-outlined text-[20px]" data-icon="zoom_in">zoom_in</span>
+</button>
+<button class="p-2 rounded hover:text-primary transition-colors hover:bg-surface-container-highest">
+<span class="material-symbols-outlined text-[20px]" data-icon="zoom_out">zoom_out</span>
+</button>
+<button class="p-2 rounded hover:text-primary transition-colors hover:bg-surface-container-highest">
+<span class="material-symbols-outlined text-[20px]" data-icon="dark_mode">dark_mode</span>
+</button>
+<button class="p-2 rounded hover:text-primary transition-colors hover:bg-surface-container-highest">
+<span class="material-symbols-outlined text-[20px]" data-icon="notifications">notifications</span>
+</button>
+<div class="h-6 w-px bg-border-subtle mx-2"></div>
+<button class="text-body-sm font-semibold hover:text-primary transition-colors px-3 py-1.5 rounded hover:bg-surface-container-highest">
+                Admin Console
+            </button>
+<button class="bg-primary-container text-on-primary-container font-semibold text-body-sm px-4 py-1.5 rounded hover:opacity-90 transition-opacity flex items-center gap-2">
+                Execute
+            </button>
+<div class="w-8 h-8 rounded-full overflow-hidden border border-border-subtle ml-2">
+<img alt="User profile avatar" class="w-full h-full object-cover" data-alt="A professional headshot of a developer in a dark, high-tech server room environment. The lighting is moody with subtle blue and green highlights reflecting on their glasses. They appear focused and competent. The overall tone is technical and reliable, matching a utilitarian corporate aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDPPjDLyx-1eqoOXafsrtvxljQMsO-4t4xc8yg0vYnbe-9AKCWiQavwHC7h0idYrv7TPZtRXLSner67FiIuutc1hbZh3uNAQqA1sRpif1rjh-areauE_N8HsIAmX26-NEKeiW3B30uguMiHmuBl9l97vH7U4VCjJ-ARimcj1eEzvIOwbTYMnzParKZ716Cws16-FWZzOmJI2UOhPD00SLErhZXTYan675b92CPc9iaK6MLrA8mXHYO8Ylric8wU0wOXuYkY1XUC22k"/>
+</div>
+</div>
+</header>
+<!-- SideNavBar -->
+<nav class="fixed left-0 top-0 bottom-0 z-50 flex flex-col bg-surface-container-low dark:bg-surface-container-low w-sidebar-width border-r border-border-subtle hidden md:flex">
+<div class="h-header-height flex items-center px-gutter border-b border-border-subtle">
+<div class="flex items-center gap-3 w-full">
+<div class="w-8 h-8 rounded bg-primary-container flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-on-primary-container text-[18px]">terminal</span>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-headline-md text-headline-md font-bold text-primary truncate text-[16px] leading-tight">GameOps Engine</span>
+<span class="text-label-caps font-label-caps text-on-surface-variant">v2.4.0-stable</span>
+</div>
+</div>
+</div>
+<div class="flex-1 overflow-y-auto py-4 flex flex-col gap-1 px-3">
+<a class="flex items-center gap-3 px-3 py-2 rounded text-on-surface-variant hover:bg-surface-container-high transition-colors" href="#">
+<span class="material-symbols-outlined text-[20px]" data-icon="terminal">terminal</span>
+<span class="font-body-md text-body-md">Command</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded text-on-surface-variant hover:bg-surface-container-high transition-colors" href="#">
+<span class="material-symbols-outlined text-[20px]" data-icon="code">code</span>
+<span class="font-body-md text-body-md">Script</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded text-on-surface-variant hover:bg-surface-container-high transition-colors" href="#">
+<span class="material-symbols-outlined text-[20px]" data-icon="bug_report">bug_report</span>
+<span class="font-body-md text-body-md">QA Design</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded text-on-surface-variant hover:bg-surface-container-high transition-colors" href="#">
+<span class="material-symbols-outlined text-[20px]" data-icon="bolt">bolt</span>
+<span class="font-body-md text-body-md">Skill</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded text-on-surface-variant hover:bg-surface-container-high transition-colors" href="#">
+<span class="material-symbols-outlined text-[20px]" data-icon="functions">functions</span>
+<span class="font-body-md text-body-md">Formula</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded text-on-surface-variant hover:bg-surface-container-high transition-colors" href="#">
+<span class="material-symbols-outlined text-[20px]" data-icon="inventory_2">inventory_2</span>
+<span class="font-body-md text-body-md">Items</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded bg-secondary-container text-on-secondary-container font-bold border-r-2 border-primary" href="#">
+<span class="material-symbols-outlined text-[20px]" data-icon="account_tree">account_tree</span>
+<span class="font-body-md text-body-md">Git</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded text-on-surface-variant hover:bg-surface-container-high transition-colors" href="#">
+<span class="material-symbols-outlined text-[20px]" data-icon="sync">sync</span>
+<span class="font-body-md text-body-md">KS Sync</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded text-on-surface-variant hover:bg-surface-container-high transition-colors" href="#">
+<span class="material-symbols-outlined text-[20px]" data-icon="group">group</span>
+<span class="font-body-md text-body-md">User Mgmt</span>
+</a>
+</div>
+<div class="p-4 border-t border-border-subtle flex flex-col gap-2">
+<button class="w-full bg-surface-container-highest text-on-surface border border-border-subtle rounded py-2 text-body-sm font-semibold hover:bg-surface-bright transition-colors flex items-center justify-center gap-2">
+                Launch Console
+                <span class="material-symbols-outlined text-[16px]">open_in_new</span>
+</button>
+<div class="flex justify-between mt-2 px-1">
+<a class="text-on-surface-variant hover:text-on-surface transition-colors" href="#">
+<span class="material-symbols-outlined text-[20px]" data-icon="settings">settings</span>
+</a>
+<a class="text-on-surface-variant hover:text-on-surface transition-colors" href="#">
+<span class="material-symbols-outlined text-[20px]" data-icon="help">help</span>
+</a>
+</div>
+</div>
+</nav>
+<!-- Main Canvas -->
+<main class="flex-1 md:ml-sidebar-width mt-header-height mb-8 overflow-y-auto p-margin-page bg-background-deep relative">
+<!-- Error State Container -->
+<div class="max-w-4xl mx-auto h-full flex flex-col justify-center items-center py-12">
+<div class="bg-background-elevated border border-error/30 rounded-xl p-8 w-full shadow-lg relative overflow-hidden">
+<!-- Decorative Error Gradient -->
+<div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-error-container via-error to-error-container"></div>
+<div class="flex items-start gap-6">
+<!-- Icon -->
+<div class="w-16 h-16 rounded-full bg-error-container/20 flex items-center justify-center shrink-0 border border-error/20">
+<span class="material-symbols-outlined text-error text-[32px]">warning</span>
+</div>
+<!-- Content -->
+<div class="flex-1">
+<h2 class="font-headline-lg text-headline-lg font-bold text-on-surface mb-2">Configuration table pull failed</h2>
+<p class="font-body-md text-body-md text-on-surface-variant mb-6 max-w-2xl">
+                            The git pull operation was aborted because one or more configuration files are currently locked by another process (likely Excel/WPS). Close the files to proceed.
+                        </p>
+<!-- Data Table (Locked Files) -->
+<div class="bg-surface-container border border-border-subtle rounded-lg overflow-hidden mb-8">
+<div class="bg-surface-container-high px-4 py-2 border-b border-border-subtle flex justify-between items-center">
+<span class="font-label-caps text-label-caps text-on-surface-variant">LOCKED RESOURCES DETECTED</span>
+<span class="font-code-md text-code-md text-error px-2 py-0.5 bg-error-container/20 rounded border border-error/20">2 Files</span>
+</div>
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="border-b border-border-subtle">
+<th class="px-4 py-3 font-label-caps text-label-caps text-on-surface-variant w-8">#</th>
+<th class="px-4 py-3 font-label-caps text-label-caps text-on-surface-variant">File Path</th>
+<th class="px-4 py-3 font-label-caps text-label-caps text-on-surface-variant">Suspected Process</th>
+<th class="px-4 py-3 font-label-caps text-label-caps text-on-surface-variant text-right">Status</th>
+</tr>
+</thead>
+<tbody class="font-code-md text-code-md">
+<tr class="border-b border-border-subtle hover:bg-surface-container-high transition-colors">
+<td class="px-4 py-3 text-on-surface-variant">1</td>
+<td class="px-4 py-3 text-on-surface">Data/Config/Item/COA_Item.xlsx</td>
+<td class="px-4 py-3 text-on-surface-variant flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px]">description</span>
+                                            EXCEL.EXE
+                                        </td>
+<td class="px-4 py-3 text-right text-error font-medium">Locked (0x80070020)</td>
+</tr>
+<tr class="hover:bg-surface-container-high transition-colors">
+<td class="px-4 py-3 text-on-surface-variant">2</td>
+<td class="px-4 py-3 text-on-surface">Data/Config/Skill/Hero_Skill_Matrix.xlsx</td>
+<td class="px-4 py-3 text-on-surface-variant flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px]">description</span>
+                                            WPS.EXE
+                                        </td>
+<td class="px-4 py-3 text-right text-error font-medium">Locked (0x80070020)</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Actions -->
+<div class="flex gap-4">
+<button class="bg-primary-container text-on-primary-container font-body-md text-body-md font-semibold px-6 py-2.5 rounded flex items-center gap-2 hover:opacity-90 transition-opacity" id="resolveRetryBtn">
+<span class="material-symbols-outlined text-[18px]">refresh</span>
+                                Resolve and Retry
+                            </button>
+<button class="bg-surface-container-highest text-on-surface font-body-md text-body-md font-semibold border border-border-subtle px-6 py-2.5 rounded hover:bg-surface-bright transition-colors">
+                                View Full Log
+                            </button>
+</div>
+</div>
+</div>
+</div>
+<!-- Terminal Output Context (Collapsible) -->
+<div class="w-full mt-6 bg-surface-container-lowest border border-border-subtle rounded-lg overflow-hidden">
+<div class="px-4 py-3 border-b border-border-subtle flex items-center justify-between cursor-pointer hover:bg-surface-container-highest transition-colors">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-on-surface-variant text-[18px]">terminal</span>
+<span class="font-body-sm text-body-sm text-on-surface font-semibold">Raw Git Output</span>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant text-[18px]">expand_more</span>
+</div>
+<div class="p-4 font-code-md text-code-md text-on-surface-variant bg-[#0d0e0f] overflow-x-auto">
+<pre class="text-[12px] leading-relaxed text-on-surface-variant">$ git pull origin main
+From ssh://git.internal.corp:2222/GameOps/ConfigData
+ * branch            main       -&gt; FETCH_HEAD
+Updating a9f8b4c..c7d2e1f
+error: Your local changes to the following files would be overwritten by merge:
+    Data/Config/Item/COA_Item.xlsx
+    Data/Config/Skill/Hero_Skill_Matrix.xlsx
+Please commit your changes or stash them before you merge.
+Aborting
+fatal: cannot lock ref 'HEAD': unable to resolve reference 'HEAD': reference broken
+</pre>
+</div>
+</div>
+</div>
+</main>
+<!-- Footer -->
+<footer class="fixed bottom-0 right-0 left-sidebar-width z-40 flex justify-between items-center px-gutter bg-surface-container-lowest dark:bg-surface-container-lowest h-8 border-t border-border-subtle bg-opacity-90 backdrop-blur-sm hidden md:flex">
+<span class="font-code-md text-code-md text-ks-executable">Cocos WebSocket: Connected | Env: Production-A</span>
+<div class="flex gap-4">
+<a class="font-label-caps text-label-caps text-on-surface-variant hover:text-on-surface transition-opacity duration-200" href="#">System Logs</a>
+<a class="font-label-caps text-label-caps text-on-surface-variant hover:text-on-surface transition-opacity duration-200" href="#">Network Status</a>
+<a class="font-label-caps text-label-caps text-on-surface-variant hover:text-on-surface transition-opacity duration-200" href="#">API Docs</a>
+</div>
+</footer>
+<!-- High-Risk Confirmation Modal (Hidden by default) -->
+<div class="fixed inset-0 z-[100] flex items-center justify-center hidden" id="confirmationModal">
+<!-- Backdrop -->
+<div class="absolute inset-0 bg-[#000000] bg-opacity-60 backdrop-blur-sm transition-opacity"></div>
+<!-- Dialog -->
+<div class="bg-background-elevated border border-error/50 rounded-xl w-full max-w-md shadow-2xl relative z-10 overflow-hidden flex flex-col">
+<div class="p-6 border-b border-border-subtle flex items-start gap-4 bg-error-container/5">
+<div class="w-10 h-10 rounded bg-error-container/20 flex items-center justify-center shrink-0 border border-error/20">
+<span class="material-symbols-outlined text-error">dangerous</span>
+</div>
+<div>
+<h3 class="font-headline-md text-headline-md font-bold text-on-surface mb-1">Force Pull Configuration?</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">PRD 9.9.7: Data Loss Warning</p>
+</div>
+</div>
+<div class="p-6 flex-1 bg-surface-container-low">
+<p class="font-body-md text-body-md text-on-surface mb-4">
+                    Retrying this operation will attempt to force-close active Excel/WPS processes locking the configuration files.
+                </p>
+<div class="bg-error-container/10 border-l-4 border-error p-3 rounded-r text-body-sm font-body-sm text-on-error-container mb-4">
+<strong>Warning:</strong> Any unsaved changes in the locked Excel sheets will be permanently lost.
+                </div>
+<div class="mb-4">
+<label class="block font-body-sm text-body-sm text-on-surface-variant mb-2">Type <span class="font-code-md text-code-md text-on-surface font-bold">CONFIRM</span> to proceed:</label>
+<input autocomplete="off" class="w-full bg-surface-container-highest border border-border-subtle rounded px-3 py-2 text-body-md font-code-md text-on-surface focus:outline-none focus:border-error focus:ring-1 focus:ring-error transition-all" id="confirmInput" type="text"/>
+</div>
+</div>
+<div class="p-4 border-t border-border-subtle bg-surface-container flex justify-end gap-3">
+<button class="px-4 py-2 font-body-md text-body-md font-semibold text-on-surface-variant hover:text-on-surface transition-colors" id="cancelModalBtn">
+                    Cancel
+                </button>
+<button class="px-4 py-2 font-body-md text-body-md font-semibold border border-error text-error rounded hover:bg-error hover:text-on-error transition-colors opacity-50 cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-error" disabled="" id="executeModalBtn">
+                    Force Resolve
+                </button>
+</div>
+</div>
+</div>
+<script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const resolveBtn = document.getElementById('resolveRetryBtn');
+            const modal = document.getElementById('confirmationModal');
+            const cancelBtn = document.getElementById('cancelModalBtn');
+            const confirmInput = document.getElementById('confirmInput');
+            const executeBtn = document.getElementById('executeModalBtn');
+
+            // Open Modal
+            resolveBtn.addEventListener('click', () => {
+                modal.classList.remove('hidden');
+                setTimeout(() => confirmInput.focus(), 100);
+            });
+
+            // Close Modal
+            const closeModal = () => {
+                modal.classList.add('hidden');
+                confirmInput.value = '';
+                executeBtn.disabled = true;
+                executeBtn.classList.add('opacity-50', 'cursor-not-allowed');
+            };
+
+            cancelBtn.addEventListener('click', closeModal);
+
+            // Validation Logic
+            confirmInput.addEventListener('input', (e) => {
+                if (e.target.value === 'CONFIRM') {
+                    executeBtn.disabled = false;
+                    executeBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+                    executeBtn.classList.add('bg-error/10'); // Slight visual cue it's active before hover
+                } else {
+                    executeBtn.disabled = true;
+                    executeBtn.classList.add('opacity-50', 'cursor-not-allowed');
+                    executeBtn.classList.remove('bg-error/10');
+                }
+            });
+
+            // Execute (Simulated)
+            executeBtn.addEventListener('click', () => {
+                if(!executeBtn.disabled) {
+                    executeBtn.innerHTML = '<span class="material-symbols-outlined animate-spin text-[18px]">progress_activity</span> Processing...';
+                    executeBtn.disabled = true;
+                    setTimeout(() => {
+                        closeModal();
+                        // Reset button text
+                        executeBtn.innerHTML = 'Force Resolve';
+                    }, 1500);
+                }
+            });
+        });
+    </script>
+</body></html>

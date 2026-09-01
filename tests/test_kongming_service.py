@@ -81,9 +81,39 @@ class KongmingServiceTests(unittest.TestCase):
             server.build_kongming_evidence.call_args.kwargs['index_path'],
             server.KONGMING_INDEX_FILE,
         )
+        self.assertEqual(
+            server.build_kongming_evidence.call_args.kwargs['gm_commands_path'],
+            server.DATA_FILE,
+        )
+        self.assertEqual(result['evidence']['gm_command_candidate_count'], 0)
 
         history = server.get_kongming_chat_payload('user-a', result['conversation']['id'])
         self.assertEqual(history['conversation']['messages'][1]['role'], 'assistant')
+
+    def test_branch_comparison_evidence_is_kept_in_read_only_prompt(self):
+        server.build_kongming_evidence.return_value = {
+            'keywords': ['COA_ActivityFishingEvent', '0820'],
+            'table_candidates': [{
+                'xlsx_path': 'csv/common/COA_ActivityFishingEvent.xlsx',
+                'matched_rows': [],
+            }],
+            'client_candidates': [],
+            'branch_comparison': {
+                'status': 'compared',
+                'base_branch': 'release/v20260813',
+                'target_branch': 'release/v20260820',
+                'conclusion': 'goldenFishMercyDrop 为新增字段，crownMercy 在基线已存在',
+            },
+            'table_search': {'source': 'index', 'index_generation': 7},
+        }
+        result = server.run_kongming_chat(
+            'user-a', 'COA_ActivityFishingEvent 配置表里的金冠保底字段，是 0820 分支上新增的吗'
+        )
+
+        self.assertTrue(result['ok'])
+        prompt = server.subprocess.run.call_args.kwargs['input']
+        self.assertIn('branch_comparison', prompt)
+        self.assertIn('goldenFishMercyDrop', prompt)
 
     def test_unknown_conversation_is_rejected_without_leaking_lock(self):
         with self.assertRaises(ValueError):

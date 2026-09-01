@@ -4,6 +4,7 @@ import subprocess
 import tempfile
 import time
 import unittest
+import zipfile
 from pathlib import Path
 
 import server
@@ -179,6 +180,150 @@ class GitBranchOperationsTest(unittest.TestCase):
                 server.start_git_pull_job([self.repo_id])
         finally:
             server._git_operation_lock.release()
+
+    def test_unified_checkout_switches_client_and_excel_together(self):
+        excel_work = os.path.join(self.temp_dir, 'excel-work')
+        self.git('clone', self.remote, excel_work)
+        previous_client = server.GIT_REPOS.get('client')
+        previous_excel = server.GIT_REPOS.get('excel')
+        server.GIT_REPOS['client'] = {'label': '客户端', 'path': self.work}
+        server.GIT_REPOS['excel'] = {'label': '配置表', 'path': excel_work}
+        try:
+            result = server.git_checkout_unified_branch([
+                {'repo': 'client', 'branch': 'origin/feature/source', 'source': 'remote'},
+                {'repo': 'excel', 'branch': 'origin/feature/source', 'source': 'remote'},
+            ])
+
+            self.assertTrue(result['ok'], result.get('msg'))
+            self.assertEqual([item['id'] for item in result['items']], ['client', 'excel'])
+            self.assertEqual(self.git('-C', self.work, 'branch', '--show-current'), 'feature/source')
+            self.assertEqual(self.git('-C', excel_work, 'branch', '--show-current'), 'feature/source')
+        finally:
+            if previous_client is None:
+                server.GIT_REPOS.pop('client', None)
+            else:
+                server.GIT_REPOS['client'] = previous_client
+            if previous_excel is None:
+                server.GIT_REPOS.pop('excel', None)
+            else:
+                server.GIT_REPOS['excel'] = previous_excel
+
+
+class ConfigCompareTest(unittest.TestCase):
+    repo_id = 'config-compare-test'
+
+    def setUp(self):
+        self.temp_dir = tempfile.mkdtemp(prefix='gm-tool-config-compare-')
+        self.work = os.path.join(self.temp_dir, 'excel')
+        self.git('init', self.work)
+        self.git('-C', self.work, 'config', 'user.name', 'GM Tool Test')
+        self.git('-C', self.work, 'config', 'user.email', 'gm-tool@example.invalid')
+        self.git('-C', self.work, 'branch', '-M', 'main')
+        self.previous_repo = server.GIT_REPOS.get(self.repo_id)
+        server.GIT_REPOS[self.repo_id] = {'label': '配置表测试', 'path': self.work}
+
+    def tearDown(self):
+        if self.previous_repo is None:
+            server.GIT_REPOS.pop(self.repo_id, None)
+        else:
+            server.GIT_REPOS[self.repo_id] = self.previous_repo
+        shutil.rmtree(self.temp_dir, ignore_errors=True)
+
+    @staticmethod
+    def git(*args):
+        proc = subprocess.run(
+            [server.git_executable(), *args],
+            capture_output=True,
+            text=True,
+            encoding='utf-8',
+            errors='replace',
+        )
+        if proc.returncode != 0:
+            raise AssertionError((proc.stdout + '\n' + proc.stderr).strip())
+        return proc.stdout.strip()
+
+    @staticmethod
+    def write_xlsx(path, value):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        rows = [
+            '<row r="1"><c r="A1" t="inlineStr"><is><t>id</t></is></c><c r="B1" t="inlineStr"><is><t>name</t></is></c></row>',
+            f'<row r="2"><c r="A2"><v>1</v></c><c r="B2" t="inlineStr"><is><t>{value}</t></is></c></row>',
+        ]
+        files = {
+            '[Content_Types].xml': (
+                '<?xml version="1.0" encoding="UTF-8"?>'
+                '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+                '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+                '<Default Extension="xml" ContentType="application/xml"/>'
+                '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
+                '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
+                '</Types>'
+            ),
+            'xl/workbook.xml': (
+                '<?xml version="1.0" encoding="UTF-8"?>'
+                '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" '
+                'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+                '<sheets><sheet name="Data" sheetId="1" r:id="rId1"/></sheets></workbook>'
+            ),
+            'xl/_rels/workbook.xml.rels': (
+                '<?xml version="1.0" encoding="UTF-8"?>'
+                '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+                '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>'
+                '</Relationships>'
+            ),
+            'xl/worksheets/sheet1.xml': (
+                '<?xml version="1.0" encoding="UTF-8"?>'
+                '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>' +
+                ''.join(rows) + '</sheetData></worksheet>'
+            ),
+        }
+        with zipfile.ZipFile(path, 'w', zipfile.ZIP_DEFLATED) as archive:
+            for name, content in files.items():
+                archive.writestr(name, content)
+
+    def commit_demo_version(self, value, subject):
+        path = Path(self.work, 'csv', 'common', 'Demo.xlsx')
+        self.write_xlsx(path, value)
+        self.git('-C', self.work, 'add', 'csv/common/Demo.xlsx')
+        self.git('-C', self.work, 'commit', '-m', subject)
+
+    def test_lists_tables_and_compares_three_previous_versions(self):
+        for index in range(4):
+            self.commit_demo_version(f'v{index}', f'demo version {index}')
+        Path(self.work, 'README.md').write_text('unrelated commit\n', encoding='utf-8')
+        self.git('-C', self.work, 'add', 'README.md')
+        self.git('-C', self.work, 'commit', '-m', 'unrelated update')
+
+        result = server.git_config_compare_tables(self.repo_id)
+        self.assertTrue(result['ok'], result.get('msg'))
+        self.assertEqual(result['branch'], 'main')
+        self.assertIn('csv/common/Demo.xlsx', {item['path'] for item in result['items']})
+
+        comparison = server.git_config_compare_file('csv/common/Demo.xlsx', self.repo_id)
+        self.assertTrue(comparison['ok'], comparison.get('msg'))
+        self.assertEqual(comparison['history_count'], 3)
+        self.assertEqual([item['rank'] for item in comparison['comparisons']], [1, 2, 3])
+        first = comparison['comparisons'][0]
+        self.assertEqual(first['summary']['changed_cells'], 1)
+        self.assertEqual(first['summary']['changed_fields'][0]['column'], 'B')
+        self.assertEqual(first['sheets'][0]['name'], 'Data')
+        self.assertEqual(first['sheets'][0]['rows'][0]['cells'][1]['after'], 'v3')
+
+    def test_history_shortage_and_path_validation_are_explicit(self):
+        one = Path(self.work, 'csv', 'common', 'One.xlsx')
+        self.write_xlsx(one, 'one-only')
+        self.git('-C', self.work, 'add', 'csv/common/One.xlsx')
+        self.git('-C', self.work, 'commit', '-m', 'one table')
+
+        comparison = server.git_config_compare_file('csv/common/One.xlsx', self.repo_id)
+        self.assertTrue(comparison['ok'], comparison.get('msg'))
+        self.assertEqual(comparison['history_count'], 0)
+        self.assertEqual(comparison['comparisons'], [])
+
+        for path in ('../One.xlsx', 'csv/other/One.xlsx', 'csv/common/One.csv'):
+            rejected = server.git_config_compare_file(path, self.repo_id)
+            self.assertFalse(rejected['ok'])
+            self.assertEqual(rejected['code'], 'invalid_path')
 
 
 if __name__ == '__main__':
