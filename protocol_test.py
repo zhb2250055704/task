@@ -300,6 +300,89 @@ def _extract_config_fields(rows, keys):
     return {}
 
 
+def _extract_config_records(rows, keys):
+    """Extract real config rows while skipping the workbook's type/example rows."""
+    keys = set(keys)
+    for index, row in enumerate(rows or []):
+        values = row.get("values", [])
+        positions = {
+            str(value).strip(): column
+            for column, value in enumerate(values)
+            if str(value).strip() in keys
+        }
+        if "id" not in positions or "name" not in positions:
+            continue
+
+        id_position = positions["id"]
+        name_position = positions["name"]
+        records = []
+        for candidate in rows[index + 1:]:
+            candidate_values = candidate.get("values", [])
+            id_value = str(candidate_values[id_position]).strip() if id_position < len(candidate_values) else ""
+            name_value = str(candidate_values[name_position]).strip() if name_position < len(candidate_values) else ""
+            if not re.fullmatch(r"-?\d+(?:\.\d+)?", id_value):
+                continue
+            # Type and example rows use numeric placeholders in the name column.
+            if not name_value or re.fullmatch(r"-?\d+(?:\.\d+)?", name_value):
+                continue
+            record = {
+                key: str(candidate_values[column]).strip() if column < len(candidate_values) else ""
+                for key, column in positions.items()
+            }
+            # The column before the localization key is the display name in the source workbook.
+            display_position = name_position - 1
+            display_name = (
+                str(candidate_values[display_position]).strip()
+                if display_position >= 0 and display_position < len(candidate_values)
+                else ""
+            )
+            record["name_key"] = name_value
+            record["name"] = display_name or name_value
+            record["display_name"] = display_name or name_value
+            records.append(record)
+        if records:
+            return records
+    return []
+
+
+_FISH_QUALITY_LABELS = {
+    "1": "普通",
+    "2": "普通",
+    "3": "稀有",
+    "4": "史诗",
+    "5": "传说",
+}
+
+
+def _fish_quality_label(value):
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+    return _FISH_QUALITY_LABELS.get(raw, "品质 " + raw)
+
+
+def _fish_config_view(record):
+    raw_quality = str(record.get("quality") or "").strip()
+    quality = _as_int(raw_quality, None) if raw_quality else None
+    return {
+        "fish_id": str(record.get("id") or ""),
+        "name": str(record.get("name") or record.get("name_key") or "未知鱼类"),
+        "name_key": str(record.get("name_key") or ""),
+        "quality": quality if quality is not None else raw_quality,
+        "quality_name": _fish_quality_label(raw_quality),
+        "quality_display": (
+            str(quality) + "（" + _fish_quality_label(raw_quality) + "）"
+            if quality is not None and _fish_quality_label(raw_quality)
+            else raw_quality
+        ),
+        "weight_range": str(record.get("weight") or ""),
+        "crown_weight": str(record.get("crownWeight") or ""),
+        "reward_id": str(record.get("reward") or ""),
+        "day_and_night": str(record.get("dayAndNight") or ""),
+        "desc_key": str(record.get("desc") or ""),
+    }
+
+
 def _weighted_distribution(raw):
     values = []
     for part in str(raw or "").split(","):
@@ -321,6 +404,8 @@ def load_fishing_baseline(excel_root):
     sheets = _load_xlsx_rows(path)
     names = [sheet["name"] for sheet in sheets]
     main = next((sheet for sheet in sheets if sheet["name"] == "FishingEventMain"), None)
+    map_sheet = next((sheet for sheet in sheets if sheet["name"] == "FishingEventMap"), None)
+    pool_sheet = next((sheet for sheet in sheets if sheet["name"] == "FishingEventPool"), None)
     keys = [
         "itemId", "cost", "multiplier", "fishNumProb", "mapID", "dayTime",
         "goldenFishProb", "goldenFishMercyDrop", "goldenFishMercyNum",
@@ -332,6 +417,31 @@ def load_fishing_baseline(excel_root):
     expected_fish_per_action = sum(
         float(item["value"]) * item["probability"] for item in fish_number_distribution
     )
+    map_records = _extract_config_records(
+        map_sheet.get("rows", []) if map_sheet else [],
+        ["id", "name", "sceneRes", "unlockSeason", "nextMap", "collectionID", "fishRequest", "fishPool1", "fishPool2"],
+    )
+    pool_records = _extract_config_records(
+        pool_sheet.get("rows", []) if pool_sheet else [],
+        ["id", "name", "crownName", "desc", "pic", "model", "quality", "weight", "crownWeight", "reward", "dayAndNight", "offset"],
+    )
+    fishing_grounds = {
+        str(record.get("id")): {
+            "fishing_ground_id": str(record.get("id") or ""),
+            "name": str(record.get("name") or "未知渔场"),
+            "name_key": str(record.get("name_key") or ""),
+            "scene_res": str(record.get("sceneRes") or ""),
+            "fish_pool_1": str(record.get("fishPool1") or ""),
+            "fish_pool_2": str(record.get("fishPool2") or ""),
+        }
+        for record in map_records
+        if str(record.get("id") or "").strip()
+    }
+    fish_configs = {
+        config["fish_id"]: config
+        for config in (_fish_config_view(record) for record in pool_records)
+        if config["fish_id"]
+    }
     return {
         "file": path,
         "exists": bool(sheets),
@@ -340,6 +450,8 @@ def load_fishing_baseline(excel_root):
         "fish_number_distribution": fish_number_distribution,
         "expected_fish_per_action": expected_fish_per_action,
         "expected_fish_count": expected_fish_per_action * 1000,
+        "fishing_grounds": fishing_grounds,
+        "fish_configs": fish_configs,
     }
 
 
@@ -458,9 +570,13 @@ def preview_plan(payload, client_root, excel_root):
     }
 
 
-def _extract_fishes(response):
+def _extract_fish_record(response):
     current = response.get("current") if isinstance(response, dict) else None
-    fishes = current.get("fishes") if isinstance(current, dict) else None
+    return current if isinstance(current, dict) else {}
+
+
+def _extract_fishes(response):
+    fishes = _extract_fish_record(response).get("fishes")
     return fishes if isinstance(fishes, list) else []
 
 
@@ -479,6 +595,8 @@ def _new_stats():
         "fish_weight_by_id": {},
         "item_by_id": {},
         "mask_counts": {},
+        "fishing_ground_ids": {},
+        "fish_scene_ids": {},
         "response_latencies_ms": [],
     }
 
@@ -488,13 +606,20 @@ def _increment(mapping, key, amount=1):
     mapping[key] = int(mapping.get(key, 0)) + amount
 
 
-def _record_fishes(stats, fishes):
+def _record_fishes(stats, fishes, scene_id=None):
+    scene_key = str(scene_id).strip() if scene_id is not None else ""
+    if scene_key:
+        _increment(stats["fishing_ground_ids"], scene_key)
     for fish in fishes:
         if not isinstance(fish, dict):
             continue
         fish_id = str(fish.get("fishId", "unknown"))
         _increment(stats["fish_by_id"], fish_id)
         stats["fish_total"] += 1
+        if scene_key:
+            scene_ids = stats["fish_scene_ids"].setdefault(fish_id, [])
+            if scene_key not in scene_ids:
+                scene_ids.append(scene_key)
         weight = fish.get("weight")
         if weight is not None:
             stats["fish_weight_by_id"].setdefault(fish_id, []).append(weight)
@@ -507,9 +632,31 @@ def _record_fishes(stats, fishes):
             _increment(stats["item_by_id"], item_id, _as_int(item.get("num", item.get("count", 1)), 1))
 
 
+def _report_fishing_ground(baseline, stats, state):
+    configured_grounds = (baseline or {}).get("fishing_grounds") or {}
+    observed_ids = list((stats.get("fishing_ground_ids") or {}).keys())
+    requested_scene = _path_get(state.get("plan") or {}, "request_payload.scene")
+    if not observed_ids and requested_scene is not None and str(requested_scene).strip():
+        observed_ids = [str(requested_scene).strip()]
+    names = [_fishing_ground_name(configured_grounds, scene_id) for scene_id in observed_ids]
+    return {
+        "id": ", ".join(observed_ids),
+        "name": " / ".join(names) if names else "未知渔场",
+        "ids": observed_ids,
+        "names": names,
+    }
+
+
+def _fishing_ground_name(configured_grounds, scene_id):
+    ground = (configured_grounds or {}).get(str(scene_id)) or {}
+    return str(ground.get("name") or "场景 " + str(scene_id))
+
+
 def _build_report(state, stats, baseline):
     completed = max(0, int(stats.get("completed", 0)))
     fish_total = max(0, int(stats.get("fish_total", 0)))
+    fishing_ground = _report_fishing_ground(baseline, stats, state)
+    fish_configs = (baseline or {}).get("fish_configs") or {}
     latencies = sorted(stats.get("response_latencies_ms") or [])
     def percentile(ratio):
         if not latencies:
@@ -519,8 +666,19 @@ def _build_report(state, stats, baseline):
     fish_distribution = []
     for fish_id, count in sorted(stats.get("fish_by_id", {}).items(), key=lambda item: (-item[1], item[0])):
         interval = wilson_interval(count, fish_total)
+        config = fish_configs.get(fish_id) or {}
+        scene_ids = list((stats.get("fish_scene_ids") or {}).get(fish_id) or fishing_ground["ids"])
+        scene_names = [
+            _fishing_ground_name((baseline or {}).get("fishing_grounds") or {}, scene_id)
+            for scene_id in scene_ids
+        ]
         fish_distribution.append({
             "fish_id": fish_id,
+            "fish_name": config.get("name") or "未知鱼类",
+            "fish_name_key": config.get("name_key") or "",
+            "fishing_ground_id": ", ".join(scene_ids),
+            "fishing_ground_name": " / ".join(scene_names) if scene_names else fishing_ground["name"],
+            "config": config,
             "count": count,
             "probability": count / fish_total if fish_total else 0,
             "interval": interval,
@@ -534,6 +692,7 @@ def _build_report(state, stats, baseline):
         "started_at_ms": state.get("started_at_ms", 0),
         "finished_at_ms": state.get("finished_at_ms", 0),
         "duration_ms": max(0, state.get("finished_at_ms", 0) - state.get("started_at_ms", 0)),
+        "fishing_ground": fishing_ground,
         "actions": {
             "requested": stats["requested"],
             "completed": completed,
@@ -559,6 +718,7 @@ def _build_report(state, stats, baseline):
             "fish_weight_by_id": stats["fish_weight_by_id"],
             "items": stats["item_by_id"],
             "mask_counts": stats["mask_counts"],
+            "fishing_ground_ids": stats["fishing_ground_ids"],
         },
         "config_baseline": baseline,
     }
@@ -687,7 +847,9 @@ class ProtocolTestService:
                         else:
                             stats["success"] += 1
                             stats["response_latencies_ms"].append(event["latency_ms"])
-                            _record_fishes(stats, _extract_fishes(response))
+                            fish_record = _extract_fish_record(response)
+                            scene_id = fish_record.get("scene", request_payload.get("scene"))
+                            _record_fishes(stats, _extract_fishes(response), scene_id)
                             finish_result = None
                             if plan["finish_protocol"]:
                                 finish_result = send_request(

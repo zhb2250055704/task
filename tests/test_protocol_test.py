@@ -6,6 +6,55 @@ import protocol_test
 
 
 class ProtocolTestTest(unittest.TestCase):
+    def test_extract_config_records_uses_display_name_before_localization_key(self):
+        rows = [
+            {'row': 2, 'values': ['id', '', 'name', 'quality', 'weight', 'crownWeight', 'reward']},
+            {'row': 3, 'values': ['int', '', 'string', 'string', 'string', 'string', 'int']},
+            {'row': 4, 'values': ['1', '', '1', '1', '1', '1', '1']},
+            {'row': 11, 'values': ['2007', '鳙鱼', 'FISH_EVENT_FISH_2007', '3', '10|40', '40', '6341012']},
+        ]
+        records = protocol_test._extract_config_records(
+            rows, ['id', 'name', 'quality', 'weight', 'crownWeight', 'reward']
+        )
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0]['name'], '鳙鱼')
+        self.assertEqual(records[0]['name_key'], 'FISH_EVENT_FISH_2007')
+
+    def test_fishing_report_includes_ground_name_and_fish_quality_config(self):
+        stats = protocol_test._new_stats()
+        protocol_test._record_fishes(stats, [{'fishId': 2007, 'weight': 4}], 1)
+        report = protocol_test._build_report(
+            {
+                'id': 'pt-test',
+                'title': 'fishing',
+                'fixture': 'fishing',
+                'status': 'succeeded',
+                'plan': {'request_payload': {'scene': 1}},
+            },
+            stats,
+            {
+                'fishing_grounds': {'1': {'name': '赤壁江边'}},
+                'fish_configs': {
+                    '2007': {
+                        'fish_id': '2007',
+                        'name': '鳙鱼',
+                        'name_key': 'FISH_EVENT_FISH_2007',
+                        'quality': 3,
+                        'quality_display': '3（稀有）',
+                        'weight_range': '10|40',
+                        'crown_weight': '40',
+                        'reward_id': '6341012',
+                    },
+                },
+            },
+        )
+        drop = report['drops']['fish_distribution'][0]
+        self.assertEqual(report['fishing_ground']['name'], '赤壁江边')
+        self.assertEqual(drop['fishing_ground_name'], '赤壁江边')
+        self.assertEqual(drop['fish_name'], '鳙鱼')
+        self.assertEqual(drop['config']['quality_display'], '3（稀有）')
+        self.assertEqual(drop['config']['weight_range'], '10|40')
+
     def test_wilson_interval_contains_observed_rate(self):
         interval = protocol_test.wilson_interval(300, 1000)
         self.assertLess(interval['low'], 0.3)

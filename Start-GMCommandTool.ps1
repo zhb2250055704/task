@@ -12,7 +12,9 @@ $BuildFiles = @(
     (Join-Path $ToolDir 'kongming_chat.py'),
     (Join-Path $ToolDir 'kongming_index.py'),
     (Join-Path $ToolDir 'kongming_search.py'),
-    (Join-Path $ToolDir 'kongming_workflow.py')
+    (Join-Path $ToolDir 'kongming_workflow.py'),
+    (Join-Path $ToolDir 'kongming_tasks.py'),
+    (Join-Path $ToolDir 'protocol_test.py')
 ) | Where-Object { Test-Path -LiteralPath $_ }
 $BuildBytes = [byte[]]($BuildFiles | ForEach-Object { [IO.File]::ReadAllBytes($_) })
 $ExpectedBuild = ([BitConverter]::ToString(

@@ -9555,7 +9555,7 @@
   .protocol-test-section-head > span { color: var(--text-faint); font-size: 10px; }
   .protocol-test-download { min-height: 28px !important; padding: 5px 8px !important; font-size: 10px !important; }
   .protocol-test-table-wrap { overflow: auto; max-height: 270px; border: 1px solid var(--border); border-radius: 7px; }
-  .protocol-test-table { min-width: 470px; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+  .protocol-test-table { min-width: 980px; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
   .protocol-test-table th, .protocol-test-table td { padding: 8px 10px; font-size: 11px; }
   .protocol-test-table th { position: sticky; top: 0; z-index: 1; background: var(--th-bg); }
   .protocol-test-table td { color: var(--text); }
@@ -10430,7 +10430,7 @@ FORM: Operate mode, Stitch high-fidelity prototype, source order 1, no concept s
           </div>
           <div class="protocol-test-result-section">
             <div class="protocol-test-section-head"><h3>掉落分布</h3><span id="protocolTestDropMeta">完成测试后显示</span></div>
-            <div class="protocol-test-table-wrap"><table class="protocol-test-table"><thead><tr><th>Fish ID</th><th>数量</th><th>概率</th><th>Wilson 95%</th></tr></thead><tbody id="protocolTestDropBody"><tr><td colspan="4" class="protocol-test-table-empty">暂无数据</td></tr></tbody></table></div>
+            <div class="protocol-test-table-wrap"><table class="protocol-test-table"><thead><tr><th>渔场</th><th>Fish ID</th><th>鱼名称</th><th>品质</th><th>配置重量</th><th>冠鱼重量</th><th>奖励 ID</th><th>数量</th><th>概率</th><th>Wilson 95%</th></tr></thead><tbody id="protocolTestDropBody"><tr><td colspan="10" class="protocol-test-table-empty">暂无数据</td></tr></tbody></table></div>
           </div>
           <div class="protocol-test-result-section">
             <div class="protocol-test-section-head"><h3>执行摘要</h3><button class="btn btn-ghost protocol-test-download" type="button" onclick="downloadProtocolTestReport()">下载报告</button></div>
@@ -16645,18 +16645,31 @@ function renderProtocolTestReport(report) {
   if (body) {
     body.innerHTML = drops.length ? drops.map(item => {
       const interval = item.interval || {};
-      return '<tr><td><code>' + esc(item.fish_id) + '</code></td><td>' + (Number(item.count) || 0) + '</td><td>' +
-        protocolTestPercent(item.probability) + '</td><td>' + protocolTestPercent(interval.low) + ' – ' +
-        protocolTestPercent(interval.high) + '</td></tr>';
-    }).join('') : '<tr><td colspan="4" class="protocol-test-table-empty">暂无掉落数据</td></tr>';
+      const config = item.config || {};
+      const quality = config.quality_display || config.quality || '未知';
+      const display = value => value === undefined || value === null || value === '' ? '—' : esc(String(value));
+      return '<tr><td>' + display(item.fishing_ground_name || '未知渔场') + '</td><td><code>' + display(item.fish_id) +
+        '</code></td><td>' + display(item.fish_name || '未知鱼类') + '</td><td>' + display(quality) + '</td><td>' +
+        display(config.weight_range) + '</td><td>' + display(config.crown_weight) + '</td><td>' + display(config.reward_id) +
+        '</td><td>' + (Number(item.count) || 0) + '</td><td>' + protocolTestPercent(item.probability) +
+        '</td><td>' + protocolTestPercent(interval.low) + ' – ' + protocolTestPercent(interval.high) + '</td></tr>';
+    }).join('') : '<tr><td colspan="10" class="protocol-test-table-empty">暂无掉落数据</td></tr>';
   }
   const meta = document.getElementById('protocolTestDropMeta');
   if (meta) meta.textContent = report ? (report.drops?.fish_total || 0) + ' 条鱼 · 按掉落数计算概率' : '完成测试后显示';
   const actions = report?.actions || {};
   const latency = report?.latency_ms || {};
+  const fishingGround = report?.fishing_ground || {};
+  const fishConfigSummary = drops.map(item => {
+    const config = item.config || {};
+    const quality = config.quality_display || config.quality || '未知';
+    return (item.fish_name || '未知鱼类') + ' / 品质 ' + quality;
+  }).join('；') || '暂无鱼类配置';
   const lines = report ? [
     '总动作：' + (actions.completed || 0) + ' / ' + (actions.requested || 0),
     '成功率：' + protocolTestPercent(actions.success_rate),
+    '测试渔场：' + (fishingGround.name || '未知渔场') + (fishingGround.id ? '（ID ' + fishingGround.id + '）' : ''),
+    '鱼类配置：' + fishConfigSummary,
     '业务失败：' + (actions.business_failed || 0) + ' · 传输失败：' + (actions.transport_failed || 0) + ' · 超时：' + (actions.timeout || 0),
     '响应耗时：平均 ' + Math.round(latency.average || 0) + ' ms · P50 ' + (latency.p50 || 0) + ' ms · P95 ' + (latency.p95 || 0) + ' ms · P99 ' + (latency.p99 || 0) + ' ms',
     '收尾失败：' + (actions.finish_failures || 0),
