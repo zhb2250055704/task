@@ -9503,6 +9503,90 @@
     .kongming-workflow-actions .btn { width: 100%; }
   }
 
+  /* ============ Protocol test workspace ============ */
+  #view-protocol-test { background: transparent; }
+  .protocol-test-subtitle { margin-top: 4px; color: var(--text-dim); font-size: 12px; }
+  .protocol-test-layout { display: grid; grid-template-columns: minmax(420px, .92fr) minmax(520px, 1.08fr); gap: 18px; padding: 18px 28px 40px; align-items: start; }
+  .protocol-test-panel { min-width: 0; overflow: hidden; border: 1px solid var(--border); border-radius: 12px; background: var(--panel); box-shadow: var(--shadow); }
+  .protocol-test-panel-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; padding: 18px 20px 15px; border-bottom: 1px solid var(--border); }
+  .protocol-test-panel-head h2 { margin-top: 3px; color: var(--text); font-size: 18px; font-weight: 800; }
+  .protocol-test-eyebrow { color: var(--accent2); font-size: 10px; font-weight: 900; letter-spacing: 1.4px; }
+  .protocol-test-badge, .protocol-test-status { flex: 0 0 auto; padding: 5px 9px; border: 1px solid var(--border); border-radius: 999px; background: var(--ghost-bg); color: var(--text-dim); font-size: 11px; font-weight: 800; }
+  .protocol-test-status.running { border-color: rgba(99,102,241,.4); background: var(--accent-soft); color: var(--accent); }
+  .protocol-test-status.succeeded { border-color: rgba(22,128,91,.3); background: rgba(22,128,91,.10); color: #16805b; }
+  .protocol-test-status.failed, .protocol-test-status.stopped { border-color: rgba(239,68,68,.3); background: rgba(239,68,68,.1); color: #c2413d; }
+  .protocol-test-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 13px; padding: 18px 20px 8px; }
+  .protocol-test-field { min-width: 0; display: grid; gap: 6px; align-content: start; }
+  .protocol-test-field-wide { grid-column: 1 / -1; }
+  .protocol-test-field > label { color: var(--text-dim); font-size: 12px; font-weight: 750; }
+  .protocol-test-field input, .protocol-test-field select, .protocol-test-field textarea { width: 100%; min-width: 0; border: 1px solid var(--border); border-radius: 7px; outline: 0; background: var(--input-bg); color: var(--text); font: 13px/1.45 inherit; }
+  .protocol-test-field input, .protocol-test-field select { min-height: 36px; padding: 7px 10px; }
+  .protocol-test-field textarea { resize: vertical; padding: 9px 10px; }
+  .protocol-test-field input:focus, .protocol-test-field select:focus, .protocol-test-field textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .protocol-test-field-hint { color: var(--text-faint); font-size: 10px; line-height: 1.4; }
+  .protocol-test-code { min-height: 92px; color: var(--text); font-family: Consolas, "SFMono-Regular", monospace !important; font-size: 12px !important; }
+  .protocol-test-code-short { min-height: 58px; }
+  .protocol-test-check { display: flex; align-items: center; gap: 8px; color: var(--text-dim); cursor: pointer; font-size: 12px !important; font-weight: 650 !important; }
+  .protocol-test-check input { width: 15px; height: 15px; accent-color: var(--accent); }
+  .protocol-test-warning { display: flex; gap: 10px; margin: 6px 20px 14px; padding: 11px 12px; border: 1px solid rgba(217,119,6,.25); border-radius: 8px; background: rgba(217,119,6,.08); color: var(--text-dim); }
+  .protocol-test-warning-icon { display: grid; place-items: center; width: 19px; height: 19px; flex: 0 0 19px; border-radius: 50%; background: #d97706; color: #fff; font-size: 12px; font-weight: 900; }
+  .protocol-test-warning strong { display: block; color: var(--text); font-size: 11px; }
+  .protocol-test-warning p { margin-top: 3px; font-size: 10px; line-height: 1.55; }
+  .protocol-test-preview { margin: 0 20px 14px; min-height: 68px; padding: 11px 12px; border: 1px dashed var(--border-strong); border-radius: 8px; background: var(--input-bg); }
+  .protocol-test-preview.is-error { border-color: rgba(239,68,68,.35); background: rgba(239,68,68,.06); }
+  .protocol-test-preview-title { color: var(--text); font-size: 12px; font-weight: 800; }
+  .protocol-test-preview-list { display: grid; gap: 4px; margin-top: 6px; color: var(--text-dim); font-size: 10px; line-height: 1.5; }
+  .protocol-test-preview-list .error { color: #c2413d; }
+  .protocol-test-actions { display: flex; justify-content: flex-end; gap: 9px; padding: 0 20px 20px; }
+  .protocol-test-actions .btn { min-height: 35px; padding: 8px 13px; font-size: 12px; }
+  .protocol-test-progress-wrap { padding: 18px 20px 0; }
+  .protocol-test-progress-head { display: flex; justify-content: space-between; gap: 12px; color: var(--text-dim); font-size: 11px; }
+  .protocol-test-progress-head strong { color: var(--text); }
+  .protocol-test-progress-track { height: 8px; margin-top: 9px; overflow: hidden; border: 1px solid var(--border); border-radius: 999px; background: var(--ghost-bg); }
+  .protocol-test-progress-track span { display: block; width: 0; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--accent), var(--accent2)); transition: width .25s ease; }
+  .protocol-test-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 9px; padding: 16px 20px 5px; }
+  .protocol-test-kpis > div { min-width: 0; padding: 10px 11px; border: 1px solid var(--border); border-radius: 8px; background: var(--input-bg); }
+  .protocol-test-kpis span { display: block; color: var(--text-dim); font-size: 10px; }
+  .protocol-test-kpis strong { display: block; margin-top: 5px; overflow: hidden; color: var(--text); font-size: 20px; text-overflow: ellipsis; white-space: nowrap; }
+  .protocol-test-result-section { margin: 13px 20px 0; padding-top: 13px; border-top: 1px solid var(--border); }
+  .protocol-test-history-section { padding-bottom: 20px; }
+  .protocol-test-section-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 9px; }
+  .protocol-test-section-head h3 { color: var(--text); font-size: 13px; }
+  .protocol-test-section-head > span { color: var(--text-faint); font-size: 10px; }
+  .protocol-test-download { min-height: 28px !important; padding: 5px 8px !important; font-size: 10px !important; }
+  .protocol-test-table-wrap { overflow: auto; max-height: 270px; border: 1px solid var(--border); border-radius: 7px; }
+  .protocol-test-table { min-width: 470px; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+  .protocol-test-table th, .protocol-test-table td { padding: 8px 10px; font-size: 11px; }
+  .protocol-test-table th { position: sticky; top: 0; z-index: 1; background: var(--th-bg); }
+  .protocol-test-table td { color: var(--text); }
+  .protocol-test-table-empty { color: var(--text-faint) !important; text-align: center !important; }
+  .protocol-test-summary { min-height: 100px; max-height: 230px; overflow: auto; padding: 11px 12px; border: 1px solid var(--border); border-radius: 7px; background: var(--input-bg); color: var(--text-dim); font: 11px/1.65 Consolas, "SFMono-Regular", monospace; white-space: pre-wrap; }
+  .protocol-test-history { display: grid; gap: 6px; }
+  .protocol-test-history-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 10px; border: 1px solid var(--border); border-radius: 7px; background: var(--input-bg); cursor: pointer; }
+  .protocol-test-history-item:hover { border-color: var(--accent); }
+  .protocol-test-history-main { min-width: 0; }
+  .protocol-test-history-main strong { display: block; overflow: hidden; color: var(--text); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+  .protocol-test-history-main span { display: block; margin-top: 3px; color: var(--text-faint); font-size: 10px; }
+  .protocol-test-history-state { flex: 0 0 auto; color: var(--text-dim); font-size: 10px; font-weight: 800; }
+  .protocol-test-empty { color: var(--text-faint); font-size: 11px; line-height: 1.6; }
+  #view-protocol-test > header::after { display: none; }
+  #view-protocol-test > header > div:first-child { position: relative; z-index: 1; }
+  #view-protocol-test > header .protocol-test-subtitle { margin-top: 8px; line-height: 1.5; }
+  @media (max-width: 1100px) {
+    .protocol-test-layout { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 700px) {
+    .protocol-test-layout { padding: 12px; }
+    .protocol-test-fields { grid-template-columns: 1fr; padding-inline: 14px; }
+    .protocol-test-field-wide { grid-column: auto; }
+    .protocol-test-panel-head { padding-inline: 14px; }
+    .protocol-test-warning, .protocol-test-preview, .protocol-test-result-section { margin-inline: 14px; }
+    .protocol-test-actions { flex-wrap: wrap; padding-inline: 14px; }
+    .protocol-test-actions .btn { flex: 1 1 120px; }
+    .protocol-test-kpis { padding-inline: 14px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .protocol-test-progress-wrap { padding-inline: 14px; }
+  }
+
   /* Keep command resources in the first viewport while retaining every target control. */
   @media (min-width: 900px) {
     #view-commands.active {
@@ -9718,6 +9802,7 @@ FORM: Operate mode, Stitch high-fidelity prototype, source order 1, no concept s
       <button class="nav-item active" type="button" data-view="commands" aria-current="page" onclick="switchView('commands')"><span class="material-symbols-outlined">terminal</span><span>命令管理</span></button>
       <button class="nav-item" type="button" data-view="scripts" onclick="switchView('scripts')"><span class="material-symbols-outlined">code</span><span>脚本管理</span></button>
       <button class="nav-item" type="button" data-view="qa" onclick="switchView('qa')"><span class="material-symbols-outlined">bug_report</span><span>测试设计</span></button>
+      <button class="nav-item admin-only" type="button" data-view="protocol-test" onclick="switchView('protocol-test')" style="display:none"><span class="material-symbols-outlined">network_check</span><span>协议测试</span></button>
       <button class="nav-item admin-only" type="button" data-view="skillhub" onclick="switchView('skillhub')" style="display:none"><span class="material-symbols-outlined">bolt</span><span>Skill 管理</span></button>
       <button class="nav-item" type="button" data-view="kongming" onclick="switchView('kongming')"><span class="material-symbols-outlined">forum</span><span>孔明助手</span></button>
       <button class="nav-item" type="button" data-view="formulas" onclick="switchView('formulas')"><span class="material-symbols-outlined">functions</span><span>计算公式</span></button>
@@ -10241,6 +10326,124 @@ FORM: Operate mode, Stitch high-fidelity prototype, source order 1, no concept s
       </div>
     </div>
 
+    <!-- ============ 协议测试视图 ============ -->
+    <div class="view" id="view-protocol-test">
+      <header>
+        <div>
+          <h1>协议测试</h1>
+          <p class="protocol-test-subtitle">面向本机 Cocos 客户端的真实协议响应采集与统计</p>
+        </div>
+        <div class="header-right">
+          <span id="protocolTestCount" class="count-badge">未运行</span>
+          <button class="btn btn-ghost" type="button" onclick="loadProtocolTestWorkspace()">刷新</button>
+        </div>
+      </header>
+      <div class="protocol-test-layout">
+        <section class="protocol-test-panel protocol-test-config" aria-label="协议测试配置">
+          <div class="protocol-test-panel-head">
+            <div><span class="protocol-test-eyebrow">TEST PLAN</span><h2>创建测试计划</h2></div>
+            <span id="protocolTestChannelBadge" class="protocol-test-badge">仅支持本机 Cocos</span>
+          </div>
+          <div class="protocol-test-fields">
+            <div class="protocol-test-field protocol-test-field-wide">
+              <label for="protocolTestTitle">测试名称</label>
+              <input id="protocolTestTitle" type="text" value="钓鱼活动掉落抽样" maxlength="120" autocomplete="off">
+            </div>
+            <div class="protocol-test-field">
+              <label for="protocolTestTemplate">测试模板</label>
+              <select id="protocolTestTemplate" onchange="selectProtocolTestTemplate(this.value)">
+                <option value="fishing">钓鱼活动掉落抽样</option>
+                <option value="generic">通用协议测试</option>
+              </select>
+            </div>
+            <div class="protocol-test-field">
+              <label for="protocolTestTarget">本机游戏账号</label>
+              <select id="protocolTestTarget" onchange="renderProtocolTestTargetMeta()"></select>
+              <span id="protocolTestTargetMeta" class="protocol-test-field-hint">正在读取客户端账号</span>
+            </div>
+            <div class="protocol-test-field">
+              <label for="protocolTestRequestProtocol">请求协议</label>
+              <select id="protocolTestRequestProtocol"></select>
+            </div>
+            <div class="protocol-test-field">
+              <label for="protocolTestResponseProtocol">响应协议</label>
+              <select id="protocolTestResponseProtocol"></select>
+            </div>
+            <div class="protocol-test-field protocol-test-field-wide protocol-test-fishing-only">
+              <label for="protocolTestActivityMetaId">活动 Meta ID</label>
+              <input id="protocolTestActivityMetaId" type="text" placeholder="打开游戏活动后自动获取，也可手动填写" autocomplete="off" oninput="markProtocolTestActivityMetaIdManual()">
+              <span class="protocol-test-field-hint">打开对应活动后自动回填；手动输入后保留手动值</span>
+            </div>
+            <div class="protocol-test-field protocol-test-fishing-only">
+              <label for="protocolTestScene">场景</label>
+              <input id="protocolTestScene" type="number" min="1" value="1" step="1">
+            </div>
+            <div class="protocol-test-field">
+              <label for="protocolTestCountInput">执行次数</label>
+              <input id="protocolTestCountInput" type="number" min="1" max="10000" value="1000" step="1">
+            </div>
+            <div class="protocol-test-field">
+              <label for="protocolTestTimeout">单次超时（毫秒）</label>
+              <input id="protocolTestTimeout" type="number" min="1000" max="12000" value="10000" step="500">
+            </div>
+            <div class="protocol-test-field">
+              <label for="protocolTestInterval">请求间隔（毫秒）</label>
+              <input id="protocolTestInterval" type="number" min="0" max="60000" value="0" step="100">
+            </div>
+            <div class="protocol-test-field protocol-test-field-wide">
+              <label for="protocolTestRequestPayload">请求参数 JSON</label>
+              <textarea id="protocolTestRequestPayload" class="protocol-test-code" spellcheck="false"></textarea>
+            </div>
+            <div class="protocol-test-field protocol-test-field-wide">
+              <label for="protocolTestResponseMatch">响应匹配条件 JSON（可选）</label>
+              <textarea id="protocolTestResponseMatch" class="protocol-test-code protocol-test-code-short" spellcheck="false"></textarea>
+            </div>
+            <div class="protocol-test-field protocol-test-field-wide protocol-test-fishing-only">
+              <label class="protocol-test-check"><input id="protocolTestFinishEnabled" type="checkbox" checked><span>每次成功后发送 CgFishFinish 收尾协议</span></label>
+            </div>
+          </div>
+          <div class="protocol-test-warning">
+            <span class="protocol-test-warning-icon">!</span>
+            <div><strong>真实数据变更提醒</strong><p>测试会消耗道具并改变图鉴、重量和保底状态。请只使用隔离测试账号，超时请求不会自动重试。</p></div>
+          </div>
+          <div id="protocolTestPreview" class="protocol-test-preview" aria-live="polite">
+            <div class="protocol-test-empty">先点击“预检计划”，确认目标和参数后再开始执行。</div>
+          </div>
+          <div class="protocol-test-actions">
+            <button class="btn btn-ghost" type="button" onclick="previewProtocolTest()">预检计划</button>
+            <button id="protocolTestStartBtn" class="btn btn-primary" type="button" onclick="startProtocolTest()">开始测试</button>
+            <button id="protocolTestStopBtn" class="btn btn-danger" type="button" onclick="stopProtocolTest()" disabled>停止测试</button>
+          </div>
+        </section>
+
+        <section class="protocol-test-panel protocol-test-results" aria-label="协议测试结果">
+          <div class="protocol-test-panel-head">
+            <div><span class="protocol-test-eyebrow">LIVE REPORT</span><h2>执行结果</h2></div>
+            <span id="protocolTestStatus" class="protocol-test-status">等待执行</span>
+          </div>
+          <div class="protocol-test-progress-wrap">
+            <div class="protocol-test-progress-head"><span id="protocolTestProgressText">尚未开始</span><strong id="protocolTestProgressPercent">0%</strong></div>
+            <div class="protocol-test-progress-track"><span id="protocolTestProgressFill"></span></div>
+          </div>
+          <div id="protocolTestKpis" class="protocol-test-kpis">
+            <div><span>成功</span><strong>0</strong></div><div><span>失败</span><strong>0</strong></div><div><span>超时</span><strong>0</strong></div><div><span>掉落总数</span><strong>0</strong></div>
+          </div>
+          <div class="protocol-test-result-section">
+            <div class="protocol-test-section-head"><h3>掉落分布</h3><span id="protocolTestDropMeta">完成测试后显示</span></div>
+            <div class="protocol-test-table-wrap"><table class="protocol-test-table"><thead><tr><th>Fish ID</th><th>数量</th><th>概率</th><th>Wilson 95%</th></tr></thead><tbody id="protocolTestDropBody"><tr><td colspan="4" class="protocol-test-table-empty">暂无数据</td></tr></tbody></table></div>
+          </div>
+          <div class="protocol-test-result-section">
+            <div class="protocol-test-section-head"><h3>执行摘要</h3><button class="btn btn-ghost protocol-test-download" type="button" onclick="downloadProtocolTestReport()">下载报告</button></div>
+            <pre id="protocolTestSummary" class="protocol-test-summary">完成一次测试后，这里会显示响应成功率、耗时分位数和异常分布。</pre>
+          </div>
+          <div class="protocol-test-result-section protocol-test-history-section">
+            <div class="protocol-test-section-head"><h3>最近测试</h3><span>保留最近 50 条</span></div>
+            <div id="protocolTestHistory" class="protocol-test-history"><div class="protocol-test-empty">暂无历史测试</div></div>
+          </div>
+        </section>
+      </div>
+    </div>
+
     <!-- ============ 孔明对话助手视图 ============ -->
     <div class="view" id="view-kongming">
       <header>
@@ -10285,15 +10488,15 @@ FORM: Operate mode, Stitch high-fidelity prototype, source order 1, no concept s
                   <h2>今天要解决什么问题？</h2>
                   <p>我会整理配置证据，或生成范围明确、等待确认的执行计划。</p>
                   <div class="kongming-starters">
-                    <button type="button" onclick="askKongmingStarter('九州风采活动关联哪些配置表？')">九州风采关联表</button>
-                    <button type="button" onclick="askKongmingStarter('帮我查奇兵突袭的配置入口和关键字段')">奇兵突袭配置入口</button>
-                    <button type="button" onclick="askKongmingStarter('帮我查鉴宝活动关联的配置表和客户端入口')">鉴宝活动关联配置</button>
+                    <button type="button" onclick="askKongmingStarter('同步 KS 环境和账号，然后等待我登录游戏')">同步并等待登录</button>
+                    <button type="button" onclick="askKongmingStarter('给当前在线账号执行成为天子命令')">执行成为天子</button>
+                    <button type="button" onclick="askKongmingStarter('九州风采活动关联哪些配置表？')">查询活动配置</button>
                   </div>
                 </div>
               </div>
 
               <form class="kongming-composer" onsubmit="sendKongmingMessage(event)">
-                <textarea id="kongmingInput" rows="1" maxlength="4000" placeholder="询问配置，或描述要执行的 KS 任务" oninput="resizeKongmingInput()" onkeydown="handleKongmingInputKey(event)"></textarea>
+                <textarea id="kongmingInput" rows="1" maxlength="12000" placeholder="询问配置，或描述要执行的 KS 任务" oninput="resizeKongmingInput()" onkeydown="handleKongmingInputKey(event)"></textarea>
                 <button id="kongmingSendButton" type="submit" title="发送" aria-label="发送"><span class="material-symbols-outlined">arrow_upward</span></button>
                 <span id="kongmingComposerHint">检索 / 任务预览</span>
               </form>
@@ -10846,6 +11049,7 @@ const GM_CONSOLE_API = '/api/gm-console';
 const QA_TEST_DESIGN_API = '/api/qa-test-design';
 const SKILLHUB_API = '/api/skillhub';
 const KONGMING_API = '/api/kongming';
+const PROTOCOL_TEST_API = '/api/protocol-test';
 let categoryCache = [];
 let currentView = 'commands';
 let currentUser = null;
@@ -10930,6 +11134,11 @@ let qaHistoryFilter = 'all';
 let qaHistoryLoaded = false;
 let qaHistoryLoading = false;
 let qaHistoryActiveId = '';
+let protocolTestCatalog = { protocols: [], templates: [], baselines: {} };
+let protocolTestActiveRunId = '';
+let protocolTestPollTimer = null;
+let protocolTestReport = null;
+let protocolTestLastPreview = null;
 
 function enhanceReactBitsComponents(root) {
   const scope = root && root.querySelectorAll ? root : document;
@@ -11063,6 +11272,7 @@ function switchView(view) {
     loadQaHistory({ restoreLatest: !qaHistoryLoaded });
   }
   else if (view === 'skillhub') loadSkillHubStatus();
+  else if (view === 'protocol-test') loadProtocolTestWorkspace();
   else if (view === 'kongming') loadKongmingWorkspace();
   else if (view === 'items') loadItems();
   else if (view === 'git') loadGitRepos();
@@ -11516,6 +11726,7 @@ function renderCocosStatus(data) {
     updateCocosTargetSummarySelection();
   }
   renderScriptTargetPanel();
+  if (currentView === 'protocol-test') renderProtocolTestTargets();
 }
 
 function getCocosTargetEntries() {
@@ -12222,7 +12433,7 @@ function startCocosStatusPolling() {
   if (cocosStatusTimer) clearInterval(cocosStatusTimer);
   loadCocosStatus();
   cocosStatusTimer = setInterval(() => {
-    if (currentView === 'commands') loadCocosStatus();
+    if (currentView === 'commands' || currentView === 'protocol-test') loadCocosStatus();
   }, 5000);
 }
 
@@ -16116,6 +16327,489 @@ function applyQaProviderSelection(provider) {
   });
   renderQaArtifactResults(qaProviderResults[qaProvider]);
   applyQaProviderStatus();
+}
+
+/* ============ 协议测试 ============ */
+const PROTOCOL_TEST_STATUS_LABELS = {
+  queued: '排队中',
+  running: '执行中',
+  succeeded: '已完成',
+  stopped: '已停止',
+  failed: '执行失败',
+};
+
+let protocolTestActivityMetaIdManual = false;
+let protocolTestActivityMetaIdTargetId = '';
+
+function markProtocolTestActivityMetaIdManual() {
+  protocolTestActivityMetaIdManual = true;
+}
+
+function protocolTestIsDirectTarget(item) {
+  return !!(item && item.dispatchable && item.source !== 'external_proxy' && !String(item.id || '').startsWith('proxy:'));
+}
+
+function protocolTestDirectTargets() {
+  return getCocosTargetEntries().filter(protocolTestIsDirectTarget);
+}
+
+function protocolTestSetOptions(selectId, items, selected, placeholder) {
+  const select = document.getElementById(selectId);
+  if (!select) return;
+  const list = Array.isArray(items) ? items : [];
+  select.innerHTML = list.length
+    ? list.map(item => '<option value="' + esc(item.value) + '"' + (item.value === selected ? ' selected' : '') + '>' + esc(item.label) + '</option>').join('')
+    : '<option value="">' + esc(placeholder || '暂无可选项') + '</option>';
+}
+
+function renderProtocolTestTargets() {
+  const select = document.getElementById('protocolTestTarget');
+  if (!select) return;
+  const targets = protocolTestDirectTargets();
+  const current = select.value;
+  const selected = targets.some(item => item.id === current) ? current : ((targets[0] && targets[0].id) || '');
+  protocolTestSetOptions('protocolTestTarget', targets.map(item => ({
+    value: item.id,
+    label: [item.account_label || item.role_name || item.account_name || '未命名角色', item.server_id ? item.server_id + '服' : '', item.environment_name || ''].filter(Boolean).join(' · '),
+  })), selected, '暂无本机 Cocos 客户端账号');
+  renderProtocolTestTargetMeta();
+}
+
+function renderProtocolTestTargetMeta() {
+  const targetId = document.getElementById('protocolTestTarget')?.value || '';
+  const target = protocolTestDirectTargets().find(item => item.id === targetId);
+  const meta = document.getElementById('protocolTestTargetMeta');
+  const badge = document.getElementById('protocolTestChannelBadge');
+  const activityMetaInput = document.getElementById('protocolTestActivityMetaId');
+  const targetChanged = targetId !== protocolTestActivityMetaIdTargetId;
+  if (targetChanged) {
+    protocolTestActivityMetaIdTargetId = targetId;
+    protocolTestActivityMetaIdManual = false;
+    if (activityMetaInput) activityMetaInput.value = '';
+  }
+  if (!target) {
+    if (meta) meta.textContent = '没有可执行的本机 Cocos 客户端，请先登录游戏并开启自动测试桥接';
+    if (badge) badge.textContent = '等待本机客户端';
+    return;
+  }
+  const activityMetaId = String(target.fish_activity_meta_id || '').trim();
+  if (activityMetaInput && !protocolTestActivityMetaIdManual && activityMetaId) {
+    if (activityMetaInput.value !== activityMetaId) {
+      activityMetaInput.value = activityMetaId;
+      protocolTestSyncActivityMetaId(activityMetaId);
+    }
+  }
+  if (meta) meta.textContent = [
+    target.environment_name || '未识别环境',
+    target.server_id ? target.server_id + '服' : '',
+    target.role_id ? '角色 ' + target.role_id : '',
+    target.port ? '端口 ' + target.port : '',
+  ].filter(Boolean).join(' · ');
+  if (activityMetaInput && !activityMetaId && !protocolTestActivityMetaIdManual) {
+    activityMetaInput.placeholder = '请先在游戏中打开钓鱼活动，收到活动信息后会自动回填';
+  } else if (activityMetaInput) {
+    activityMetaInput.placeholder = '打开游戏活动后自动获取，也可手动填写';
+  }
+  if (badge) badge.textContent = '本机 Cocos 已连接';
+}
+
+function protocolTestProtocolOptions(direction) {
+  return (protocolTestCatalog.protocols || [])
+    .filter(item => item.direction === direction)
+    .map(item => ({ value: item.name, label: item.name + (item.description ? ' · ' + item.description : '') }));
+}
+
+function renderProtocolTestProtocolSelectors(selectedRequest, selectedResponse) {
+  protocolTestSetOptions('protocolTestRequestProtocol', protocolTestProtocolOptions('request'), selectedRequest || 'CgFishStart', '暂无请求协议定义');
+  protocolTestSetOptions('protocolTestResponseProtocol', protocolTestProtocolOptions('response'), selectedResponse || 'GcFishStartResult', '暂无响应协议定义');
+}
+
+function protocolTestWriteJson(id, value) {
+  const element = document.getElementById(id);
+  if (element) element.value = JSON.stringify(value || {}, null, 2);
+}
+
+function protocolTestSyncActivityMetaId(activityMetaId) {
+  if (document.getElementById('protocolTestTemplate')?.value !== 'fishing') return;
+  const value = String(activityMetaId || '').trim();
+  ['protocolTestRequestPayload', 'protocolTestResponseMatch'].forEach(id => {
+    const element = document.getElementById(id);
+    if (!element) return;
+    try {
+      const parsed = element.value.trim() ? JSON.parse(element.value) : {};
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return;
+      parsed.activityMetaId = value;
+      protocolTestWriteJson(id, parsed);
+    } catch (_error) {
+      // Keep invalid user-entered JSON visible so the existing validation can explain it.
+    }
+  });
+}
+
+function protocolTestToggleFishingFields(isFishing) {
+  document.querySelectorAll('.protocol-test-fishing-only').forEach(element => {
+    element.style.display = isFishing ? '' : 'none';
+  });
+}
+
+function selectProtocolTestTemplate(template) {
+  const isFishing = template === 'fishing';
+  protocolTestToggleFishingFields(isFishing);
+  const title = document.getElementById('protocolTestTitle');
+  const finish = document.getElementById('protocolTestFinishEnabled');
+  if (isFishing) {
+    if (title) title.value = '钓鱼活动掉落抽样';
+    renderProtocolTestProtocolSelectors('CgFishStart', 'GcFishStartResult');
+    if (finish) finish.checked = true;
+    protocolTestWriteJson('protocolTestRequestPayload', {
+      activityMetaId: document.getElementById('protocolTestActivityMetaId')?.value.trim() || '',
+      times: 1,
+      scene: Number(document.getElementById('protocolTestScene')?.value || 1),
+    });
+    protocolTestWriteJson('protocolTestResponseMatch', {
+      activityMetaId: document.getElementById('protocolTestActivityMetaId')?.value.trim() || '',
+    });
+  } else {
+    if (title) title.value = '通用协议测试';
+    renderProtocolTestProtocolSelectors();
+    if (finish) finish.checked = false;
+    protocolTestWriteJson('protocolTestRequestPayload', {});
+    protocolTestWriteJson('protocolTestResponseMatch', {});
+  }
+}
+
+function protocolTestParseJson(id, fallback) {
+  const text = document.getElementById(id)?.value.trim() || '';
+  if (!text) return fallback;
+  try {
+    const value = JSON.parse(text);
+    if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('必须是 JSON 对象');
+    return value;
+  } catch (error) {
+    throw new Error((id === 'protocolTestRequestPayload' ? '请求参数' : '响应匹配条件') + ' JSON 无效：' + error.message);
+  }
+}
+
+function buildProtocolTestPlan() {
+  const targetId = document.getElementById('protocolTestTarget')?.value || '';
+  const target = protocolTestDirectTargets().find(item => item.id === targetId);
+  if (!target) throw new Error('请选择一个已连接的本机 Cocos 客户端账号');
+  const template = document.getElementById('protocolTestTemplate')?.value || 'fishing';
+  const requestPayload = protocolTestParseJson('protocolTestRequestPayload', {});
+  let responseMatch = protocolTestParseJson('protocolTestResponseMatch', {});
+  let finish = {};
+  if (template === 'fishing') {
+    const activityMetaId = document.getElementById('protocolTestActivityMetaId')?.value.trim() || '';
+    if (!activityMetaId) throw new Error('请填写活动 Meta ID');
+    requestPayload.activityMetaId = activityMetaId;
+    requestPayload.times = 1;
+    requestPayload.scene = Math.max(1, Number(document.getElementById('protocolTestScene')?.value || 1));
+    responseMatch = { ...responseMatch, activityMetaId };
+    if (document.getElementById('protocolTestFinishEnabled')?.checked) {
+      finish = {
+        protocol: 'CgFishFinish',
+        response_protocol: 'GcFishFinishResult',
+        payload: { activityMetaId },
+      };
+    }
+  }
+  return {
+    title: document.getElementById('protocolTestTitle')?.value.trim() || '协议测试',
+    fixture: template,
+    target_specs: [getCocosTargetSpec(target)],
+    request: {
+      protocol: document.getElementById('protocolTestRequestProtocol')?.value || '',
+      payload: requestPayload,
+      response_protocol: document.getElementById('protocolTestResponseProtocol')?.value || '',
+      response_match: responseMatch,
+      success_condition: template === 'fishing' ? 'code == 0' : '',
+    },
+    finish,
+    count: Math.max(1, Math.min(10000, Number(document.getElementById('protocolTestCountInput')?.value || 1000))),
+    concurrency: 1,
+    interval_ms: Math.max(0, Math.min(60000, Number(document.getElementById('protocolTestInterval')?.value || 0))),
+    timeout_ms: Math.max(1000, Math.min(12000, Number(document.getElementById('protocolTestTimeout')?.value || 10000))),
+  };
+}
+
+function renderProtocolTestPreview(data) {
+  const box = document.getElementById('protocolTestPreview');
+  if (!box) return;
+  const errors = data?.errors || [];
+  const warnings = data?.warnings || [];
+  const plan = data?.plan || {};
+  const lines = [];
+  if (errors.length) errors.forEach(item => lines.push('<span class="error">错误：' + esc(item) + '</span>'));
+  else {
+    lines.push('目标：' + esc(plan.target_specs?.length === 1 ? '1 个本机 Cocos 客户端' : '未选择目标'));
+    lines.push('流程：' + esc([plan.request_protocol, plan.response_protocol, plan.finish_protocol].filter(Boolean).join(' → ')));
+    lines.push('执行：' + esc((plan.count || 0) + ' 次 · 串行 · 超时 ' + (plan.timeout_ms || 0) + ' ms'));
+  }
+  warnings.slice(0, 3).forEach(item => lines.push('<span>' + esc(item) + '</span>'));
+  box.classList.toggle('is-error', errors.length > 0);
+  box.innerHTML = '<div class="protocol-test-preview-title">' + (errors.length ? '预检未通过' : '预检结果') + '</div><div class="protocol-test-preview-list">' + lines.join('') + '</div>';
+}
+
+async function previewProtocolTest(silent) {
+  let plan;
+  try {
+    plan = buildProtocolTestPlan();
+  } catch (error) {
+    if (!silent) toast(error.message);
+    renderProtocolTestPreview({ errors: [error.message], warnings: [] });
+    return null;
+  }
+  const box = document.getElementById('protocolTestPreview');
+  if (box) box.innerHTML = '<div class="protocol-test-empty">正在检查协议定义、目标身份和配置基线…</div>';
+  try {
+    const res = await fetch(PROTOCOL_TEST_API + '/preview', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(plan),
+    });
+    const data = await res.json();
+    protocolTestLastPreview = data;
+    renderProtocolTestPreview(data);
+    if (!res.ok || !data.ok) {
+      if (!silent) toast((data.errors || [data.msg || '预检未通过'])[0]);
+      return null;
+    }
+    if (!silent) toast('预检通过，可以开始测试');
+    return { plan, data };
+  } catch (error) {
+    renderProtocolTestPreview({ errors: [error.message || '预检请求失败'], warnings: [] });
+    if (!silent) toast(error.message || '预检请求失败');
+    return null;
+  }
+}
+
+function protocolTestStatusClass(status) {
+  return ['running', 'succeeded', 'failed', 'stopped'].includes(status) ? status : '';
+}
+
+function renderProtocolTestRun(run) {
+  if (!run) return;
+  const status = document.getElementById('protocolTestStatus');
+  const percent = Math.max(0, Math.min(100, Number(run.progress) || 0));
+  const done = Number(run.completed) || 0;
+  const total = Number(run.total) || 0;
+  const success = Number(run.success) || 0;
+  const failed = Number(run.failed) || 0;
+  const timeout = Number(run.timeout) || 0;
+  if (status) {
+    status.textContent = PROTOCOL_TEST_STATUS_LABELS[run.status] || '等待执行';
+    status.className = 'protocol-test-status ' + protocolTestStatusClass(run.status);
+  }
+  const count = document.getElementById('protocolTestCount');
+  if (count) count.textContent = total ? done + '/' + total : '未运行';
+  const text = document.getElementById('protocolTestProgressText');
+  if (text) text.textContent = run.message || done + '/' + total;
+  const percentNode = document.getElementById('protocolTestProgressPercent');
+  if (percentNode) percentNode.textContent = percent.toFixed(2).replace(/\.00$/, '') + '%';
+  const fill = document.getElementById('protocolTestProgressFill');
+  if (fill) fill.style.width = percent + '%';
+  const kpis = document.querySelectorAll('#protocolTestKpis strong');
+  if (kpis.length >= 4) {
+    kpis[0].textContent = String(success);
+    kpis[1].textContent = String(failed);
+    kpis[2].textContent = String(timeout);
+  }
+  const active = ['queued', 'running'].includes(run.status);
+  const start = document.getElementById('protocolTestStartBtn');
+  const stop = document.getElementById('protocolTestStopBtn');
+  if (start) start.disabled = active;
+  if (stop) stop.disabled = !active;
+}
+
+function protocolTestRenderKpis(report) {
+  const actions = report?.actions || {};
+  const drops = report?.drops || {};
+  const kpis = document.querySelectorAll('#protocolTestKpis strong');
+  if (kpis.length >= 4) {
+    kpis[0].textContent = String(actions.success || 0);
+    kpis[1].textContent = String((actions.business_failed || 0) + (actions.transport_failed || 0) + (actions.timeout || 0));
+    kpis[2].textContent = String(actions.timeout || 0);
+    kpis[3].textContent = String(drops.fish_total || 0);
+  }
+}
+
+function protocolTestPercent(value) {
+  return (Number(value || 0) * 100).toFixed(2) + '%';
+}
+
+function renderProtocolTestReport(report) {
+  protocolTestReport = report || null;
+  protocolTestRenderKpis(report);
+  const drops = report?.drops?.fish_distribution || [];
+  const body = document.getElementById('protocolTestDropBody');
+  if (body) {
+    body.innerHTML = drops.length ? drops.map(item => {
+      const interval = item.interval || {};
+      return '<tr><td><code>' + esc(item.fish_id) + '</code></td><td>' + (Number(item.count) || 0) + '</td><td>' +
+        protocolTestPercent(item.probability) + '</td><td>' + protocolTestPercent(interval.low) + ' – ' +
+        protocolTestPercent(interval.high) + '</td></tr>';
+    }).join('') : '<tr><td colspan="4" class="protocol-test-table-empty">暂无掉落数据</td></tr>';
+  }
+  const meta = document.getElementById('protocolTestDropMeta');
+  if (meta) meta.textContent = report ? (report.drops?.fish_total || 0) + ' 条鱼 · 按掉落数计算概率' : '完成测试后显示';
+  const actions = report?.actions || {};
+  const latency = report?.latency_ms || {};
+  const lines = report ? [
+    '总动作：' + (actions.completed || 0) + ' / ' + (actions.requested || 0),
+    '成功率：' + protocolTestPercent(actions.success_rate),
+    '业务失败：' + (actions.business_failed || 0) + ' · 传输失败：' + (actions.transport_failed || 0) + ' · 超时：' + (actions.timeout || 0),
+    '响应耗时：平均 ' + Math.round(latency.average || 0) + ' ms · P50 ' + (latency.p50 || 0) + ' ms · P95 ' + (latency.p95 || 0) + ' ms · P99 ' + (latency.p99 || 0) + ' ms',
+    '收尾失败：' + (actions.finish_failures || 0),
+    '错误码：' + (Object.entries(actions.error_codes || {}).map(([key, value]) => key + '=' + value).join(' · ') || '无'),
+  ].join('\n') : '完成一次测试后，这里会显示响应成功率、耗时分位数和异常分布。';
+  const summary = document.getElementById('protocolTestSummary');
+  if (summary) summary.textContent = lines;
+}
+
+function renderProtocolTestHistory(runs) {
+  const box = document.getElementById('protocolTestHistory');
+  if (!box) return;
+  if (!runs?.length) {
+    box.innerHTML = '<div class="protocol-test-empty">暂无历史测试</div>';
+    return;
+  }
+  box.innerHTML = runs.slice(0, 10).map(run => '<div class="protocol-test-history-item" onclick="openProtocolTestRun(' +
+    JSON.stringify(String(run.id || '')) + ')"><div class="protocol-test-history-main"><strong>' +
+    esc(run.title || '协议测试') + '</strong><span>' +
+    esc(new Date(Number(run.created_at_ms || 0)).toLocaleString()) + ' · ' + (Number(run.completed) || 0) + '/' +
+    (Number(run.total) || 0) + '</span></div><span class="protocol-test-history-state">' +
+    esc(PROTOCOL_TEST_STATUS_LABELS[run.status] || run.status || '未知') + '</span></div>').join('');
+}
+
+async function loadProtocolTestReport(runId) {
+  try {
+    const res = await fetch(PROTOCOL_TEST_API + '/runs/' + encodeURIComponent(runId) + '/report', { cache: 'no-store' });
+    const data = await res.json();
+    if (res.ok && data.ok) renderProtocolTestReport(data.report);
+  } catch (error) {}
+}
+
+async function openProtocolTestRun(runId) {
+  protocolTestActiveRunId = runId;
+  try {
+    const res = await fetch(PROTOCOL_TEST_API + '/runs/' + encodeURIComponent(runId), { cache: 'no-store' });
+    const data = await res.json();
+    if (!res.ok || !data.ok) throw new Error(data.msg || '测试任务读取失败');
+    renderProtocolTestRun(data.run);
+    await loadProtocolTestReport(runId);
+    if (['queued', 'running'].includes(data.run.status)) startProtocolTestPolling();
+  } catch (error) {
+    toast(error.message || '测试任务读取失败');
+  }
+}
+
+async function loadProtocolTestHistory() {
+  try {
+    const res = await fetch(PROTOCOL_TEST_API + '/runs', { cache: 'no-store' });
+    const data = await res.json();
+    if (!res.ok || !data.ok) throw new Error(data.msg || '协议测试记录读取失败');
+    renderProtocolTestHistory(data.runs || []);
+    const active = (data.runs || []).find(item => ['queued', 'running'].includes(item.status));
+    if (active && !protocolTestActiveRunId) await openProtocolTestRun(active.id);
+    else if (!protocolTestActiveRunId && data.runs?.[0]) await openProtocolTestRun(data.runs[0].id);
+  } catch (error) {
+    const box = document.getElementById('protocolTestHistory');
+    if (box) box.innerHTML = '<div class="protocol-test-empty">' + esc(error.message || '历史记录读取失败') + '</div>';
+  }
+}
+
+function startProtocolTestPolling() {
+  if (protocolTestPollTimer) clearInterval(protocolTestPollTimer);
+  if (!protocolTestActiveRunId) return;
+  protocolTestPollTimer = setInterval(async () => {
+    try {
+      const res = await fetch(PROTOCOL_TEST_API + '/runs/' + encodeURIComponent(protocolTestActiveRunId), { cache: 'no-store' });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.msg || '测试状态读取失败');
+      renderProtocolTestRun(data.run);
+      if (!['queued', 'running'].includes(data.run.status)) {
+        clearInterval(protocolTestPollTimer);
+        protocolTestPollTimer = null;
+        await loadProtocolTestReport(protocolTestActiveRunId);
+        await loadProtocolTestHistory();
+      }
+    } catch (error) {
+      clearInterval(protocolTestPollTimer);
+      protocolTestPollTimer = null;
+    }
+  }, 800);
+}
+
+async function startProtocolTest() {
+  if (protocolTestActiveRunId) {
+    const status = document.getElementById('protocolTestStatus')?.textContent || '';
+    if (status === '执行中' || status === '排队中') return;
+  }
+  const checked = await previewProtocolTest(true);
+  if (!checked) return;
+  const plan = checked.plan;
+  if (!confirm('将对 1 个本机 Cocos 账号执行 ' + plan.count + ' 次真实协议请求，可能消耗道具并改变账号数据。确认继续？')) return;
+  try {
+    const res = await fetch(PROTOCOL_TEST_API + '/runs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(plan),
+    });
+    const result = await res.json();
+    if (!res.ok || !result.ok) throw new Error(result.msg || '协议测试启动失败');
+    protocolTestReport = null;
+    protocolTestActiveRunId = result.run.id;
+    renderProtocolTestRun(result.run);
+    renderProtocolTestReport(null);
+    startProtocolTestPolling();
+    toast('协议测试已开始');
+  } catch (error) {
+    toast(error.message || '协议测试启动失败');
+  }
+}
+
+async function stopProtocolTest() {
+  if (!protocolTestActiveRunId) return;
+  try {
+    const res = await fetch(PROTOCOL_TEST_API + '/runs/' + encodeURIComponent(protocolTestActiveRunId) + '/stop', { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok || !data.ok) throw new Error(data.msg || '停止测试失败');
+    renderProtocolTestRun(data.run);
+    toast('正在停止测试');
+  } catch (error) {
+    toast(error.message || '停止测试失败');
+  }
+}
+
+function downloadProtocolTestReport() {
+  if (!protocolTestReport) {
+    toast('当前没有可下载的测试报告');
+    return;
+  }
+  const blob = new Blob([JSON.stringify(protocolTestReport, null, 2)], { type: 'application/json;charset=utf-8' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = (protocolTestReport.run_id || 'protocol-test') + '-report.json';
+  link.click();
+  URL.revokeObjectURL(link.href);
+}
+
+async function loadProtocolTestWorkspace() {
+  if (!isAdmin()) return;
+  try {
+    const res = await fetch(PROTOCOL_TEST_API + '/protocols', { cache: 'no-store' });
+    const data = await res.json();
+    if (!res.ok || !data.ok) throw new Error(data.msg || '协议定义读取失败');
+    protocolTestCatalog = data;
+    renderProtocolTestProtocolSelectors('CgFishStart', 'GcFishStartResult');
+    selectProtocolTestTemplate(document.getElementById('protocolTestTemplate')?.value || 'fishing');
+  } catch (error) {
+    toast(error.message || '协议定义读取失败');
+  }
+  renderProtocolTestTargets();
+  await loadCocosStatus();
+  renderProtocolTestTargets();
+  await loadProtocolTestHistory();
 }
 
 function qaHistoryModeLabel(mode) {

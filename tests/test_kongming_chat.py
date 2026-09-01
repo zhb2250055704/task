@@ -192,7 +192,7 @@ class KongmingChatTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             normalize_kongming_question('  ')
         with self.assertRaises(ValueError):
-            normalize_kongming_question('x' * 4001)
+            normalize_kongming_question('x' * 12001)
 
 
 if __name__ == '__main__':

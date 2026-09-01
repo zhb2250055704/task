@@ -78,6 +78,21 @@ from kongming_workflow import (
     update_kongming_workflow_command,
     workflow_preview_markdown,
 )
+from kongming_tasks import (
+    build_task_planner_prompt,
+    create_task,
+    extract_task_plan_json,
+    load_task,
+    normalize_task_plan,
+    public_task,
+    save_task,
+)
+from protocol_test import (
+    ProtocolTestService,
+    normalize_plan as normalize_protocol_test_plan,
+    preview_plan as preview_protocol_test_plan,
+    protocol_catalog,
+)
 
 if os.name == 'nt':
     try:
@@ -109,6 +124,8 @@ try:
         os.path.join(TOOL_DIR, 'kongming_index.py'),
         os.path.join(TOOL_DIR, 'kongming_search.py'),
         os.path.join(TOOL_DIR, 'kongming_workflow.py'),
+        os.path.join(TOOL_DIR, 'kongming_tasks.py'),
+        os.path.join(TOOL_DIR, 'protocol_test.py'),
     ):
         with open(build_file, 'rb') as source_file:
             build_hash.update(source_file.read())
@@ -190,6 +207,13 @@ KONGMING_CHAT_WORKSPACE = os.environ.get(
 )
 KONGMING_CHAT_DIR = os.path.join(TOOL_DIR, 'runtime', 'kongming', 'conversations')
 KONGMING_INDEX_FILE = os.path.join(TOOL_DIR, 'runtime', 'kongming', 'search-index.sqlite3')
+KONGMING_TASK_DIR = os.path.join(TOOL_DIR, 'runtime', 'kongming', 'tasks')
+PROTOCOL_TEST_RUNTIME_DIR = os.path.join(TOOL_DIR, 'runtime', 'protocol-tests')
+_protocol_test_service = ProtocolTestService(
+    PROTOCOL_TEST_RUNTIME_DIR,
+    KONGMING_CLIENT_ROOT,
+    KONGMING_EXCEL_ROOT,
+)
 
 # item 源表（游戏配表项目内的 COA_Item.xlsx）
 ITEM_XLSX = os.environ.get(
@@ -260,6 +284,9 @@ _kongming_workflow_run_lock = threading.Lock()
 _kongming_workflow_state_lock = threading.Lock()
 _kongming_workflow_running = set()
 _kongming_answer_cache = {}
+_kongming_task_plan_lock = threading.Lock()
+_kongming_task_file_lock = threading.Lock()
+_kongming_task_workers = {}
 
 QA_SKILL_NAME = 'qa-test-design'
 QA_CODEX_TIMEOUT = int(os.environ.get('GM_QA_CODEX_TIMEOUT', '300'))
@@ -3002,6 +3029,7 @@ class CocosBridgeConnection:
         allowed = {
             'environment', 'environmentUrl', 'accountId', 'accountName',
             'roleId', 'roleName', 'playerId', 'serverId', 'clientId', 'ready',
+            'fishActivityMetaId',
         }
         normalized = {key: info.get(key) for key in allowed if key in info}
         # The game does not know the bridge-side connection id. Fill it here so
@@ -3034,6 +3062,7 @@ class CocosBridgeConnection:
         role_name = str(info.get('roleName') or '').strip()
         server_id = str(info.get('serverId') or '').strip()
         client_id = str(info.get('clientId') or '').strip()
+        fish_activity_meta_id = str(info.get('fishActivityMetaId') or '').strip()
         port = str(self.address[1])
         ready = bool(info.get('ready')) and bool(account_id or role_id or player_id)
         dispatchable = all((client_id, port, role_id, server_id, environment_url))
@@ -3063,6 +3092,7 @@ class CocosBridgeConnection:
             'player_id': player_id,
             'server_id': server_id,
             'client_id': client_id,
+            'fish_activity_meta_id': fish_activity_meta_id,
             'port': port,
             'ready': ready,
             'dispatchable': dispatchable,
@@ -3230,6 +3260,9 @@ def _cocos_proxy_target(raw_client, ws_port):
     player_id = str(context.get('playerId') or context.get('userId') or '').strip()
     server_id = str(context.get('serverId') or '').strip()
     client_id = str(context.get('clientId') or route_client_id).strip()
+    fish_activity_meta_id = str(
+        context.get('fishActivityMetaId') or context.get('fish_activity_meta_id') or ''
+    ).strip()
     port = str(ws_port or COCOS_WS_PORT)
     identity_complete = all((client_id, port, role_id, server_id, environment_url))
     ready = bool(context.get('ready')) if 'ready' in context else bool(context.get('online'))
@@ -3259,6 +3292,7 @@ def _cocos_proxy_target(raw_client, ws_port):
         'player_id': player_id,
         'server_id': server_id,
         'client_id': client_id,
+        'fish_activity_meta_id': fish_activity_meta_id,
         'proxy_client_id': route_client_id,
         'proxy_connected_at': str(raw_client.get('connectedAt') or ''),
         'port': port,
@@ -5128,6 +5162,72 @@ def execute_gm_commands(commands, target_id='', target_ids=None, target_specs=No
             'msg': failed.get('msg') or f'已投递 {success_count} 个账号，失败 {failure_count} 个',
         })
     return response
+
+
+def _resolve_protocol_test_target(target_specs):
+    specs = [item for item in (target_specs or []) if isinstance(item, dict)]
+    if len(specs) != 1:
+        raise ValueError('协议测试首期只能选择一个本机 Cocos 客户端账号')
+    expected = specs[0]
+    connection_id = str(expected.get('connection_id') or expected.get('id') or '').strip()
+    if not connection_id or connection_id.startswith('proxy:') or expected.get('source') == 'external_proxy':
+        raise ValueError('协议测试不支持 KS 远端账号，请选择本机 Cocos 客户端账号')
+    with _cocos_bridge_lock:
+        connection = _cocos_connections.get(connection_id)
+    if not connection or not connection.alive:
+        raise ValueError('选中的本机 Cocos 客户端已离线，请刷新账号状态')
+    if not connection.refresh_target_info():
+        raise ValueError('无法重新确认本机 Cocos 客户端身份，本次测试未启动')
+    current = connection.target_snapshot()
+    missing, mismatched = cocos_identity_mismatches(expected, current)
+    if missing:
+        raise ValueError('目标身份信息不完整：' + ', '.join(missing))
+    if mismatched:
+        raise ValueError('目标客户端状态已变化：' + ', '.join(mismatched))
+    return connection, current
+
+
+def _send_protocol_test_request(connection, expected, request_protocol, payload,
+                                response_protocol, timeout_ms, response_match):
+    if not connection.alive:
+        return {'ok': False, 'code': 'transport_failed', 'error': 'Cocos 客户端已断开'}
+    current = connection.target_snapshot()
+    missing, mismatched = cocos_identity_mismatches(expected, current)
+    if missing:
+        return {'ok': False, 'code': 'identity_incomplete', 'error': '测试账号身份信息不完整'}
+    if mismatched:
+        return {'ok': False, 'code': 'identity_changed', 'error': '测试期间账号身份发生变化，已停止发送'}
+    params = [
+        str(request_protocol),
+        json.dumps(payload or {}, ensure_ascii=False, separators=(',', ':')),
+        str(response_protocol or ''),
+        int(timeout_ms or 10000),
+        json.dumps(response_match or {}, ensure_ascii=False, separators=(',', ':')),
+    ]
+    with connection.command_lock:
+        result = connection.send_rpc('protocolTestRequest', params)
+    if not result.get('ok'):
+        error = result.get('error') or 'Cocos 协议测试请求失败'
+        return {
+            'ok': False,
+            'code': 'protocol_timeout' if '超时' in str(error) else 'rpc_failed',
+            'error': str(error),
+        }
+    value = result.get('result')
+    if isinstance(value, dict):
+        if value.get('ok') is False:
+            return {
+                'ok': False,
+                'code': str(value.get('code') or 'protocol_failed'),
+                'error': str(value.get('error') or 'Cocos 协议测试失败'),
+            }
+        return {
+            'ok': True,
+            'response_protocol': value.get('responseProtocol') or response_protocol,
+            'response': value.get('response'),
+        }
+    return {'ok': False, 'code': 'invalid_response', 'error': 'Cocos 返回了无法解析的协议响应'}
+
 
 
 def _ks_environment_urls(environment):
@@ -7530,6 +7630,606 @@ def _kongming_search_context(conversation):
     return '\n'.join(context)
 
 
+def _kongming_task_history(conversation):
+    history = []
+    for message in (conversation.get('messages') or [])[-8:]:
+        role = str(message.get('role') or '')
+        content = str(message.get('content') or '').strip()
+        if role in ('user', 'assistant') and content:
+            history.append({'role': role, 'content': content[:4000]})
+    return history
+
+
+def _kongming_task_action_context():
+    commands = [{
+        'id': item.get('id', ''),
+        'name': item.get('name', ''),
+        'command': item.get('command', ''),
+        'params': item.get('params', ''),
+        'category': item.get('category', ''),
+        'description': item.get('description', ''),
+    } for item in load_data()]
+    scripts = [{
+        'id': item.get('id', ''),
+        'name': item.get('name', ''),
+        'category': item.get('category', ''),
+        'description': item.get('description', ''),
+    } for item in load_scripts()]
+    try:
+        catalog = ks_catalog_status().get('catalog') or {}
+    except Exception as exc:
+        print(f'[KONGMING-TASK] catalog context failed: {exc}')
+        catalog = {}
+    environments = []
+    account_budget = 800
+    for environment in (catalog.get('environments') or [])[:150]:
+        accounts = []
+        for account in (environment.get('accounts') or []):
+            if account_budget <= 0:
+                break
+            accounts.append({
+                'id': account.get('id', ''),
+                'cache_id': account.get('cache_id', ''),
+                'name': account.get('account_label') or account.get('role_name') or account.get('account_name', ''),
+                'account_name': account.get('account_name', ''),
+                'role_id': account.get('role_id', ''),
+                'server_id': account.get('server_id', ''),
+                'online': bool(account.get('dispatchable')),
+                'ks_executable': bool(account.get('ks_dispatchable')),
+            })
+            account_budget -= 1
+        environments.append({
+            'key': environment.get('key', ''),
+            'name': environment.get('name', ''),
+            'category': environment.get('category', ''),
+            'cluster': environment.get('cluster', ''),
+            'namespace': environment.get('namespace', ''),
+            'url': environment.get('login_url') or environment.get('environment_url', ''),
+            'account_count': environment.get('account_count', len(accounts)),
+            'accounts': accounts,
+        })
+    return {
+        'capabilities': [
+            {'action': 'sync_accounts', 'description': '刷新 KS 环境与已创建账号'},
+            {'action': 'execute_gm', 'description': '向精确选定的在线客户端或 KS 已创建账号投递已登记 GM 命令'},
+            {'action': 'execute_script', 'description': '向精确选定账号投递脚本管理中已登记的脚本'},
+            {'action': 'wait_for_login', 'description': '等待符合条件的游戏客户端在线后继续'},
+            {'action': 'git_pull', 'description': '拉取 client、excel 或两个仓库的当前分支'},
+            {'action': 'manual', 'description': '保留当前尚无执行适配器的步骤并阻止自动执行'},
+        ],
+        'commands': commands,
+        'scripts': scripts,
+        'environments': environments,
+        'repositories': [
+            {'id': repo_id, 'name': repo.get('label', repo_id), 'path': repo.get('path', '')}
+            for repo_id, repo in GIT_REPOS.items()
+        ],
+    }
+
+
+def _run_kongming_planner_model(prompt):
+    runtime_status = _kongming_chat_runtime_status()
+    if not runtime_status.get('codex_ready'):
+        raise RuntimeError('未找到 Codex 命令行工具，暂时无法生成任务')
+    cli_path = find_kongming_cli()
+    env = os.environ.copy()
+    env['NO_COLOR'] = '1'
+    env['PYTHONUTF8'] = '1'
+    kwargs = {
+        'input': prompt,
+        'text': True,
+        'encoding': 'utf-8',
+        'errors': 'replace',
+        'stdout': subprocess.PIPE,
+        'stderr': subprocess.PIPE,
+        'timeout': KONGMING_CHAT_TIMEOUT,
+        'cwd': KONGMING_CHAT_WORKSPACE,
+        'env': env,
+    }
+    if os.name == 'nt':
+        kwargs['creationflags'] = subprocess.CREATE_NO_WINDOW
+    proc = subprocess.run(_kongming_codex_exec_args(cli_path, KONGMING_CHAT_WORKSPACE), **kwargs)
+    if proc.returncode != 0:
+        diagnostic = str(proc.stderr or '').strip()
+        print(f'[KONGMING-TASK] planner failed({proc.returncode}): {diagnostic[-3000:]}')
+        lowered = diagnostic.lower()
+        if 'authentication' in lowered or 'not logged in' in lowered or 'unauthorized' in lowered:
+            raise RuntimeError('Codex 尚未登录，请先在本机完成 Codex 登录')
+        raise RuntimeError('孔明任务规划失败，请查看 GM 工具服务日志')
+    return str(proc.stdout or '').strip()
+
+
+def _resolve_task_named_item(items, item_id='', query='', content_key='command'):
+    item_id = str(item_id or '').strip()
+    query = str(query or '').strip().lower()
+    if item_id:
+        matched = next((item for item in items if str(item.get('id') or '') == item_id), None)
+        if matched:
+            return matched, ''
+    if not query:
+        return None, '未指定要执行的内容'
+    exact = []
+    fuzzy = []
+    for item in items:
+        values = [
+            str(item.get('id') or ''), str(item.get('name') or ''),
+            str(item.get(content_key) or ''),
+        ]
+        lowered = [value.strip().lower() for value in values if value]
+        if query in lowered:
+            exact.append(item)
+            continue
+        searchable = ' '.join(lowered + [
+            str(item.get('category') or '').lower(),
+            str(item.get('description') or '').lower(),
+            ' '.join(str(tag).lower() for tag in (item.get('tags') or [])),
+        ])
+        if query in searchable or any(value and value in query for value in lowered):
+            fuzzy.append(item)
+    candidates = exact or fuzzy
+    if len(candidates) == 1:
+        return candidates[0], ''
+    if not candidates:
+        return None, f'没有找到“{query}”对应的登记内容'
+    names = '、'.join(str(item.get('name') or item.get('id')) for item in candidates[:5])
+    return None, f'“{query}”匹配到多个候选：{names}'
+
+
+def _task_environment_matches(environment, target):
+    keys = set(str(item or '').strip() for item in (target.get('environment_keys') or []) if item)
+    if keys and str(environment.get('key') or '') not in keys:
+        return False
+    query = str(target.get('environment_query') or '').strip().lower()
+    if not query or query in (
+        '全部', '所有', '全部环境', '所有环境', '*',
+        'ks', 'ks环境', 'ks 环境', 'keystone', 'keystone环境', 'keystone 环境',
+    ):
+        return True
+    values = [
+        environment.get('key'), environment.get('raw_id'), environment.get('name'),
+        environment.get('app_name'), environment.get('category'), environment.get('cluster'),
+        environment.get('namespace'), environment.get('login_url'), environment.get('environment_url'),
+    ]
+    normalized_query_url = normalize_game_url(query) if '://' in query else ''
+    for value in values:
+        value = str(value or '').strip()
+        if not value:
+            continue
+        if normalized_query_url and normalize_game_url(value) == normalized_query_url:
+            return True
+        if query in value.lower():
+            return True
+    return False
+
+
+def _task_account_matches(account, target, force_online=False):
+    server_ids = set(str(item) for item in (target.get('server_ids') or []))
+    role_ids = set(str(item) for item in (target.get('role_ids') or []))
+    account_names = [str(item).strip().lower() for item in (target.get('account_names') or []) if item]
+    if server_ids and str(account.get('server_id') or '') not in server_ids:
+        return False
+    if role_ids and str(account.get('role_id') or '') not in role_ids:
+        return False
+    if account_names:
+        values = ' '.join(str(account.get(key) or '') for key in (
+            'account_label', 'role_name', 'account_name', 'account_id', 'role_id'
+        )).lower()
+        if not any(name in values for name in account_names):
+            return False
+    channel = 'online' if force_online else str(target.get('channel') or 'any')
+    if channel == 'online':
+        return bool(account.get('dispatchable'))
+    if channel == 'ks':
+        return bool(account.get('ks_dispatchable'))
+    return bool(account.get('dispatchable') or account.get('ks_dispatchable'))
+
+
+def _resolve_kongming_task_targets(target, force_online=False):
+    has_selector = bool(
+        target.get('environment_keys') or target.get('environment_query') or
+        target.get('server_ids') or target.get('account_names') or target.get('role_ids') or
+        target.get('all_accounts')
+    )
+    if not has_selector:
+        return []
+    catalog = ks_catalog_status().get('catalog') or {}
+    resolved = []
+    for environment in (catalog.get('environments') or []):
+        if not _task_environment_matches(environment, target):
+            continue
+        for account in (environment.get('accounts') or []):
+            if not _task_account_matches(account, target, force_online=force_online):
+                continue
+            resolved.append({
+                **account,
+                'environment_key': environment.get('key', ''),
+                'environment_name': environment.get('name', ''),
+                'environment_url': environment.get('login_url') or environment.get('environment_url', ''),
+            })
+    return resolved
+
+
+def _validate_kongming_task_target_scope(target, targets):
+    query = str(target.get('environment_query') or '').strip().lower()
+    generic_ks = query in (
+        'ks', 'ks环境', 'ks 环境', 'keystone', 'keystone环境', 'keystone 环境',
+    )
+    environment_keys = {
+        str(item.get('environment_key') or '') for item in targets
+        if item.get('environment_key')
+    }
+    if generic_ks and not target.get('environment_keys') and len(environment_keys) > 1:
+        raise RuntimeError('目标账号分布在多个 KS 环境，请在自然语言中指定环境名称或 URL')
+
+
+def _task_target_preview(targets):
+    return [{
+        'id': item.get('id', ''),
+        'cache_id': item.get('cache_id', ''),
+        'name': item.get('account_label') or item.get('role_name') or item.get('account_name') or '未命名账号',
+        'role_id': item.get('role_id', ''),
+        'server_id': item.get('server_id', ''),
+        'environment_key': item.get('environment_key', ''),
+        'environment_name': item.get('environment_name', ''),
+        'channel': 'online' if item.get('dispatchable') else 'ks',
+    } for item in targets[:100]]
+
+
+def _prepare_kongming_task_plan(plan):
+    blockers = list(plan.get('blockers') or [])
+    commands = load_data()
+    scripts = load_scripts()
+    has_dynamic_predecessor = False
+    for step in plan.get('steps') or []:
+        action = step.get('action')
+        params = step.get('params') or {}
+        if action == 'execute_gm':
+            query = params.get('command_query') or params.get('command_text')
+            item, error = _resolve_task_named_item(commands, params.get('command_id'), query, 'command')
+            if error:
+                blockers.append(f'步骤 {step["index"]}：{error}')
+                step['supported'] = False
+            else:
+                args = str(params.get('command_args') or '').strip()
+                raw_text = str(params.get('command_text') or '').strip()
+                base = str(item.get('command') or '').strip()
+                if raw_text.startswith(base) and not args:
+                    args = raw_text[len(base):].strip()
+                params['command_id'] = item.get('id', '')
+                params['resolved_name'] = item.get('name', '')
+                params['resolved_command'] = f'{base} {args}'.strip()
+                params['resolved_params'] = item.get('params', '')
+                if item.get('params') and not args and not re.search(r'\s', base):
+                    blockers.append(f'步骤 {step["index"]}：命令“{item.get("name")}”缺少参数（{item.get("params")}）')
+                    step['supported'] = False
+        elif action == 'execute_script':
+            item, error = _resolve_task_named_item(
+                scripts, params.get('script_id'), params.get('script_query'), 'content'
+            )
+            if error:
+                blockers.append(f'步骤 {step["index"]}：{error}')
+                step['supported'] = False
+            else:
+                params['script_id'] = item.get('id', '')
+                params['resolved_name'] = item.get('name', '')
+        elif action == 'git_pull':
+            repo_ids = params.get('repo_ids') or []
+            if 'all' in repo_ids:
+                repo_ids = list(GIT_REPOS)
+            repo_ids = [repo_id for repo_id in repo_ids if repo_id in GIT_REPOS]
+            if not repo_ids:
+                blockers.append(f'步骤 {step["index"]}：未指定 client 或 excel 仓库')
+                step['supported'] = False
+            params['repo_ids'] = repo_ids
+
+        if action in ('execute_gm', 'execute_script', 'wait_for_login'):
+            targets = _resolve_kongming_task_targets(
+                step.get('target') or {}, force_online=action == 'wait_for_login'
+            )
+            step['target_preview'] = _task_target_preview(targets)
+            step['target_count'] = len(targets)
+            if not targets and action != 'wait_for_login':
+                message = '当前没有匹配的可执行账号'
+                if has_dynamic_predecessor:
+                    step.setdefault('warnings', []).append(message + '，执行时会在前置步骤完成后重新匹配')
+                else:
+                    blockers.append(f'步骤 {step["index"]}：{message}')
+                    step['supported'] = False
+        if action in ('sync_accounts', 'wait_for_login', 'manual'):
+            has_dynamic_predecessor = True
+    plan['blockers'] = list(dict.fromkeys(blockers))
+    return plan
+
+
+def plan_kongming_request(owner_id, question, conversation_id=''):
+    question = normalize_kongming_question(question)
+    conversation_id = str(conversation_id or '').strip()
+    conversation = (
+        load_kongming_conversation(KONGMING_CHAT_DIR, owner_id, conversation_id)
+        if conversation_id else None
+    )
+    if conversation_id and conversation is None:
+        raise ValueError('孔明会话不存在或无权访问')
+    if conversation is None:
+        conversation = create_kongming_conversation(owner_id, question)
+
+    if not _kongming_task_plan_lock.acquire(blocking=False):
+        raise BlockingIOError('孔明正在规划上一项任务，请稍后再试')
+    try:
+        prompt = build_task_planner_prompt(
+            question, _kongming_task_history(conversation), _kongming_task_action_context()
+        )
+        payload = extract_task_plan_json(_run_kongming_planner_model(prompt))
+        plan = normalize_task_plan(payload, question)
+    finally:
+        _kongming_task_plan_lock.release()
+    if plan.get('kind') == 'chat':
+        return {'kind': 'chat'}
+
+    plan = _prepare_kongming_task_plan(plan)
+    task = create_task(owner_id, question, plan, conversation.get('id'))
+    with _kongming_task_file_lock:
+        save_task(KONGMING_TASK_DIR, task)
+    append_kongming_message(conversation, 'user', question)
+    step_count = len(task.get('steps') or [])
+    if task.get('blockers'):
+        answer = f'已拆解为 {step_count} 个步骤，但存在阻塞项。请先查看任务预览。'
+    else:
+        answer = f'已拆解为 {step_count} 个可执行步骤。确认任务预览后，我会按顺序执行。'
+    append_kongming_message(
+        conversation, 'assistant', answer,
+        {'kind': 'task', 'task_id': task['id'], 'task': public_task(task)},
+    )
+    save_kongming_conversation(KONGMING_CHAT_DIR, conversation)
+    return {
+        'ok': True,
+        'kind': 'task',
+        'task': public_task(task),
+        'conversation': conversation,
+        'conversations': list_kongming_conversations(KONGMING_CHAT_DIR, owner_id),
+    }
+
+
+def _task_client_target_spec(target):
+    return {
+        'connection_id': target.get('id', ''),
+        'source': target.get('source', ''),
+        'proxy_client_id': target.get('proxy_client_id', ''),
+        'proxy_connected_at': target.get('proxy_connected_at', ''),
+        'port': target.get('port', ''),
+        'client_id': target.get('client_id', ''),
+        'account_id': target.get('account_id', ''),
+        'role_id': target.get('role_id', ''),
+        'server_id': target.get('server_id', ''),
+        'environment_url': target.get('environment_url', ''),
+    }
+
+
+def _task_ks_target_spec(target):
+    return {
+        'environment_key': target.get('environment_key', ''),
+        'cache_id': target.get('cache_id', ''),
+    }
+
+
+class KongmingTaskBlocked(Exception):
+    pass
+
+
+def _execute_kongming_task_step(step):
+    action = step.get('action')
+    params = step.get('params') or {}
+    if action == 'sync_accounts':
+        result = sync_ks_catalog()
+        if not result.get('ok'):
+            raise RuntimeError(result.get('msg') or 'KS 环境与账号同步失败')
+        return {'message': result.get('msg') or 'KS 环境与账号同步完成'}
+    if action in ('execute_gm', 'execute_script'):
+        targets = _resolve_kongming_task_targets(step.get('target') or {})
+        if not targets:
+            raise RuntimeError('执行时没有匹配到可执行账号')
+        _validate_kongming_task_target_scope(step.get('target') or {}, targets)
+        command = params.get('resolved_command')
+        label = params.get('resolved_name') or step.get('title')
+        if action == 'execute_script':
+            script = next((item for item in load_scripts() if item.get('id') == params.get('script_id')), None)
+            if not script:
+                raise RuntimeError('脚本已不存在，请重新生成任务')
+            command = script.get('content', '')
+        online_targets = []
+        ks_targets = []
+        channel = str((step.get('target') or {}).get('channel') or 'any')
+        for target in targets:
+            if channel != 'ks' and target.get('dispatchable'):
+                online_targets.append(_task_client_target_spec(target))
+            elif target.get('ks_dispatchable'):
+                ks_targets.append(_task_ks_target_spec(target))
+        result = execute_gm_commands(
+            command, target_specs=online_targets, ks_targets=ks_targets
+        )
+        if not result.get('ok'):
+            raise RuntimeError(result.get('msg') or f'{label}执行失败')
+        return {
+            'message': f'{label}已投递到 {result.get("delivered_count") or result.get("target_count") or len(targets)} 个账号',
+            'target_count': result.get('target_count', len(targets)),
+            'delivered_count': result.get('delivered_count', 0),
+            'channels': result.get('channels', []),
+        }
+    if action == 'wait_for_login':
+        timeout_seconds = int(params.get('timeout_seconds') or 300)
+        expected = int((step.get('target') or {}).get('expected_count') or 0)
+        if expected <= 0:
+            selectors = step.get('target') or {}
+            expected = max(1, len(selectors.get('server_ids') or []), len(selectors.get('account_names') or []))
+        deadline = time.time() + timeout_seconds
+        while time.time() < deadline:
+            targets = _resolve_kongming_task_targets(step.get('target') or {}, force_online=True)
+            if len(targets) >= expected:
+                _validate_kongming_task_target_scope(step.get('target') or {}, targets)
+                return {'message': f'已检测到 {len(targets)} 个目标客户端在线', 'target_count': len(targets)}
+            time.sleep(2)
+        raise RuntimeError(f'等待游戏登录超时，未检测到 {expected} 个目标客户端')
+    if action == 'git_pull':
+        results = [git_pull_repo_result(repo_id) for repo_id in (params.get('repo_ids') or [])]
+        failed = [item for item in results if not item.get('ok')]
+        if failed:
+            raise RuntimeError(failed[0].get('output') or 'Git 拉取失败')
+        return {'message': '、'.join(item.get('label', '') for item in results) + '拉取完成'}
+    if action == 'manual':
+        raise KongmingTaskBlocked(params.get('instruction') or '该步骤需要人工处理')
+    raise KongmingTaskBlocked(f'未注册任务动作：{action}')
+
+
+def _run_kongming_task_worker(task):
+    try:
+        for index, step in enumerate(task.get('steps') or []):
+            if step.get('status') == 'succeeded':
+                continue
+            step['status'] = 'running'
+            step['started_at'] = now_str()
+            task['status_label'] = f'正在执行 {index + 1}/{len(task.get("steps") or [])}'
+            with _kongming_task_file_lock:
+                save_task(KONGMING_TASK_DIR, task)
+            try:
+                result = _execute_kongming_task_step(step)
+            except KongmingTaskBlocked as exc:
+                step['status'] = 'blocked'
+                step['result'] = {'ok': False, 'message': str(exc)}
+                step['finished_at'] = now_str()
+                task['status'] = 'blocked'
+                task['status_label'] = '等待人工处理'
+                task['blockers'] = list(dict.fromkeys((task.get('blockers') or []) + [str(exc)]))
+                break
+            except Exception as exc:
+                step['status'] = 'failed'
+                step['result'] = {'ok': False, 'message': str(exc)}
+                step['finished_at'] = now_str()
+                task['status'] = 'failed'
+                task['status_label'] = f'第 {index + 1} 步失败'
+                for pending in (task.get('steps') or [])[index + 1:]:
+                    if pending.get('status') == 'pending':
+                        pending['status'] = 'skipped'
+                break
+            step['status'] = 'succeeded'
+            step['result'] = {'ok': True, **(result or {})}
+            step['finished_at'] = now_str()
+            with _kongming_task_file_lock:
+                save_task(KONGMING_TASK_DIR, task)
+        else:
+            task['status'] = 'succeeded'
+            task['status_label'] = '全部执行完成'
+        task['finished_at'] = now_str()
+        task['result'] = {
+            'ok': task.get('status') == 'succeeded',
+            'completed_steps': sum(1 for step in task.get('steps') or [] if step.get('status') == 'succeeded'),
+            'total_steps': len(task.get('steps') or []),
+        }
+        with _kongming_task_file_lock:
+            save_task(KONGMING_TASK_DIR, task)
+    finally:
+        _kongming_task_workers.pop(task.get('id'), None)
+
+
+def start_kongming_task(owner_id, task_id, operator):
+    with _kongming_task_file_lock:
+        task = load_task(KONGMING_TASK_DIR, owner_id, task_id)
+        if task is None:
+            raise ValueError('任务不存在或无权访问')
+        if task.get('blockers'):
+            raise KongmingTaskBlocked('任务仍有阻塞项，不能开始执行')
+        if task.get('status') == 'running' or task_id in _kongming_task_workers:
+            raise BlockingIOError('任务正在执行')
+        if task.get('status') == 'succeeded':
+            raise ValueError('任务已经执行完成')
+        for step in task.get('steps') or []:
+            step['status'] = 'pending'
+            step['result'] = None
+        task['status'] = 'running'
+        task['status_label'] = '准备执行'
+        task['operator'] = str(operator or '')
+        task['started_at'] = now_str()
+        task['finished_at'] = ''
+        save_task(KONGMING_TASK_DIR, task)
+    worker = threading.Thread(target=_run_kongming_task_worker, args=(task,), daemon=True)
+    _kongming_task_workers[task_id] = worker
+    worker.start()
+    return public_task(task)
+
+
+def update_kongming_task_command(owner_id, task_id, step_id, command_text, operator=''):
+    command_text = str(command_text or '').strip()
+    if not command_text:
+        raise ValueError('GM 命令不能为空')
+    if len(command_text) > 2000:
+        raise ValueError('GM 命令不能超过 2000 个字符')
+    if '\r' in command_text or '\n' in command_text:
+        raise ValueError('单个任务步骤只能填写一行 GM 命令')
+    if not command_text.startswith('#'):
+        raise ValueError('GM 命令必须以 # 开头')
+
+    matches = []
+    for item in load_data():
+        base = str(item.get('command') or '').strip()
+        if base and (command_text == base or command_text.startswith(base + ' ')):
+            matches.append((len(base), item, base))
+    if not matches:
+        raise ValueError('该命令未在“命令管理”中登记，不能写入执行任务')
+    _, command_item, base_command = max(matches, key=lambda match: match[0])
+    command_args = command_text[len(base_command):].strip()
+    if command_item.get('params') and not command_args and not re.search(r'\s', base_command):
+        raise ValueError(f'命令缺少参数：{command_item.get("params")}')
+
+    with _kongming_task_file_lock:
+        task = load_task(KONGMING_TASK_DIR, owner_id, task_id)
+        if task is None:
+            raise ValueError('任务不存在或无权访问')
+        if task.get('status') not in ('draft', 'blocked'):
+            raise ValueError('只有等待确认或存在阻塞的任务可以修改')
+        step = next((
+            item for item in (task.get('steps') or [])
+            if str(item.get('id') or '') == str(step_id or '')
+        ), None)
+        if step is None:
+            raise ValueError('任务步骤不存在')
+        if step.get('action') != 'execute_gm':
+            raise ValueError('该步骤不是 GM 命令步骤')
+
+        params = step.setdefault('params', {})
+        old_command = str(params.get('resolved_command') or '')
+        params.update({
+            'command_id': command_item.get('id', ''),
+            'command_query': command_item.get('name', ''),
+            'command_args': command_args,
+            'command_text': command_text,
+            'resolved_name': command_item.get('name', ''),
+            'resolved_command': command_text,
+            'resolved_params': command_item.get('params', ''),
+        })
+        step['supported'] = True
+        step['result'] = None
+        step_index = int(step.get('index') or 0)
+        blocker_prefixes = (
+            f'步骤 {step_index}：命令',
+            f'步骤 {step_index}：没有找到',
+        )
+        task['blockers'] = [
+            blocker for blocker in (task.get('blockers') or [])
+            if not str(blocker).startswith(blocker_prefixes)
+        ]
+        task['status'] = 'blocked' if task['blockers'] else 'draft'
+        task['status_label'] = '存在阻塞项' if task['blockers'] else '等待确认'
+        task.setdefault('edits', []).append({
+            'step_id': step.get('id', ''),
+            'field': 'command',
+            'before': old_command,
+            'after': command_text,
+            'operator': str(operator or ''),
+            'time': now_str(),
+        })
+        save_task(KONGMING_TASK_DIR, task)
+    return public_task(task)
+
+
 def run_kongming_chat(owner_id, question, conversation_id=''):
     question = normalize_kongming_question(question)
     requested_conversation_id = str(conversation_id or '').strip()
@@ -7864,6 +8564,18 @@ class GMHandler(SimpleHTTPRequestHandler):
                 self._refresh_items()
             elif path == '/api/cocos/status':
                 self._cocos_status(parse_qs(parsed.query))
+            elif path == '/api/protocol-test/protocols':
+                if self._require_admin() is None:
+                    return
+                self._protocol_test_protocols()
+            elif path == '/api/protocol-test/runs':
+                if self._require_admin() is None:
+                    return
+                self._protocol_test_runs()
+            elif path.startswith('/api/protocol-test/runs/'):
+                if self._require_admin() is None:
+                    return
+                self._protocol_test_run_resource(path)
             elif path == '/api/ks/catalog':
                 self._send_json(ks_catalog_status())
             elif path == '/api/gm-console/options':
@@ -7956,6 +8668,11 @@ class GMHandler(SimpleHTTPRequestHandler):
             if sess is not None:
                 self._kongming_chat_send(sess)
             return
+        if path.startswith('/api/protocol-test/runs/') and path.endswith('/stop'):
+            if self._require_admin() is None:
+                return
+            self._protocol_test_stop(path)
+            return
         if path == '/api/kongming/workflows/plan':
             sess = self._require_login()
             if sess is not None:
@@ -7981,6 +8698,10 @@ class GMHandler(SimpleHTTPRequestHandler):
             self._create_category()
         elif path == '/api/cocos/execute':
             self._cocos_execute()
+        elif path == '/api/protocol-test/preview':
+            self._protocol_test_preview()
+        elif path == '/api/protocol-test/runs':
+            self._protocol_test_start()
         elif path == '/api/ks/sync':
             self._ks_sync()
         elif path == '/api/ks/token-bridge/open-folder':
@@ -8015,6 +8736,16 @@ class GMHandler(SimpleHTTPRequestHandler):
             self._kongming_open_folder()
         else:
             self.send_error(404)
+
+    def do_PATCH(self):
+        parsed = urlparse(self.path)
+        path = parsed.path
+        if path.startswith('/api/protocol-test/runs/') and path.endswith('/stop'):
+            if self._require_admin() is None:
+                return
+            self._protocol_test_stop(path)
+            return
+        self.send_error(404)
 
     def do_PUT(self):
         parsed = urlparse(self.path)
@@ -8620,6 +9351,76 @@ class GMHandler(SimpleHTTPRequestHandler):
             command, target_id, target_ids, target_specs, ks_targets
         )
         self._send_json(result, status=200 if result.get('ok') else 409)
+
+    # ---------- 协议测试 ----------
+    def _protocol_test_protocols(self):
+        self._send_json({
+            'ok': True,
+            **protocol_catalog(KONGMING_CLIENT_ROOT, KONGMING_EXCEL_ROOT),
+        })
+
+    def _protocol_test_preview(self):
+        data = self._read_json()
+        if data is None:
+            return
+        result = preview_protocol_test_plan(data, KONGMING_CLIENT_ROOT, KONGMING_EXCEL_ROOT)
+        self._send_json(result, status=200 if result.get('ok') else 400)
+
+    def _protocol_test_start(self):
+        data = self._read_json()
+        if data is None:
+            return
+        try:
+            connection, target = _resolve_protocol_test_target(data.get('target_specs', []))
+            target_specs = data.get('target_specs') or []
+            expected = target_specs[0]
+            send_request = lambda request_protocol, payload, response_protocol, timeout_ms, response_match: _send_protocol_test_request(
+                connection, expected, request_protocol, payload, response_protocol, timeout_ms, response_match
+            )
+            result = _protocol_test_service.start(data, send_request)
+            if result.get('ok'):
+                result['run']['target'] = target
+                self._send_json(result, status=202)
+            else:
+                self._send_json(result, status=400)
+        except ValueError as exc:
+            self._send_json({'ok': False, 'code': 'target_invalid', 'msg': str(exc)}, status=409)
+        except Exception as exc:
+            print(f'[PROTOCOL-TEST] start failed: {exc}')
+            self._send_json({'ok': False, 'code': 'protocol_test_start_failed', 'msg': '协议测试启动失败'}, status=500)
+
+    def _protocol_test_runs(self):
+        self._send_json({'ok': True, 'runs': _protocol_test_service.list()})
+
+    def _protocol_test_run_resource(self, path):
+        parts = [item for item in path.split('/') if item]
+        run_id = parts[3] if len(parts) >= 4 else ''
+        resource = parts[4] if len(parts) >= 5 else ''
+        if resource == 'events':
+            result = _protocol_test_service.events(run_id)
+            if result is None:
+                self._send_json({'ok': False, 'msg': '测试任务不存在'}, status=404)
+            else:
+                self._send_json({'ok': True, 'events': result})
+            return
+        if resource == 'report':
+            result = _protocol_test_service.report(run_id)
+            if result is None:
+                self._send_json({'ok': False, 'msg': '测试报告尚未生成或任务不存在'}, status=404)
+            else:
+                self._send_json({'ok': True, 'report': result})
+            return
+        result = _protocol_test_service.get(run_id)
+        if result is None:
+            self._send_json({'ok': False, 'msg': '测试任务不存在'}, status=404)
+        else:
+            self._send_json({'ok': True, 'run': result})
+
+    def _protocol_test_stop(self, path):
+        parts = [item for item in path.split('/') if item]
+        run_id = parts[3] if len(parts) >= 4 else ''
+        result = _protocol_test_service.stop(run_id)
+        self._send_json(result, status=200 if result.get('ok') else 404)
 
     # ---------- Git 拉取 ----------
     def _list_git_repos(self):
