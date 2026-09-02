@@ -9591,8 +9591,8 @@
   /* Keep command resources in the first viewport while retaining every target control. */
   @media (min-width: 900px) {
     #view-commands.active {
-      height: var(--gm-command-view-height, calc(100dvh - var(--nexus-header) - var(--nexus-footer)));
-      min-height: 0;
+      height: auto;
+      min-height: calc(100dvh - var(--nexus-header) - var(--nexus-footer));
       padding-bottom: 18px;
       display: grid;
       grid-template-columns: clamp(280px, 34%, 420px) minmax(0, 1fr);
@@ -9730,7 +9730,8 @@
       display: flex;
       flex-direction: column;
       gap: 14px;
-      overflow-y: auto;
+      height: auto;
+      overflow: visible;
       overscroll-behavior: contain;
       scrollbar-gutter: stable;
     }
@@ -9741,7 +9742,8 @@
       min-height: 0;
       display: flex;
       flex-direction: column;
-      overflow: hidden;
+      height: auto;
+      overflow: visible;
     }
     #view-commands > .commands-resource-column > .toolbar {
       flex: 0 0 auto;
@@ -9753,7 +9755,7 @@
       min-height: 0;
       height: auto;
       padding: 0 4px 18px 0;
-      overflow-y: auto;
+      overflow: visible;
       overscroll-behavior: contain;
       scrollbar-gutter: stable;
     }
@@ -9769,7 +9771,8 @@
       max-height: none;
       margin: 0;
       display: block;
-      overflow-y: auto;
+      height: auto;
+      overflow: visible;
       overscroll-behavior: contain;
       scrollbar-gutter: stable;
     }
@@ -17455,12 +17458,9 @@ function applyZoom(z) {
   const main = document.querySelector('.main');
   if (main) {
     const scale = effectiveZoom / 100;
-    const rootStyle = getComputedStyle(document.documentElement);
-    const headerHeight = parseFloat(rootStyle.getPropertyValue('--nexus-header')) || 56;
-    const footerHeight = parseFloat(rootStyle.getPropertyValue('--nexus-footer')) || 32;
-    const commandViewHeight = Math.max(320, window.innerHeight / scale - headerHeight - footerHeight);
     main.style.zoom = scale.toString();
-    main.style.setProperty('--gm-command-view-height', `${commandViewHeight}px`);
+    // 命令页按内容自然延展，避免缩放后固定高度把账号和命令卡片截断。
+    main.style.removeProperty('--gm-command-view-height');
   }
   const inp = document.getElementById('zoomInput');
   if (inp && +inp.value !== effectiveZoom) inp.value = effectiveZoom;
