@@ -22,7 +22,15 @@ class ProtocolTestTest(unittest.TestCase):
 
     def test_fishing_report_includes_ground_name_and_fish_quality_config(self):
         stats = protocol_test._new_stats()
-        protocol_test._record_fishes(stats, [{'fishId': 2007, 'weight': 4}], 1)
+        protocol_test._record_fishes(
+            stats,
+            [
+                {'fishId': 2007, 'weight': 4},
+                {'fishId': 2007, 'weight': 7},
+                {'fishId': 2007, 'weight': 10},
+            ],
+            1,
+        )
         report = protocol_test._build_report(
             {
                 'id': 'pt-test',
@@ -54,6 +62,10 @@ class ProtocolTestTest(unittest.TestCase):
         self.assertEqual(drop['fish_name'], '鳙鱼')
         self.assertEqual(drop['config']['quality_display'], '3（稀有）')
         self.assertEqual(drop['config']['weight_range'], '10|40')
+        self.assertEqual(drop['observed_weight']['sample_count'], 3)
+        self.assertEqual(drop['observed_weight']['min'], 4)
+        self.assertEqual(drop['observed_weight']['max'], 10)
+        self.assertEqual(drop['observed_weight']['average'], 7)
 
     def test_wilson_interval_contains_observed_rate(self):
         interval = protocol_test.wilson_interval(300, 1000)

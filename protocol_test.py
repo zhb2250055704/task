@@ -606,6 +606,35 @@ def _increment(mapping, key, amount=1):
     mapping[key] = int(mapping.get(key, 0)) + amount
 
 
+def _numeric_weights(values):
+    result = []
+    for value in values or []:
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(number):
+            result.append(int(number) if number.is_integer() else number)
+    return result
+
+
+def _weight_summary(values):
+    weights = _numeric_weights(values)
+    if not weights:
+        return {
+            "sample_count": 0,
+            "min": None,
+            "max": None,
+            "average": None,
+        }
+    return {
+        "sample_count": len(weights),
+        "min": min(weights),
+        "max": max(weights),
+        "average": sum(weights) / len(weights),
+    }
+
+
 def _record_fishes(stats, fishes, scene_id=None):
     scene_key = str(scene_id).strip() if scene_id is not None else ""
     if scene_key:
@@ -667,6 +696,7 @@ def _build_report(state, stats, baseline):
     for fish_id, count in sorted(stats.get("fish_by_id", {}).items(), key=lambda item: (-item[1], item[0])):
         interval = wilson_interval(count, fish_total)
         config = fish_configs.get(fish_id) or {}
+        observed_weight = _weight_summary((stats.get("fish_weight_by_id") or {}).get(fish_id, []))
         scene_ids = list((stats.get("fish_scene_ids") or {}).get(fish_id) or fishing_ground["ids"])
         scene_names = [
             _fishing_ground_name((baseline or {}).get("fishing_grounds") or {}, scene_id)
@@ -679,6 +709,7 @@ def _build_report(state, stats, baseline):
             "fishing_ground_id": ", ".join(scene_ids),
             "fishing_ground_name": " / ".join(scene_names) if scene_names else fishing_ground["name"],
             "config": config,
+            "observed_weight": observed_weight,
             "count": count,
             "probability": count / fish_total if fish_total else 0,
             "interval": interval,
