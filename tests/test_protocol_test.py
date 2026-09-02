@@ -72,6 +72,32 @@ class ProtocolTestTest(unittest.TestCase):
         self.assertLess(interval['low'], 0.3)
         self.assertGreater(interval['high'], 0.3)
 
+    def test_generic_report_uses_response_statistics_without_fish_data(self):
+        stats = protocol_test._new_stats()
+        protocol_test._record_response(stats, 'GcActivityResult', {
+            'code': 0,
+            'current': {'fishes': [{'fishId': 2007}]},
+        })
+        protocol_test._record_response(stats, 'GcActivityResult', {'code': 1})
+        report = protocol_test._build_report(
+            {
+                'id': 'pt-generic',
+                'title': 'activity',
+                'fixture': 'generic',
+                'status': 'succeeded',
+                'plan': {'request_payload': {}},
+            },
+            stats,
+            None,
+        )
+        self.assertIsNone(report['fishing_ground'])
+        self.assertEqual(report['drops']['fish_total'], 0)
+        self.assertEqual(report['drops']['fish_distribution'], [])
+        self.assertEqual(report['generic']['response_total'], 2)
+        self.assertEqual(report['generic']['response_by_protocol']['GcActivityResult'], 2)
+        self.assertEqual(report['generic']['response_code_by_protocol']['GcActivityResult'], {'0': 1, '1': 1})
+        self.assertEqual(report['generic']['samples'][0]['keys'], ['code', 'current'])
+
     def test_normalize_rejects_parallel_execution(self):
         plan = protocol_test.normalize_plan({
             'request_protocol': 'CgFishStart',
@@ -165,6 +191,43 @@ class ProtocolTestTest(unittest.TestCase):
             self.assertEqual(run['status'], 'failed')
             self.assertEqual(run['completed'], 1)
             self.assertEqual(calls, ['CgTestRequest'])
+
+    def test_generic_run_does_not_record_fish_fields(self):
+        with tempfile.TemporaryDirectory() as runtime_dir:
+            service = protocol_test.ProtocolTestService(runtime_dir, 'missing-client', 'missing-excel')
+
+            def send_request(*args):
+                return {
+                    'ok': True,
+                    'response_protocol': 'GcActivityResult',
+                    'response': {
+                        'code': 0,
+                        'current': {'fishes': [{'fishId': 2007, 'weight': 4}]},
+                    },
+                }
+
+            result = service.start({
+                'title': 'generic-response',
+                'fixture': 'generic',
+                'target_specs': [{'connection_id': 'direct:test'}],
+                'request': {
+                    'protocol': 'CgActivityRequest',
+                    'payload': {},
+                    'response_protocol': 'GcActivityResult',
+                },
+                'count': 2,
+                'concurrency': 1,
+            }, send_request)
+            self.assertTrue(result['ok'])
+            run_id = result['run']['id']
+            deadline = time.time() + 3
+            while service.get(run_id).get('status') in ('queued', 'running') and time.time() < deadline:
+                time.sleep(0.01)
+            report = service.report(run_id)
+            self.assertEqual(report['generic']['response_total'], 2)
+            self.assertEqual(report['generic']['response_by_protocol']['GcActivityResult'], 2)
+            self.assertEqual(report['drops']['fish_total'], 0)
+            self.assertEqual(report['drops']['fish_by_id'], {})
 
 
 if __name__ == '__main__':

@@ -10427,11 +10427,19 @@ FORM: Operate mode, Stitch high-fidelity prototype, source order 1, no concept s
             <div class="protocol-test-progress-track"><span id="protocolTestProgressFill"></span></div>
           </div>
           <div id="protocolTestKpis" class="protocol-test-kpis">
-            <div><span>成功</span><strong>0</strong></div><div><span>失败</span><strong>0</strong></div><div><span>超时</span><strong>0</strong></div><div><span>掉落总数</span><strong>0</strong></div>
+            <div><span>成功</span><strong>0</strong></div><div><span>失败</span><strong>0</strong></div><div><span>超时</span><strong>0</strong></div><div><span id="protocolTestKpiTotalLabel">掉落总数</span><strong>0</strong></div>
           </div>
+          <div id="protocolTestFishingResults">
           <div class="protocol-test-result-section">
             <div class="protocol-test-section-head"><h3>掉落分布</h3><span id="protocolTestDropMeta">完成测试后显示</span></div>
             <div class="protocol-test-table-wrap"><table class="protocol-test-table"><thead><tr><th>渔场</th><th>Fish ID</th><th>鱼名称</th><th>品质</th><th>实测重量</th><th>配置重量</th><th>冠鱼重量</th><th>奖励 ID</th><th>数量</th><th>概率</th><th>Wilson 95%</th></tr></thead><tbody id="protocolTestDropBody"><tr><td colspan="11" class="protocol-test-table-empty">暂无数据</td></tr></tbody></table></div>
+          </div>
+          </div>
+          <div id="protocolTestGenericResults" style="display: none;">
+            <div class="protocol-test-result-section">
+              <div class="protocol-test-section-head"><h3>响应分布</h3><span id="protocolTestGenericMeta">完成测试后显示</span></div>
+              <div class="protocol-test-table-wrap"><table class="protocol-test-table"><thead><tr><th>响应协议</th><th>响应次数</th><th>code 分布</th><th>响应字段摘要</th></tr></thead><tbody id="protocolTestGenericBody"><tr><td colspan="4" class="protocol-test-table-empty">暂无数据</td></tr></tbody></table></div>
+            </div>
           </div>
           <div class="protocol-test-result-section">
             <div class="protocol-test-section-head"><h3>执行摘要</h3><button class="btn btn-ghost protocol-test-download" type="button" onclick="downloadProtocolTestReport()">下载报告</button></div>
@@ -16453,9 +16461,21 @@ function protocolTestToggleFishingFields(isFishing) {
   });
 }
 
+function protocolTestSetResultMode(fixture) {
+  const isFishing = fixture === 'fishing';
+  const fishingResults = document.getElementById('protocolTestFishingResults');
+  const genericResults = document.getElementById('protocolTestGenericResults');
+  const totalLabel = document.getElementById('protocolTestKpiTotalLabel');
+  if (fishingResults) fishingResults.style.display = isFishing ? '' : 'none';
+  if (genericResults) genericResults.style.display = isFishing ? 'none' : '';
+  if (totalLabel) totalLabel.textContent = isFishing ? '掉落总数' : '响应数';
+}
+
 function selectProtocolTestTemplate(template) {
   const isFishing = template === 'fishing';
   protocolTestToggleFishingFields(isFishing);
+  protocolTestSetResultMode(template);
+  if (protocolTestReport) renderProtocolTestReport(null);
   const title = document.getElementById('protocolTestTitle');
   const finish = document.getElementById('protocolTestFinishEnabled');
   if (isFishing) {
@@ -16590,6 +16610,7 @@ function protocolTestStatusClass(status) {
 
 function renderProtocolTestRun(run) {
   if (!run) return;
+  protocolTestSetResultMode(run.fixture || document.getElementById('protocolTestTemplate')?.value || 'fishing');
   const status = document.getElementById('protocolTestStatus');
   const percent = Math.max(0, Math.min(100, Number(run.progress) || 0));
   const done = Number(run.completed) || 0;
@@ -16625,12 +16646,15 @@ function renderProtocolTestRun(run) {
 function protocolTestRenderKpis(report) {
   const actions = report?.actions || {};
   const drops = report?.drops || {};
+  const fixture = report?.fixture || document.getElementById('protocolTestTemplate')?.value || 'fishing';
+  const generic = report?.generic || {};
+  protocolTestSetResultMode(fixture);
   const kpis = document.querySelectorAll('#protocolTestKpis strong');
   if (kpis.length >= 4) {
     kpis[0].textContent = String(actions.success || 0);
     kpis[1].textContent = String((actions.business_failed || 0) + (actions.transport_failed || 0) + (actions.timeout || 0));
     kpis[2].textContent = String(actions.timeout || 0);
-    kpis[3].textContent = String(drops.fish_total || 0);
+    kpis[3].textContent = String(fixture === 'fishing' ? (drops.fish_total || 0) : (generic.response_total || 0));
   }
 }
 
@@ -16670,9 +16694,36 @@ function protocolTestObservedWeight(item, report) {
   return { label, title: preview };
 }
 
+function protocolTestFormatCodeCounts(counts) {
+  return Object.entries(counts || {}).map(([code, count]) => esc(code) + ' × ' + (Number(count) || 0)).join(' / ') || '暂无';
+}
+
+function renderProtocolTestGenericReport(report) {
+  const generic = report?.generic || {};
+  const byProtocol = generic.response_by_protocol || {};
+  const codeByProtocol = generic.response_code_by_protocol || {};
+  const samples = Array.isArray(generic.samples) ? generic.samples : [];
+  const body = document.getElementById('protocolTestGenericBody');
+  if (body) {
+    const rows = Object.entries(byProtocol).sort((a, b) => Number(b[1]) - Number(a[1]));
+    body.innerHTML = rows.length ? rows.map(([protocol, count]) => {
+      const sample = samples.find(item => item?.protocol === protocol) || {};
+      const keys = Array.isArray(sample.keys) ? sample.keys.join(', ') : '';
+      return '<tr><td><code>' + esc(protocol) + '</code></td><td>' + (Number(count) || 0) + '</td><td>' +
+        protocolTestFormatCodeCounts(codeByProtocol[protocol]) + '</td><td title="' + esc(keys) + '">' + esc(keys || '暂无') + '</td></tr>';
+    }).join('') : '<tr><td colspan="4" class="protocol-test-table-empty">暂无响应数据</td></tr>';
+  }
+  const meta = document.getElementById('protocolTestGenericMeta');
+  if (meta) meta.textContent = report ? (generic.response_total || 0) + ' 次响应 · 按协议和 code 统计' : '完成测试后显示';
+}
+
 function renderProtocolTestReport(report) {
   protocolTestReport = report || null;
+  const fixture = report?.fixture || document.getElementById('protocolTestTemplate')?.value || 'fishing';
+  const isFishing = fixture === 'fishing';
+  protocolTestSetResultMode(fixture);
   protocolTestRenderKpis(report);
+  renderProtocolTestGenericReport(report);
   const drops = report?.drops?.fish_distribution || [];
   const body = document.getElementById('protocolTestDropBody');
   if (body) {
@@ -16694,13 +16745,18 @@ function renderProtocolTestReport(report) {
   const actions = report?.actions || {};
   const latency = report?.latency_ms || {};
   const fishingGround = report?.fishing_ground || {};
+  const generic = report?.generic || {};
   const fishConfigSummary = drops.map(item => {
     const config = item.config || {};
     const quality = config.quality_display || config.quality || '未知';
     const observedWeight = protocolTestObservedWeight(item, report);
     return (item.fish_name || '未知鱼类') + ' / 品质 ' + quality + ' / 实测重量 ' + observedWeight.label;
   }).join('；') || '暂无鱼类配置';
-  const lines = report ? [
+  const protocolSummary = Object.entries(generic.response_by_protocol || {})
+    .map(([protocol, count]) => protocol + '=' + (Number(count) || 0)).join(' · ') || '无';
+  const responseCodeSummary = Object.entries(generic.response_code_by_protocol || {})
+    .map(([protocol, counts]) => protocol + ': ' + Object.entries(counts || {}).map(([code, count]) => code + '=' + count).join(', ')).join(' · ') || '无';
+  const lines = report ? (isFishing ? [
     '总动作：' + (actions.completed || 0) + ' / ' + (actions.requested || 0),
     '成功率：' + protocolTestPercent(actions.success_rate),
     '测试渔场：' + (fishingGround.name || '未知渔场') + (fishingGround.id ? '（ID ' + fishingGround.id + '）' : ''),
@@ -16709,7 +16765,17 @@ function renderProtocolTestReport(report) {
     '响应耗时：平均 ' + Math.round(latency.average || 0) + ' ms · P50 ' + (latency.p50 || 0) + ' ms · P95 ' + (latency.p95 || 0) + ' ms · P99 ' + (latency.p99 || 0) + ' ms',
     '收尾失败：' + (actions.finish_failures || 0),
     '错误码：' + (Object.entries(actions.error_codes || {}).map(([key, value]) => key + '=' + value).join(' · ') || '无'),
-  ].join('\n') : '完成一次测试后，这里会显示响应成功率、耗时分位数和异常分布。';
+  ] : [
+    '测试类型：通用协议',
+    '总动作：' + (actions.completed || 0) + ' / ' + (actions.requested || 0),
+    '成功率：' + protocolTestPercent(actions.success_rate),
+    '响应总数：' + (generic.response_total || 0),
+    '响应协议：' + protocolSummary,
+    'code 分布：' + responseCodeSummary,
+    '业务失败：' + (actions.business_failed || 0) + ' · 传输失败：' + (actions.transport_failed || 0) + ' · 超时：' + (actions.timeout || 0),
+    '响应耗时：平均 ' + Math.round(latency.average || 0) + ' ms · P50 ' + (latency.p50 || 0) + ' ms · P95 ' + (latency.p95 || 0) + ' ms · P99 ' + (latency.p99 || 0) + ' ms',
+    '错误码：' + (Object.entries(actions.error_codes || {}).map(([key, value]) => key + '=' + value).join(' · ') || '无'),
+  ]).join('\n') : '完成一次测试后，这里会显示响应成功率、耗时分位数和异常分布。';
   const summary = document.getElementById('protocolTestSummary');
   if (summary) summary.textContent = lines;
 }

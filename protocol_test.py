@@ -598,12 +598,38 @@ def _new_stats():
         "fishing_ground_ids": {},
         "fish_scene_ids": {},
         "response_latencies_ms": [],
+        "response_by_protocol": {},
+        "response_code_by_protocol": {},
+        "response_samples": [],
     }
 
 
 def _increment(mapping, key, amount=1):
     key = str(key)
     mapping[key] = int(mapping.get(key, 0)) + amount
+
+
+def _record_response(stats, response_protocol, response):
+    protocol = str(response_protocol or "unknown")
+    _increment(stats["response_by_protocol"], protocol)
+    code = response.get("code") if isinstance(response, dict) else None
+    code_key = str(code) if code is not None else "none"
+    code_counts = stats["response_code_by_protocol"].setdefault(protocol, {})
+    _increment(code_counts, code_key)
+    if len(stats["response_samples"]) < 3:
+        if isinstance(response, dict):
+            sample = {
+                "protocol": protocol,
+                "code": code,
+                "keys": list(response.keys())[:30],
+            }
+        else:
+            sample = {
+                "protocol": protocol,
+                "code": code,
+                "type": type(response).__name__,
+            }
+        stats["response_samples"].append(_json_safe(sample))
 
 
 def _numeric_weights(values):
@@ -683,9 +709,11 @@ def _fishing_ground_name(configured_grounds, scene_id):
 
 def _build_report(state, stats, baseline):
     completed = max(0, int(stats.get("completed", 0)))
-    fish_total = max(0, int(stats.get("fish_total", 0)))
-    fishing_ground = _report_fishing_ground(baseline, stats, state)
-    fish_configs = (baseline or {}).get("fish_configs") or {}
+    fixture = state.get("fixture") or "generic"
+    is_fishing = fixture == "fishing"
+    fish_total = max(0, int(stats.get("fish_total", 0))) if is_fishing else 0
+    fishing_ground = _report_fishing_ground(baseline, stats, state) if is_fishing else None
+    fish_configs = ((baseline or {}).get("fish_configs") or {}) if is_fishing else {}
     latencies = sorted(stats.get("response_latencies_ms") or [])
     def percentile(ratio):
         if not latencies:
@@ -693,7 +721,7 @@ def _build_report(state, stats, baseline):
         index = min(len(latencies) - 1, max(0, math.ceil(len(latencies) * ratio) - 1))
         return latencies[index]
     fish_distribution = []
-    for fish_id, count in sorted(stats.get("fish_by_id", {}).items(), key=lambda item: (-item[1], item[0])):
+    for fish_id, count in sorted(stats.get("fish_by_id", {}).items(), key=lambda item: (-item[1], item[0])) if is_fishing else []:
         interval = wilson_interval(count, fish_total)
         config = fish_configs.get(fish_id) or {}
         observed_weight = _weight_summary((stats.get("fish_weight_by_id") or {}).get(fish_id, []))
@@ -717,7 +745,7 @@ def _build_report(state, stats, baseline):
     return {
         "run_id": state["id"],
         "title": state["title"],
-        "fixture": state["fixture"],
+        "fixture": fixture,
         "status": state["status"],
         "created_at_ms": state.get("created_at_ms", 0),
         "started_at_ms": state.get("started_at_ms", 0),
@@ -744,12 +772,18 @@ def _build_report(state, stats, baseline):
         },
         "drops": {
             "fish_total": fish_total,
-            "fish_by_id": stats["fish_by_id"],
+            "fish_by_id": stats["fish_by_id"] if is_fishing else {},
             "fish_distribution": fish_distribution,
-            "fish_weight_by_id": stats["fish_weight_by_id"],
-            "items": stats["item_by_id"],
-            "mask_counts": stats["mask_counts"],
-            "fishing_ground_ids": stats["fishing_ground_ids"],
+            "fish_weight_by_id": stats["fish_weight_by_id"] if is_fishing else {},
+            "items": stats["item_by_id"] if is_fishing else {},
+            "mask_counts": stats["mask_counts"] if is_fishing else {},
+            "fishing_ground_ids": stats["fishing_ground_ids"] if is_fishing else {},
+        },
+        "generic": {
+            "response_total": sum(stats["response_by_protocol"].values()),
+            "response_by_protocol": stats["response_by_protocol"],
+            "response_code_by_protocol": stats["response_code_by_protocol"],
+            "samples": stats["response_samples"],
         },
         "config_baseline": baseline,
     }
@@ -869,6 +903,11 @@ class ProtocolTestService:
                 if result and result.get("ok"):
                     response = result.get("response")
                     event["response"] = _json_safe(response)
+                    _record_response(
+                        stats,
+                        result.get("response_protocol") or plan["response_protocol"],
+                        response,
+                    )
                     if plan["response_match"] and not _matches(response, plan["response_match"]):
                         result = {"ok": False, "code": "response_mismatch", "error": "响应字段不符合预期"}
                     else:
@@ -878,9 +917,10 @@ class ProtocolTestService:
                         else:
                             stats["success"] += 1
                             stats["response_latencies_ms"].append(event["latency_ms"])
-                            fish_record = _extract_fish_record(response)
-                            scene_id = fish_record.get("scene", request_payload.get("scene"))
-                            _record_fishes(stats, _extract_fishes(response), scene_id)
+                            if plan["fixture"] == "fishing":
+                                fish_record = _extract_fish_record(response)
+                                scene_id = fish_record.get("scene", request_payload.get("scene"))
+                                _record_fishes(stats, _extract_fishes(response), scene_id)
                             finish_result = None
                             if plan["finish_protocol"]:
                                 finish_result = send_request(
