@@ -12518,7 +12518,7 @@ async function dispatchGmContent(command, label) {
     const channelLabel = Array.isArray(data.channels) && data.channels.length
       ? data.channels.map(channel => channel === 'ks' ? 'KS' : '客户端').join(' + ')
       : 'GM 通道';
-    toast(`已通过${channelLabel}投递：${label}（${targetCount} 个账号）`);
+    toast(data.msg || `已通过${channelLabel}投递：${label}（${targetCount} 个账号）`);
     await loadCocosStatus();
     return true;
   } catch (e) {
@@ -13358,6 +13358,7 @@ function renderKongmingWorkflow(workflow) {
   const executionStep = steps.find(step => ['execute_account_command', 'execute_reward_command'].includes(step.id)) || {};
   const executionResult = executionStep.result || {};
   const gameResultVerified = executionResult.verification_status === 'verified';
+  const verificationUnavailable = Number(executionResult.verification_unavailable_count || 0) > 0;
   const deliveredOnly = isAccountTargetWorkflow && workflow.state === 'completed' && !gameResultVerified;
   if (deliveredOnly) state = { label: '已投递', icon: 'outbox' };
   const workflowStateClass = deliveredOnly ? 'queued' : (workflow.state || '');
@@ -13406,7 +13407,9 @@ function renderKongmingWorkflow(workflow) {
   } else if (workflow.state === 'completed') {
     const completionNote = gameResultVerified
       ? `已读取并核验 ${Number(executionResult.verified_count || 0)} 个账号的游戏内结果，操作已生效。`
-      : '任务已完成投递；当前命令不支持自动核验，请以游戏内结果为准。';
+      : verificationUnavailable
+        ? '任务已完成投递；当前 Cocos 不支持自动核验，请以游戏内结果为准。'
+        : '任务已完成投递；当前命令不支持自动核验，请以游戏内结果为准。';
     actions = `<span class="kongming-workflow-note">${completionNote}</span><button class="btn btn-ghost" type="button" onclick="switchView('commands')"><span class="material-symbols-outlined">terminal</span><span>命令管理</span></button><button class="btn btn-ghost" type="button" onclick="switchView('scripts')"><span class="material-symbols-outlined">code</span><span>脚本管理</span></button>`;
   }
   return `<section class="kongming-workflow" data-workflow-id="${workflowId}" aria-label="孔明任务预览 ${esc(workflow.title || '')}">

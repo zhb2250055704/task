@@ -3670,7 +3670,10 @@ def _verify_cocos_command(connection, spec, timeout=None, interval=None):
             lowered = last_error.lower()
             if ('method' in lowered and 'not found' in lowered) or 'does not support' in lowered:
                 return {
-                    'ok': False,
+                    # The command was accepted by Cocos. Missing verification
+                    # support is not a delivery failure and must not trigger a
+                    # retry that could send the command a second time.
+                    'ok': True,
                     'status': 'unsupported',
                     'type': spec['type'],
                     'label': spec['label'],
@@ -3679,7 +3682,7 @@ def _verify_cocos_command(connection, spec, timeout=None, interval=None):
                     'state': last_state,
                     'msg': (
                         '命令已投递，但当前 Cocos 游戏未加载结果核验代码。'
-                        '请在 Cocos 中重新构建或刷新游戏后重试'
+                        '请以游戏内结果为准；如需自动核验，请在后续命令前更新客户端'
                     ),
                 }
         remaining = deadline - time.monotonic()
@@ -3712,6 +3715,7 @@ def _execute_cocos_connection(connection, normalized):
     results = []
     verified_count = 0
     verifiable_count = 0
+    verification_unavailable_count = 0
     with connection.command_lock:
         for index, command in enumerate(normalized):
             params = ['CgChatRoomSendMessage', json.dumps({
@@ -3748,7 +3752,13 @@ def _execute_cocos_connection(connection, normalized):
                 verifiable_count += 1
                 verification = _verify_cocos_command(connection, verification_spec)
                 command_result['verification'] = verification
-                command_result['verification_status'] = verification['status']
+                if verification['status'] == 'unsupported':
+                    # Preserve the detailed nested status while exposing the
+                    # command outcome as delivered/not-available to callers.
+                    command_result['verification_status'] = 'not_available'
+                    verification_unavailable_count += 1
+                else:
+                    command_result['verification_status'] = verification['status']
                 if not verification.get('ok'):
                     return {
                         'ok': False,
@@ -3758,17 +3768,30 @@ def _execute_cocos_connection(connection, normalized):
                         'delivery_status': 'delivered',
                         'verification_status': verification['status'],
                         'verified_count': verified_count,
+                        'verification_unavailable_count': verification_unavailable_count,
                     }
-                verified_count += 1
+                if verification['status'] == 'verified':
+                    verified_count += 1
             if index < len(normalized) - 1:
                 time.sleep(0.1)
-    verification_status = 'verified' if verifiable_count == len(normalized) else 'not_available'
+    verification_status = (
+        'verified'
+        if verifiable_count == len(normalized) and verified_count == verifiable_count
+        else 'not_available'
+    )
+    message = (
+        f'已投递到 Cocos；有 {verification_unavailable_count} 条命令无法自动核验，'
+        '请以游戏内结果为准'
+        if verification_unavailable_count else ''
+    )
     return {
         'ok': True,
         'results': results,
         'delivery_status': 'delivered',
         'verification_status': verification_status,
         'verified_count': verified_count,
+        'verification_unavailable_count': verification_unavailable_count,
+        'msg': message,
     }
 
 
@@ -3854,6 +3877,7 @@ def execute_cocos_commands(commands, target_id='', target_ids=None, target_specs
                 'delivered' if execution.get('ok') else 'delivery_failed'
             ),
             'verification_status': execution.get('verification_status', 'not_available'),
+            'verification_unavailable_count': execution.get('verification_unavailable_count', 0),
             'code': execution.get('code', ''),
             'msg': execution.get('msg', ''),
             'results': execution.get('results', []),
@@ -3867,10 +3891,14 @@ def execute_cocos_commands(commands, target_id='', target_ids=None, target_specs
     verified_count = sum(
         1 for item in batch_results if item.get('verification_status') == 'verified'
     )
+    verification_unavailable_count = sum(
+        int(item.get('verification_unavailable_count') or 0)
+        for item in batch_results
+    )
     verification_status = (
-        'verified' if verified_count == len(batch_results)
+        'verified' if all(item.get('verification_status') == 'verified' for item in batch_results)
         else ('verification_failed' if any(
-            item.get('verification_status') in ('verification_failed', 'unsupported')
+            item.get('verification_status') == 'verification_failed'
             for item in batch_results
         ) else 'not_available')
     )
@@ -3882,6 +3910,7 @@ def execute_cocos_commands(commands, target_id='', target_ids=None, target_specs
         'target_count': len(selected_connections),
         'delivered_count': delivered_count,
         'verified_count': verified_count,
+        'verification_unavailable_count': verification_unavailable_count,
         'success_count': success_count,
         'failure_count': len(failed_results),
         'targets': [item['target'] for item in batch_results],
@@ -3895,6 +3924,11 @@ def execute_cocos_commands(commands, target_id='', target_ids=None, target_specs
         )
     elif verification_status == 'verified':
         response['msg'] = f'已投递并验证 {verified_count} 个游戏账号，游戏内结果已生效'
+    elif verification_unavailable_count:
+        response['msg'] = (
+            f'已投递到 {success_count} 个游戏客户端，但当前 Cocos 不支持结果核验，'
+            '请以游戏内结果为准'
+        )
     else:
         response['msg'] = f'已投递到 {success_count} 个游戏客户端；游戏服务器是否执行成功请以游戏内结果为准'
     if len(batch_results) == 1:
@@ -5222,6 +5256,22 @@ def execute_gm_commands(commands, target_id='', target_ids=None, target_specs=No
     target_count = sum(int(result.get('target_count') or 0) for _, result in results)
     failure_count = max(0, target_count - success_count)
     ok = all(result.get('ok') for _, result in results)
+    verification_statuses = [
+        _text_value(result.get('verification_status')) or 'not_available'
+        for _, result in results
+    ]
+    verification_status = (
+        'verified' if verification_statuses and all(
+            status == 'verified' for status in verification_statuses
+        )
+        else ('verification_failed' if any(
+            status == 'verification_failed' for status in verification_statuses
+        ) else 'not_available')
+    )
+    verification_unavailable_count = sum(
+        int(result.get('verification_unavailable_count') or 0)
+        for _, result in results
+    )
     response = {
         'ok': ok,
         'delivery_status': 'delivered' if delivered_count == target_count else 'partial_failed',
@@ -5229,12 +5279,23 @@ def execute_gm_commands(commands, target_id='', target_ids=None, target_specs=No
         'delivered_count': delivered_count,
         'success_count': success_count,
         'failure_count': failure_count,
+        'verification_status': verification_status,
+        'verified_count': sum(
+            int(result.get('verified_count') or 0) for _, result in results
+        ),
+        'verification_unavailable_count': verification_unavailable_count,
         'batch_results': batch_results,
         'channel_results': {channel: result for channel, result in results},
         'channels': [channel for channel, _ in results],
     }
     if ok:
-        response['msg'] = f'已投递 {success_count} 个账号'
+        if verification_unavailable_count:
+            response['msg'] = (
+                f'已投递 {success_count} 个账号，但当前 Cocos 不支持结果核验，'
+                '请以游戏内结果为准'
+            )
+        else:
+            response['msg'] = f'已投递 {success_count} 个账号'
     else:
         failed = next((result for _, result in results if not result.get('ok')), {})
         response.update({
@@ -6746,6 +6807,11 @@ def _workflow_execute_account_command(workflow):
     verification_status = _text_value(result.get('verification_status')) or 'not_available'
     if verification_status == 'verified':
         result_message = f'已对 {verified_count} 个账号执行并验证：{operation_name}'
+    elif int(result.get('verification_unavailable_count') or 0) > 0:
+        result_message = (
+            f'已对 {result.get("success_count", pending_count)} 个账号投递：{operation_name}；'
+            '当前 Cocos 不支持自动核验，请以游戏内结果为准'
+        )
     else:
         result_message = f'已对 {result.get("success_count", pending_count)} 个账号执行：{operation_name}'
     return {
@@ -6755,6 +6821,7 @@ def _workflow_execute_account_command(workflow):
         'success_count': result.get('success_count', pending_count),
         'verified_count': verified_count,
         'verification_status': verification_status,
+        'verification_unavailable_count': int(result.get('verification_unavailable_count') or 0),
         'channels': result.get('channels') or [],
     }
 
@@ -6782,6 +6849,46 @@ KONGMING_WORKFLOW_STEP_HANDLERS = {
     'resolve_account_targets': _workflow_resolve_reward_targets,
     'execute_account_command': _workflow_execute_account_command,
 }
+
+
+def _recover_legacy_unverified_cocos_step(workflow, failed_step):
+    """Recover pre-fix tasks whose Cocos command was delivered but misclassified."""
+    if not isinstance(failed_step, dict) or failed_step.get('id') not in {
+        'execute_account_command', 'execute_reward_command'
+    }:
+        return False
+    error = _text_value(failed_step.get('error'))
+    if '命令已投递' not in error or '未加载结果核验代码' not in error:
+        return False
+
+    runtime = workflow.setdefault('runtime', {})
+    client_targets = runtime.get('client_targets') or runtime.get('online_targets') or []
+    if not client_targets:
+        return False
+    completed_ids = set(runtime.get('command_completed_cache_ids') or [])
+    for target in client_targets:
+        identity = _workflow_reward_target_identity(target)
+        if identity:
+            completed_ids.add(identity)
+    runtime['command_completed_cache_ids'] = sorted(completed_ids)
+    failed_step.update({
+        'status': 'completed',
+        'finished_at': now_str(),
+        'error': '',
+        'result': {
+            'msg': (
+                f'已确认历史命令已投递到 {len(client_targets)} 个 Cocos 账号，'
+                '当前客户端不支持自动核验，重试时已跳过重复投递'
+            ),
+            'target_count': len(client_targets),
+            'delivered_count': len(client_targets),
+            'success_count': len(client_targets),
+            'verification_status': 'not_available',
+            'verification_unavailable_count': len(client_targets),
+        },
+    })
+    append_workflow_event(workflow, '已恢复历史投递结果，跳过重复发送')
+    return True
 
 
 def _run_kongming_workflow(owner_id, workflow_id):
@@ -6853,6 +6960,9 @@ def start_kongming_workflow(owner_id, workflow_id, retry=False):
         failed_step = next((
             step for step in (workflow.get('steps') or []) if step.get('status') == 'failed'
         ), None)
+        recovered_legacy_step = _recover_legacy_unverified_cocos_step(workflow, failed_step)
+        if recovered_legacy_step:
+            failed_step = None
         resume_from = 'create_accounts' if failed_step and failed_step.get('id') == 'sync_accounts' else ''
         failed_seen = False
         for step in workflow.get('steps') or []:

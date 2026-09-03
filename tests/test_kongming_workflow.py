@@ -796,6 +796,79 @@ class KongmingWorkflowExecutionTests(unittest.TestCase):
         self.assertEqual(len(call.kwargs['ks_targets']), 2)
         self.assertEqual(result['success_count'], 3)
 
+    def test_delivered_but_unverified_cocos_command_is_cached_as_completed(self):
+        text = BULK_REWARD_TEXT.splitlines()[0] + '\n给这3个账号的VIP等级设置为12级'
+        catalog = sample_bulk_reward_catalog()
+        workflow = kongming_workflow.build_kongming_workflow(
+            'owner-1', text, catalog, sample_account_commands(), []
+        )
+        account = workflow['targets'][0]
+        workflow['runtime']['client_targets'] = [{
+            'id': 'client-vip-1',
+            'connection_id': 'client-vip-1',
+            'cache_id': account['cache_id'],
+            'account_name': account['account_name'],
+            'role_id': account['role_id'],
+            'server_id': account['server_id'],
+            'dispatchable': True,
+        }]
+        workflow['runtime']['online_targets'] = workflow['runtime']['client_targets']
+        execution_result = {
+            'ok': True,
+            'success_count': 1,
+            'target_count': 1,
+            'delivered_count': 1,
+            'verification_status': 'not_available',
+            'verification_unavailable_count': 1,
+            'batch_results': [{
+                'ok': True,
+                'target': {'id': 'client-vip-1'},
+            }],
+        }
+        with mock.patch.object(server, 'execute_gm_commands', return_value=execution_result) as execute_gm, \
+                mock.patch.object(server, 'save_kongming_workflow', side_effect=lambda _base, value: value):
+            result = server._workflow_execute_account_command(workflow)
+
+        execute_gm.assert_called_once()
+        self.assertEqual(
+            workflow['runtime']['command_completed_cache_ids'],
+            ['cache:' + account['cache_id']],
+        )
+        self.assertEqual(result['verification_status'], 'not_available')
+        self.assertEqual(result['verification_unavailable_count'], 1)
+        self.assertIn('不支持自动核验', result['msg'])
+
+    def test_legacy_unverified_failure_is_recovered_without_resending(self):
+        text = BULK_REWARD_TEXT.splitlines()[0] + '\n给这3个账号的VIP等级设置为12级'
+        workflow = kongming_workflow.build_kongming_workflow(
+            'owner-1', text, sample_bulk_reward_catalog(), sample_account_commands(), []
+        )
+        account = workflow['targets'][0]
+        target = {
+            'id': 'client-vip-1',
+            'connection_id': 'client-vip-1',
+            'cache_id': account['cache_id'],
+            'account_name': account['account_name'],
+            'role_id': account['role_id'],
+            'server_id': account['server_id'],
+            'dispatchable': True,
+        }
+        workflow['runtime']['client_targets'] = [target]
+        failed_step = workflow['steps'][-1]
+        failed_step['status'] = 'failed'
+        failed_step['error'] = '命令已投递，但当前 Cocos 游戏未加载结果核验代码。'
+        workflow['state'] = 'failed'
+
+        recovered = server._recover_legacy_unverified_cocos_step(workflow, failed_step)
+
+        self.assertTrue(recovered)
+        self.assertEqual(failed_step['status'], 'completed')
+        self.assertEqual(
+            workflow['runtime']['command_completed_cache_ids'],
+            ['cache:' + account['cache_id']],
+        )
+        self.assertIn('跳过重复投递', failed_step['result']['msg'])
+
 
 if __name__ == '__main__':
     unittest.main()

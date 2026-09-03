@@ -48,10 +48,11 @@ class CocosCommandVerificationTest(unittest.TestCase):
 
         result = server._execute_cocos_connection(connection, ['#setVipLevel 12'])
 
-        self.assertFalse(result['ok'])
+        self.assertTrue(result['ok'])
         self.assertEqual(result['delivery_status'], 'delivered')
-        self.assertEqual(result['verification_status'], 'unsupported')
-        self.assertIn('重新构建或刷新游戏', result['msg'])
+        self.assertEqual(result['verification_status'], 'not_available')
+        self.assertEqual(result['verification_unavailable_count'], 1)
+        self.assertIn('请以游戏内结果为准', result['msg'])
 
     def test_unchanged_vip_level_is_a_verification_failure(self):
         connection = FakeCocosConnection({

@@ -91,6 +91,36 @@ class KsOfflineExecutionTest(unittest.TestCase):
         self.assertEqual(result['target_count'], 3)
         self.assertEqual(result['delivered_count'], 3)
 
+    def test_mixed_delivery_preserves_unverified_cocos_status(self):
+        cocos_result = {
+            'ok': True,
+            'target_count': 1,
+            'delivered_count': 1,
+            'success_count': 1,
+            'verification_status': 'not_available',
+            'verification_unavailable_count': 1,
+            'batch_results': [],
+        }
+        ks_result = {
+            'ok': True,
+            'target_count': 1,
+            'delivered_count': 1,
+            'success_count': 1,
+            'batch_results': [],
+        }
+        with mock.patch.object(server, 'execute_cocos_commands', return_value=cocos_result), \
+                mock.patch.object(server, 'execute_ks_commands', return_value=ks_result):
+            result = server.execute_gm_commands(
+                '#setVipLevel 12',
+                target_specs=[{'connection_id': 'client-1'}],
+                ks_targets=[{'environment_key': 'env-206', 'cache_id': 'account-1'}],
+            )
+
+        self.assertTrue(result['ok'])
+        self.assertEqual(result['verification_status'], 'not_available')
+        self.assertEqual(result['verification_unavailable_count'], 1)
+        self.assertIn('不支持结果核验', result['msg'])
+
 
 if __name__ == '__main__':
     unittest.main()
