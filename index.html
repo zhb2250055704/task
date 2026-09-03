@@ -11569,6 +11569,47 @@ function requestKsSyncFromBrowserBridge() {
   });
 }
 
+function kongmingKsApplicationId(message) {
+  const match = String(message || '').match(/https?:\/\/[^\s\]\[<>"']+/i);
+  if (!match) return '';
+  const rawUrl = match[0].replace(/[)\]}>，。；;]+$/, '');
+  try {
+    const url = new URL(rawUrl);
+    if (url.hostname.toLowerCase() !== 'zxty.tuyoo.com' ||
+        !url.pathname.includes('/keystone/applications')) return '';
+    return url.searchParams.get('id') || '';
+  } catch (_) {
+    return '';
+  }
+}
+
+function hasKsApplicationInLocalCatalog(appId) {
+  if (!appId) return true;
+  return (ksCatalog.environments || []).some(environment =>
+    [environment.key, environment.raw_id, environment.app_id].some(value =>
+      String(value || '').trim() === appId
+    )
+  );
+}
+
+async function refreshKsForKongmingMessage(message) {
+  const appId = kongmingKsApplicationId(message);
+  if (!appId || hasKsApplicationInLocalCatalog(appId)) return;
+  const hint = document.getElementById('kongmingComposerHint');
+  if (hint) hint.textContent = '正在刷新 KS 环境';
+  try {
+    const data = await requestKsSyncFromBrowserBridge();
+    renderLsTokenResult(data);
+    if (!data || !data.ok) throw new Error(data && data.msg || 'KS 环境与账号同步失败');
+    ksConfigured = true;
+    ksTokenExpired = false;
+    saveKsCatalog(data.catalog || {});
+    sessionStorage.setItem('gm_ks_auto_sync', '1');
+  } catch (error) {
+    // Let the server perform its targeted lookup and return the precise reason.
+  }
+}
+
 async function autoRefreshKsTokenAndSync(savedStatus) {
   setKsTokenAutoSyncStatus('正在检测 KS Token 浏览器桥接...', '', 'extension');
   try {
@@ -13566,6 +13607,7 @@ async function sendKongmingMessage(event) {
   kongmingMessagesCache = [...previousMessages, { role: 'user', content: message, created_at: new Date().toLocaleString() }];
   renderKongmingMessages({ loading: true });
   try {
+    await refreshKsForKongmingMessage(message);
     const res = await fetch(`${KONGMING_API}/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

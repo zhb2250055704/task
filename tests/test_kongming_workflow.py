@@ -233,6 +233,163 @@ class KongmingWorkflowParsingTests(unittest.TestCase):
         self.assertEqual(workflow['command']['id'], 'doc_setviplevel')
         self.assertEqual(workflow['command']['command'], '#setVipLevel 12')
 
+    def test_numeric_account_ids_match_exact_account_fields(self):
+        text = (
+            'https://zxty.tuyoo.com/keystone/applications?id=env-numeric&'
+            'projectId=project-1&cluster_name=腾讯云测试集群\n'
+            'KS环境下的16200000240322和16200000240323这2个账号，都升到VIP 12级'
+        )
+        catalog = {
+            'environments': [{
+                'key': 'env-numeric',
+                'app_id': 'env-numeric',
+                'name': 'test-numeric',
+                'app_name': 'test-numeric',
+                'login_url': 'https://login-test-numeric.example.com',
+                'accounts': [
+                    {
+                        'account_name': '101.A.account.1',
+                        'role_id': '16200000240322',
+                        'server_id': '101',
+                        'cache_id': 'cache-numeric-1',
+                    },
+                    {
+                        'account_name': '101.A.account.2',
+                        'role_id': '16200000240323',
+                        'server_id': '101',
+                        'cache_id': 'cache-numeric-2',
+                    },
+                ],
+            }],
+        }
+
+        self.assertTrue(kongming_workflow.is_kongming_account_command_workflow_request(text))
+        workflow = kongming_workflow.build_kongming_workflow(
+            'owner-1', text, catalog, sample_account_commands(), []
+        )
+
+        self.assertEqual(
+            [item['role_id'] for item in workflow['targets']],
+            ['16200000240322', '16200000240323'],
+        )
+        self.assertEqual(workflow['command']['command'], '#setVipLevel 12')
+
+    def test_numeric_account_ids_never_fallback_to_other_accounts(self):
+        text = (
+            'https://zxty.tuyoo.com/keystone/applications?id=env-numeric&'
+            'projectId=project-1&cluster_name=腾讯云测试集群\n'
+            'KS环境下的16200000240322和16200000240323这2个账号，都升到VIP 12级'
+        )
+        catalog = {
+            'environments': [{
+                'key': 'env-numeric',
+                'app_id': 'env-numeric',
+                'name': 'test-numeric',
+                'login_url': 'https://login-test-numeric.example.com',
+                'accounts': [{
+                    'account_name': '101.A.account.other',
+                    'role_id': '16200000240322',
+                    'server_id': '101',
+                    'cache_id': 'cache-numeric-1',
+                }],
+            }],
+        }
+
+        with self.assertRaisesRegex(ValueError, '没有找到账号 16200000240323'):
+            kongming_workflow.build_kongming_workflow(
+                'owner-1', text, catalog, sample_account_commands(), []
+            )
+
+    def test_resource_amount_is_not_parsed_as_numeric_account_id(self):
+        text = (
+            '环境：https://login-test-numeric.example.com\n'
+            '给这1个账号发100000000元宝'
+        )
+
+        scope = kongming_workflow.parse_account_command_scope(text)
+
+        self.assertEqual(scope['mode'], 'all')
+        self.assertEqual(scope['account_identifiers'], [])
+
+    def test_workflow_plan_fills_missing_environment_from_ks_application_url(self):
+        text = (
+            'https://zxty.tuyoo.com/keystone/applications?id=env-missing&'
+            'projectId=project-1&cluster_name=腾讯云测试集群\n'
+            'KS环境下的16200000240322这1个账号，升到VIP 12级'
+        )
+        catalog = {
+            'environments': [{
+                'key': 'env-missing',
+                'app_id': 'env-missing',
+                'name': 'test-missing',
+                'login_url': 'https://login-test-missing.example.com',
+                'accounts': [{
+                    'account_name': '101.A.account.1',
+                    'role_id': '16200000240322',
+                    'server_id': '101',
+                    'cache_id': 'cache-missing-1',
+                }],
+            }],
+        }
+        with tempfile.TemporaryDirectory() as temp_dir, \
+                mock.patch.object(server, 'KONGMING_WORKFLOW_DIR', temp_dir), \
+                mock.patch.object(server, 'ks_catalog_with_online', side_effect=[
+                    {'environments': []}, catalog,
+                ]), \
+                mock.patch.object(server, 'sync_ks_application_reference', return_value={
+                    'ok': True, 'catalog': catalog,
+                }) as sync_reference, \
+                mock.patch.object(server, 'load_data', return_value=sample_account_commands()), \
+                mock.patch.object(server, 'load_scripts', return_value=[]):
+            workflow = server.create_kongming_workflow_plan('owner-1', text)
+
+        sync_reference.assert_called_once_with(text)
+        self.assertEqual(workflow['environment']['app_id'], 'env-missing')
+        self.assertEqual(workflow['targets'][0]['role_id'], '16200000240322')
+
+    def test_ks_application_reference_reads_only_requested_application(self):
+        text = (
+            'https://zxty.tuyoo.com/keystone/applications?id=env-target&'
+            'projectId=project-1&cluster_name=腾讯云测试集群'
+        )
+        environment = {
+            'key': 'env-target',
+            'app_id': 'env-target',
+            'name': 'test-target',
+            'app_name': 'test-target',
+            'category': '项目',
+            'cluster': '腾讯云测试集群',
+            'login_url': 'https://login-test-target.example.com',
+            'accounts': [],
+        }
+        accounts = [{
+            'account_name': '101.A.account.1',
+            'role_id': '16200000240322',
+            'server_id': '101',
+            'cache_id': 'cache-target-1',
+        }]
+        with mock.patch.object(server, 'load_ks_config', return_value={
+                'base_url': 'https://zxty.tuyoo.com', 'token': 'token-test'}), \
+                mock.patch.object(server, 'ks_token_status', return_value={
+                    'configured': True, 'expired': False, 'expires_at': 0, 'profile': {},
+                }), \
+                mock.patch.object(server, 'ks_fetch_applications', return_value=[environment]) as fetch_apps, \
+                mock.patch.object(server, 'ks_fetch_environment_accounts', return_value=accounts) as fetch_accounts, \
+                mock.patch.object(server, '_load_json_object', return_value={
+                    'catalog': {'environments': []},
+                }), \
+                mock.patch.object(server, '_save_json_object') as save_cache:
+            result = server.sync_ks_application_reference(text)
+
+        fetch_apps.assert_called_once_with(
+            'https://zxty.tuyoo.com', 'token-test',
+            {'id': 'project-1'}, '腾讯云测试集群'
+        )
+        fetch_accounts.assert_called_once()
+        save_cache.assert_called_once()
+        self.assertEqual(result['environment']['app_id'], 'env-target')
+        self.assertEqual(result['account_count'], 1)
+
     def test_follow_up_action_inherits_only_the_latest_workflow_scope(self):
         previous = kongming_workflow.build_kongming_workflow(
             'owner-1', BULK_REWARD_TEXT, sample_bulk_reward_catalog(), sample_reward_commands(), []

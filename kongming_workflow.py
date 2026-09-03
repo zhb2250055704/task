@@ -229,6 +229,27 @@ def _explicit_reward_accounts(text):
     return accounts
 
 
+def _explicit_account_command_identifiers(text):
+    """Extract long numeric identifiers only when they are used as account targets."""
+    source = str(text or '')
+    source_without_urls = re.sub(r'https?://[^\s\]\[<>"\']+', ' ', source, flags=re.IGNORECASE)
+    identifiers = []
+    seen = set()
+    for match in re.finditer(r'(?<!\d)(\d{10,20})(?!\d)', source_without_urls):
+        value = match.group(1)
+        context = source_without_urls[max(0, match.start() - 48):min(len(source_without_urls), match.end() + 48)]
+        trailing = source_without_urls[match.end():min(len(source_without_urls), match.end() + 16)]
+        if re.match(r'\s*(?:元宝|金币|银币|数量|次|个|级|点)', trailing):
+            continue
+        if '账号' not in context and not re.search(r'\b(?:account|role|player|user)\s*(?:id)?\b', context, re.I):
+            continue
+        identity = value.lower()
+        if identity not in seen:
+            identifiers.append(value)
+            seen.add(identity)
+    return identifiers
+
+
 def parse_reward_accounts(text):
     accounts = _explicit_reward_accounts(text)
     if not accounts:
@@ -291,6 +312,54 @@ def parse_reward_account_scope(text):
             'expected_count': expected_count,
         }
     raise ValueError('未识别到发放账号范围，请写明账号名、账号数量或“全部账号”')
+
+
+def parse_account_command_scope(text):
+    """Parse explicit account names/IDs for non-resource GM commands."""
+    source = str(text or '')
+    account_names = _explicit_reward_accounts(source)
+    account_identifiers = _explicit_account_command_identifiers(source)
+    count_match = re.search(
+        r'(?<![\dA-Za-z])([0-9]{1,3}|[一二两三四五六七八九十]{1,3})\s*个\s*(?:KS\s*)?账号',
+        source,
+        flags=re.IGNORECASE,
+    )
+    expected_count = _parse_chinese_account_count(count_match.group(1)) if count_match else None
+    if expected_count is not None:
+        if expected_count <= 0:
+            raise ValueError('账号数量必须大于 0')
+        if expected_count > KONGMING_MAX_REWARD_TARGETS:
+            raise ValueError(f'单次账号操作最多允许 {KONGMING_MAX_REWARD_TARGETS} 个账号')
+
+    explicit_targets = []
+    seen = set()
+    for value in [*account_names, *account_identifiers]:
+        identity = value.lower()
+        if identity not in seen:
+            explicit_targets.append(value)
+            seen.add(identity)
+    if explicit_targets:
+        if len(explicit_targets) > KONGMING_MAX_REWARD_TARGETS:
+            raise ValueError(f'单次账号操作最多允许 {KONGMING_MAX_REWARD_TARGETS} 个账号')
+        if expected_count is not None and expected_count != len(explicit_targets):
+            raise ValueError(
+                f'请求中写明 {expected_count} 个账号，但只识别到 {len(explicit_targets)} 个明确账号标识'
+            )
+        return {
+            'mode': 'explicit',
+            'account_names': account_names,
+            'account_identifiers': account_identifiers,
+            'expected_count': expected_count,
+        }
+    all_markers = ('全部账号', '所有账号', '每个账号', '全体账号')
+    if expected_count is not None or any(marker in source for marker in all_markers):
+        return {
+            'mode': 'all',
+            'account_names': [],
+            'account_identifiers': [],
+            'expected_count': expected_count,
+        }
+    raise ValueError('未识别到账号范围，请写明账号名、账号 ID、账号数量或“全部账号”')
 
 
 def _parse_decimal_number(raw_number):
@@ -382,7 +451,7 @@ def is_kongming_account_command_workflow_request(text):
     ):
         return False
     try:
-        parse_reward_account_scope(source)
+        parse_account_command_scope(source)
     except ValueError:
         return False
     action_markers = (
@@ -563,14 +632,33 @@ def _find_environment(catalog, app_id):
     ), None)
 
 
-def _resolve_reward_targets(environment, account_names):
+def _account_identifier_values(account):
+    values = []
+    for key in ('account_name', 'account_id', 'role_id', 'player_id', 'user_id'):
+        value = str(account.get(key) or '').strip()
+        if value:
+            values.append(value)
+    return values
+
+
+def _resolve_reward_targets(environment, account_names=None, account_identifiers=None):
     accounts = environment.get('accounts') or []
     resolved = []
-    for account_name in account_names:
+    requested_identifiers = []
+    seen_requested = set()
+    for value in [*(account_names or []), *(account_identifiers or [])]:
+        identity = str(value).strip().lower()
+        if identity and identity not in seen_requested:
+            requested_identifiers.append(value)
+            seen_requested.add(identity)
+    for account_name in requested_identifiers:
         matches = [
             item for item in accounts
             if isinstance(item, dict)
-            and str(item.get('account_name') or '').strip().lower() == account_name.lower()
+            and any(
+                value.lower() == str(account_name).strip().lower()
+                for value in _account_identifier_values(item)
+            )
         ]
         if not matches:
             raise ValueError(f'环境 {environment.get("name") or environment.get("key")} 中没有找到账号 {account_name}，请先同步 KS 账号缓存')
@@ -595,6 +683,8 @@ def _resolve_reward_targets(environment, account_names):
             'cache_id': str(account.get('cache_id') or '').strip(),
             'account_name': str(account.get('account_name') or '').strip(),
             'account_label': str(account.get('role_name') or account.get('account_label') or account.get('account_name') or '').strip(),
+            'account_id': str(account.get('account_id') or '').strip(),
+            'player_id': str(account.get('player_id') or '').strip(),
             'role_id': str(account.get('role_id') or '').strip(),
             'server_id': str(account.get('server_id') or '').strip(),
             'operation_time': str(account.get('operation_time') or account.get('last_seen') or '').strip(),
@@ -717,11 +807,17 @@ def build_kongming_account_command_workflow(owner_id, text, catalog, commands):
     environment = _find_environment_by_text(catalog, text)
     if not environment:
         raise ValueError('KS 目录中没有找到该环境，请先同步环境与账号，或提供该环境的登录地址')
-    account_scope = parse_reward_account_scope(text)
+    account_scope = parse_account_command_scope(text)
     account_names = account_scope['account_names']
     if account_scope['mode'] == 'all':
         account_names = _bulk_reward_account_names(environment, account_scope.get('expected_count'))
-    targets = _resolve_reward_targets(environment, account_names)
+        targets = _resolve_reward_targets(environment, account_names=account_names)
+    else:
+        targets = _resolve_reward_targets(
+            environment,
+            account_names=account_names,
+            account_identifiers=account_scope.get('account_identifiers'),
+        )
     intent_text = _command_intent_text(text)
     command = _select_kongming_command(intent_text, commands)
     arguments = _extract_kongming_command_arguments(intent_text, command)

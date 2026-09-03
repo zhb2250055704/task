@@ -71,8 +71,11 @@ from kongming_search import build_kongming_evidence
 from kongming_workflow import (
     append_workflow_event,
     build_kongming_workflow,
+    extract_ks_url,
+    find_kongming_environment,
     is_kongming_workflow_request,
     load_kongming_workflow,
+    parse_ks_application_url,
     public_kongming_workflow,
     save_kongming_workflow,
     update_kongming_workflow_command,
@@ -4904,6 +4907,83 @@ def sync_ks_catalog(token='', base_url='', persist_config=False):
     }
 
 
+def sync_ks_application_reference(text):
+    """Fetch one KS application and its accounts from a complete application URL."""
+    reference = parse_ks_application_url(text)
+    if not reference.get('project_id') or not reference.get('cluster_name'):
+        raise ValueError('KS 应用链接缺少 projectId 或 cluster_name，无法定位项目和集群')
+
+    config = load_ks_config()
+    _, parsed_token = parse_ls_credential_headers(config.get('token', ''))
+    token = parsed_token or str(config.get('token') or '').strip()
+    base_url = normalize_ks_base_url(config.get('base_url') or KS_DEFAULT_BASE_URL)
+    token_state = ks_token_status(token)
+    if not token:
+        raise ValueError('未配置 KS Token，请先在命令管理中更新 Token')
+    if token_state.get('expired'):
+        raise ValueError('KS Token 已过期，请更新 Token')
+
+    # The application page already supplies the project and cluster filters, so
+    # one targeted read is enough and avoids loading every KS environment.
+    project = {'id': reference['project_id']}
+    applications = ks_fetch_applications(
+        base_url, token, project, reference['cluster_name']
+    )
+    environment = next((
+        item for item in applications
+        if isinstance(item, dict) and str(item.get('app_id') or item.get('key') or '').strip() == reference['app_id']
+    ), None)
+    if not environment:
+        raise ValueError('KS 中没有找到该应用，或当前 Token 无权访问该应用')
+
+    environment['accounts'] = ks_fetch_environment_accounts(
+        base_url, token, environment
+    )
+    environment['accounts_refreshed_at'] = time.time()
+    environment['accounts_updated_at'] = now_str()
+
+    with _ks_cache_lock:
+        old_cache = _load_json_object(KS_ACCOUNT_CACHE_FILE)
+        old_catalog = old_cache.get('catalog', {}) if isinstance(old_cache, dict) else {}
+        ks_merge_cached_accounts([environment], old_catalog)
+        old_environments = [
+            item for item in (old_catalog.get('environments') or [])
+            if isinstance(item, dict) and str(item.get('key') or '').strip() != environment['key']
+        ]
+        environments = [*old_environments, environment]
+        environments.sort(key=lambda item: (
+            item.get('category', ''), item.get('cluster', ''), item.get('name', ''),
+        ))
+        categories = {}
+        for item in environments:
+            category = str(item.get('category') or '未命名项目')
+            categories[category] = categories.get(category, 0) + 1
+        account_count = sum(len(item.get('accounts') or []) for item in environments)
+        catalog = {
+            'categories': [
+                {'name': name, 'count': count}
+                for name, count in sorted(categories.items())
+            ],
+            'environments': environments,
+            'environment_count': len(environments),
+            'account_count': account_count,
+            'updated_at': now_str(),
+            'source_url': base_url,
+        }
+        _save_json_object(KS_ACCOUNT_CACHE_FILE, {
+            'catalog': catalog,
+            'profile': token_state.get('profile', old_cache.get('profile', {})),
+            'expires_at': token_state.get('expires_at', old_cache.get('expires_at', 0)),
+        })
+
+    return {
+        'ok': True,
+        'catalog': catalog,
+        'environment': environment,
+        'account_count': len(environment.get('accounts') or []),
+    }
+
+
 def _normalize_gm_command_lines(commands):
     normalized = []
     for command in commands if isinstance(commands, list) else [commands]:
@@ -7488,6 +7568,15 @@ def get_kongming_chat_payload(owner_id, conversation_id=''):
 
 def create_kongming_workflow_plan(owner_id, question):
     catalog = ks_catalog_with_online()
+    application_url = extract_ks_url(question)
+    if application_url and not find_kongming_environment(catalog, question):
+        try:
+            sync_ks_application_reference(question)
+        except ValueError as exc:
+            raise ValueError(
+                '未在本地 KS 目录找到该环境。已识别到 KS 应用链接，但定向读取失败：' + str(exc)
+            ) from exc
+        catalog = ks_catalog_with_online()
     workflow = build_kongming_workflow(
         owner_id,
         question,
