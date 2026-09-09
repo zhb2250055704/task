@@ -20,6 +20,7 @@ class CocosPresenceRegressionTest(unittest.TestCase):
             'roleId': 10100000240322,
             'serverId': 101,
             'fishActivityMetaId': 'fish-activity-101',
+            'tokenEventActivityMetaId': 'token-activity-101',
             'ready': True,
         }))
 
@@ -29,6 +30,7 @@ class CocosPresenceRegressionTest(unittest.TestCase):
         self.assertEqual(target['role_id'], '10100000240322')
         self.assertEqual(target['server_id'], '101')
         self.assertEqual(target['fish_activity_meta_id'], 'fish-activity-101')
+        self.assertEqual(target['token_event_activity_meta_id'], 'token-activity-101')
 
     def test_proxy_context_exposes_fish_activity_meta_id(self):
         target = server._cocos_proxy_target({
@@ -39,11 +41,13 @@ class CocosPresenceRegressionTest(unittest.TestCase):
                 'roleId': '10100000240322',
                 'serverId': '101',
                 'fishActivityMetaId': 'fish-activity-proxy',
+                'tokenEventActivityMetaId': 'token-activity-proxy',
                 'ready': True,
             },
         }, 5101)
 
         self.assertEqual(target['fish_activity_meta_id'], 'fish-activity-proxy')
+        self.assertEqual(target['token_event_activity_meta_id'], 'token-activity-proxy')
 
     def test_role_match_accepts_same_environment_and_role(self):
         account = {

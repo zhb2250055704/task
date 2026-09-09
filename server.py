@@ -3022,6 +3022,11 @@ class CocosBridgeConnection:
                     'fishActivityMetaId': str(
                         info.get('fishActivityMetaId') or info.get('fish_activity_meta_id') or ''
                     ).strip(),
+                    'tokenEventActivityMetaId': str(
+                        info.get('tokenEventActivityMetaId')
+                        or info.get('token_event_activity_meta_id')
+                        or ''
+                    ).strip(),
                 }
             elif not info.get('clientId'):
                 info = {**info, 'clientId': self.connection_id}
@@ -3035,7 +3040,7 @@ class CocosBridgeConnection:
         allowed = {
             'environment', 'environmentUrl', 'accountId', 'accountName',
             'roleId', 'roleName', 'playerId', 'serverId', 'clientId', 'ready',
-            'fishActivityMetaId',
+            'fishActivityMetaId', 'tokenEventActivityMetaId',
         }
         normalized = {key: info.get(key) for key in allowed if key in info}
         # The game does not know the bridge-side connection id. Fill it here so
@@ -3069,6 +3074,7 @@ class CocosBridgeConnection:
         server_id = str(info.get('serverId') or '').strip()
         client_id = str(info.get('clientId') or '').strip()
         fish_activity_meta_id = str(info.get('fishActivityMetaId') or '').strip()
+        token_event_activity_meta_id = str(info.get('tokenEventActivityMetaId') or '').strip()
         port = str(self.address[1])
         ready = bool(info.get('ready')) and bool(account_id or role_id or player_id)
         dispatchable = all((client_id, port, role_id, server_id, environment_url))
@@ -3099,6 +3105,7 @@ class CocosBridgeConnection:
             'server_id': server_id,
             'client_id': client_id,
             'fish_activity_meta_id': fish_activity_meta_id,
+            'token_event_activity_meta_id': token_event_activity_meta_id,
             'port': port,
             'ready': ready,
             'dispatchable': dispatchable,
@@ -3269,6 +3276,11 @@ def _cocos_proxy_target(raw_client, ws_port):
     fish_activity_meta_id = str(
         context.get('fishActivityMetaId') or context.get('fish_activity_meta_id') or ''
     ).strip()
+    token_event_activity_meta_id = str(
+        context.get('tokenEventActivityMetaId')
+        or context.get('token_event_activity_meta_id')
+        or ''
+    ).strip()
     port = str(ws_port or COCOS_WS_PORT)
     identity_complete = all((client_id, port, role_id, server_id, environment_url))
     ready = bool(context.get('ready')) if 'ready' in context else bool(context.get('online'))
@@ -3299,6 +3311,7 @@ def _cocos_proxy_target(raw_client, ws_port):
         'server_id': server_id,
         'client_id': client_id,
         'fish_activity_meta_id': fish_activity_meta_id,
+        'token_event_activity_meta_id': token_event_activity_meta_id,
         'proxy_client_id': route_client_id,
         'proxy_connected_at': str(raw_client.get('connectedAt') or ''),
         'port': port,

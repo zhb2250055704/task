@@ -22,6 +22,7 @@ class CocosIdentityTest(unittest.TestCase):
                     'roleId': 14100000240526,
                     'roleName': 'QA Role',
                     'serverId': 141,
+                    'tokenEventActivityMetaId': '457002',
                 },
             }
 
@@ -33,6 +34,7 @@ class CocosIdentityTest(unittest.TestCase):
         self.assertEqual(captured['environmentUrl'], 'https://login-test-201.example.com')
         self.assertEqual(captured['roleId'], '14100000240526')
         self.assertEqual(captured['clientId'], 'direct:5101')
+        self.assertEqual(captured['tokenEventActivityMetaId'], '457002')
         self.assertTrue(captured['ready'])
 
     def test_role_info_fallback_preserves_fish_activity_meta_id(self):
@@ -52,6 +54,7 @@ class CocosIdentityTest(unittest.TestCase):
                     'roleName': 'QA Role',
                     'serverId': 141,
                     'fishActivityMetaId': '457001',
+                    'tokenEventActivityMetaId': '457002',
                 },
             }
 
@@ -60,6 +63,7 @@ class CocosIdentityTest(unittest.TestCase):
 
         self.assertTrue(connection.refresh_target_info())
         self.assertEqual(captured['fishActivityMetaId'], '457001')
+        self.assertEqual(captured['tokenEventActivityMetaId'], '457002')
 
     def test_complete_proxy_context_is_dispatchable(self):
         target = server._cocos_proxy_target({
