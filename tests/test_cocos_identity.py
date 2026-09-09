@@ -35,6 +35,32 @@ class CocosIdentityTest(unittest.TestCase):
         self.assertEqual(captured['clientId'], 'direct:5101')
         self.assertTrue(captured['ready'])
 
+    def test_role_info_fallback_preserves_fish_activity_meta_id(self):
+        connection = object.__new__(server.CocosBridgeConnection)
+        connection.connection_id = 'direct:5101:fish'
+        captured = {}
+
+        def send_rpc(method, params):
+            if method != 'roleInfo':
+                return {'ok': False, 'error': 'method not found'}
+            return {
+                'ok': True,
+                'result': {
+                    'ok': True,
+                    'gameServer': 'https://login-test-201.example.com',
+                    'roleId': 14100000240526,
+                    'roleName': 'QA Role',
+                    'serverId': 141,
+                    'fishActivityMetaId': '457001',
+                },
+            }
+
+        connection.send_rpc = send_rpc
+        connection.set_target_info = lambda info: captured.update(info)
+
+        self.assertTrue(connection.refresh_target_info())
+        self.assertEqual(captured['fishActivityMetaId'], '457001')
+
     def test_complete_proxy_context_is_dispatchable(self):
         target = server._cocos_proxy_target({
             'clientId': '5101-1',

@@ -16487,7 +16487,8 @@ function protocolTestWriteJson(id, value) {
 }
 
 function protocolTestSyncActivityMetaId(activityMetaId) {
-  if (document.getElementById('protocolTestTemplate')?.value !== 'fishing') return;
+  const template = document.getElementById('protocolTestTemplate')?.value;
+  if (template !== 'fishing' && template !== 'fishing-achievement') return;
   const value = String(activityMetaId || '').trim();
   ['protocolTestRequestPayload', 'protocolTestResponseMatch'].forEach(id => {
     const element = document.getElementById(id);

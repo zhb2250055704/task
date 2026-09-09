@@ -3019,6 +3019,9 @@ class CocosBridgeConnection:
                     'serverId': server_id,
                     'clientId': self.connection_id,
                     'ready': ready,
+                    'fishActivityMetaId': str(
+                        info.get('fishActivityMetaId') or info.get('fish_activity_meta_id') or ''
+                    ).strip(),
                 }
             elif not info.get('clientId'):
                 info = {**info, 'clientId': self.connection_id}
