@@ -16569,15 +16569,42 @@ function protocolTestTokenActions() {
     ? protocolTestCatalog.baselines.fishing_bait.actions : [];
 }
 
+const PROTOCOL_TEST_TOKEN_ACTION_PROTOCOLS = Object.freeze({
+  1: { request: 'CgItemBuy', response: 'GcItemBuy', note: '按购买道具行为触发消耗元宝统计' },
+  2: { request: 'CgWorkSpeedup', response: 'GcWorkSpeedup', note: '按工作队列加速行为触发' },
+  3: { request: 'CgArmySetout', response: 'GcArmySetout', note: '按发起采集行军行为触发' },
+  4: { request: 'CgArmySetout', response: 'GcArmySetout', note: '按发起讨伐流寇行军行为触发' },
+  5: { request: 'CgArmySetout', response: 'GcArmySetout', note: '按发起集结行军行为触发' },
+  6: { request: 'CgPlayerWorldExploreEventReciveReward', response: 'GcPlayerWorldExploreEventReciveReward', note: '按领取已完成的烽火台任务奖励行为触发' },
+});
+
+function protocolTestTokenActionProtocol(action) {
+  return PROTOCOL_TEST_TOKEN_ACTION_PROTOCOLS[Number(action?.action_type)] || null;
+}
+
+function protocolTestApplyTokenActionProtocols(action) {
+  const preset = protocolTestTokenActionProtocol(action);
+  if (!preset) return null;
+  const requestExists = protocolTestProtocolOptions('request').some(item => item.value === preset.request);
+  const responseExists = protocolTestProtocolOptions('response').some(item => item.value === preset.response);
+  if (!requestExists || !responseExists) return { ...preset, available: false };
+  renderProtocolTestProtocolSelectors(preset.request, preset.response);
+  return { ...preset, available: true };
+}
+
 function renderProtocolTestTokenActionMeta() {
   const select = document.getElementById('protocolTestTokenAction');
   const action = protocolTestTokenActions().find(item => String(item.action_id) === String(select?.value || ''));
   const meta = document.getElementById('protocolTestTokenActionMeta');
+  const preset = protocolTestApplyTokenActionProtocols(action);
   if (meta) {
     meta.textContent = action
       ? [action.action_name, 'Action ' + action.action_id, protocolTestTokenActionParams(action),
         '配置概率 ' + protocolTestPercent(action.configured_probability),
-        action.limit ? '单账号上限 ' + action.limit : '无单账号上限'].join(' · ')
+        action.limit ? '单账号上限 ' + action.limit : '无单账号上限',
+        preset?.available
+          ? preset.note + ' · 已自动选择 ' + preset.request + ' / ' + preset.response
+          : '未找到可用的自动协议匹配'].join(' · ')
       : '正在读取 ActivityTokenAction 配置';
   }
 }
