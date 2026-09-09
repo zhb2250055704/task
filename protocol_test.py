@@ -1230,6 +1230,27 @@ class ProtocolTestService:
         self.stop_events = {}
         self.workers = {}
         os.makedirs(runtime_dir, exist_ok=True)
+        self._recover_orphaned_runs()
+
+    def _recover_orphaned_runs(self):
+        """Mark persisted tasks without an in-memory worker as stopped after restart."""
+        try:
+            names = os.listdir(self.runtime_dir)
+        except OSError:
+            names = []
+        for name in names:
+            run_dir = self._run_dir(name)
+            if not run_dir or not os.path.isdir(run_dir):
+                continue
+            path = os.path.join(run_dir, "run.json")
+            state = _read_json(path, None)
+            if not isinstance(state, dict) or state.get("status") not in ("queued", "running"):
+                continue
+            state["status"] = "stopped"
+            state["finished_at_ms"] = _now_ms()
+            state["message"] = "服务重启，测试已自动停止"
+            _write_json(path, state)
+            self.runs[str(name)] = dict(state)
 
     def _run_dir(self, run_id):
         if not _RUN_ID_RE.fullmatch(str(run_id or "")):
@@ -1562,19 +1583,27 @@ class ProtocolTestService:
             self._save_state(state)
             with self.lock:
                 self.workers.pop(run_id, None)
+                self.stop_events.pop(run_id, None)
 
     def stop(self, run_id):
         with self.lock:
             event = self.stop_events.get(run_id)
+            worker = self.workers.get(run_id)
             state = self.runs.get(run_id)
         if not state:
             state = self._load_state(run_id)
         if not state:
             return {"ok": False, "code": "not_found", "msg": "测试任务不存在"}
-        if event:
+        worker_alive = bool(worker and worker.is_alive())
+        if event and worker_alive:
             event.set()
         if state.get("status") in ("queued", "running"):
-            state["message"] = "正在停止测试"
+            if worker_alive:
+                state["message"] = "正在停止测试"
+            else:
+                state["status"] = "stopped"
+                state["finished_at_ms"] = _now_ms()
+                state["message"] = "测试已停止（执行线程已退出）"
             self._save_state(state)
         return {"ok": True, "run": state}
 

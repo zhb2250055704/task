@@ -369,6 +369,85 @@ class ProtocolTestTest(unittest.TestCase):
             self.assertEqual(report['drops']['fish_total'], 0)
             self.assertEqual(report['drops']['fish_by_id'], {})
 
+    def test_service_restart_recovers_orphaned_running_run(self):
+        with tempfile.TemporaryDirectory() as runtime_dir:
+            run_dir = protocol_test.os.path.join(runtime_dir, 'pt-orphaned-run')
+            protocol_test.os.makedirs(run_dir)
+            state = {
+                'id': 'pt-orphaned-run',
+                'title': 'orphaned',
+                'fixture': 'generic',
+                'status': 'running',
+                'finished_at_ms': 0,
+                'message': '正在停止测试',
+                'plan': {'count': 10},
+            }
+            protocol_test._write_json(protocol_test.os.path.join(run_dir, 'run.json'), state)
+
+            service = protocol_test.ProtocolTestService(runtime_dir, 'missing-client', 'missing-excel')
+
+            recovered = service.get('pt-orphaned-run')
+            self.assertEqual(recovered['status'], 'stopped')
+            self.assertEqual(recovered['message'], '服务重启，测试已自动停止')
+            self.assertGreater(recovered['finished_at_ms'], 0)
+
+    def test_stop_without_live_worker_finishes_run_immediately(self):
+        with tempfile.TemporaryDirectory() as runtime_dir:
+            service = protocol_test.ProtocolTestService(runtime_dir, 'missing-client', 'missing-excel')
+            state = {
+                'id': 'pt-no-worker',
+                'title': 'no-worker',
+                'fixture': 'generic',
+                'status': 'running',
+                'finished_at_ms': 0,
+                'message': '正在停止测试',
+                'plan': {'count': 10},
+            }
+            protocol_test._write_json(
+                protocol_test.os.path.join(runtime_dir, 'pt-no-worker', 'run.json'), state
+            )
+            with service.lock:
+                service.runs[state['id']] = dict(state)
+
+            result = service.stop(state['id'])
+
+            self.assertTrue(result['ok'])
+            self.assertEqual(result['run']['status'], 'stopped')
+            self.assertEqual(result['run']['message'], '测试已停止（执行线程已退出）')
+            self.assertGreater(result['run']['finished_at_ms'], 0)
+            self.assertEqual(service.get(state['id'])['status'], 'stopped')
+
+    def test_stop_signals_live_worker_and_keeps_stopping_message(self):
+        with tempfile.TemporaryDirectory() as runtime_dir:
+            service = protocol_test.ProtocolTestService(runtime_dir, 'missing-client', 'missing-excel')
+            stop_event = protocol_test.threading.Event()
+            worker = protocol_test.threading.Thread(target=lambda: stop_event.wait(2), daemon=True)
+            state = {
+                'id': 'pt-live-worker',
+                'title': 'live-worker',
+                'fixture': 'generic',
+                'status': 'running',
+                'finished_at_ms': 0,
+                'message': '正在执行协议测试',
+                'plan': {'count': 10},
+            }
+            protocol_test._write_json(
+                protocol_test.os.path.join(runtime_dir, 'pt-live-worker', 'run.json'), state
+            )
+            with service.lock:
+                service.runs[state['id']] = dict(state)
+                service.stop_events[state['id']] = stop_event
+                service.workers[state['id']] = worker
+            worker.start()
+
+            result = service.stop(state['id'])
+            worker.join(1)
+
+            self.assertTrue(result['ok'])
+            self.assertEqual(result['run']['status'], 'running')
+            self.assertEqual(result['run']['message'], '正在停止测试')
+            self.assertTrue(stop_event.is_set())
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -17163,7 +17163,7 @@ async function stopProtocolTest() {
     const data = await res.json();
     if (!res.ok || !data.ok) throw new Error(data.msg || '停止测试失败');
     renderProtocolTestRun(data.run);
-    toast('正在停止测试');
+    toast(data.run?.status === 'stopped' ? '测试已停止' : '正在停止测试');
   } catch (error) {
     toast(error.message || '停止测试失败');
   }
