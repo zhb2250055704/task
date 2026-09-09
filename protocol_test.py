@@ -106,6 +106,15 @@ _STATIC_PROTOCOLS = {
     "GcTokenEventActivityInfo": {"description": "返回鱼饵制作活动累计数据", "direction": "response"},
 }
 
+_TOKEN_ACTION_REQUEST_PROTOCOLS = {
+    1: "CgItemBuy",
+    2: "CgWorkSpeedup",
+    3: "CgArmySetout",
+    4: "CgArmySetout",
+    5: "CgArmySetout",
+    6: "CgPlayerWorldExploreEventReciveReward",
+}
+
 
 def _json_safe(value):
     if value is None or isinstance(value, (str, int, float, bool)):
@@ -759,7 +768,46 @@ def normalize_plan(payload):
     }
 
 
-def validate_plan(plan, require_target=True):
+def _token_action_request_error(plan, token_baseline):
+    if plan.get("fixture") != "fishing-bait" or not isinstance(token_baseline, dict):
+        return ""
+    token_event = plan.get("token_event") or {}
+    action = (token_baseline.get("actions_by_id") or {}).get(token_event.get("action_id"))
+    if not action:
+        return ""
+    expected_protocol = _TOKEN_ACTION_REQUEST_PROTOCOLS.get(_as_int(action.get("action_type"), 0))
+    if not expected_protocol or plan.get("request_protocol") != expected_protocol:
+        return ""
+    payload = plan.get("request_payload")
+    if not isinstance(payload, dict):
+        return f"{expected_protocol} 的行为请求参数必须是 JSON 对象"
+    action_type = _as_int(action.get("action_type"), 0)
+    if action_type == 1:
+        items = payload.get("items")
+        valid_items = isinstance(items, list) and any(
+            isinstance(item, dict)
+            and str(item.get("metaId") or "").strip()
+            and _as_int(item.get("count"), 0) > 0
+            for item in items
+        )
+        if not valid_items:
+            return "消耗元宝任务需要填写 items 数组，至少包含有效的 metaId 和正整数 count"
+    elif action_type == 2:
+        if not str(payload.get("id") or "").strip():
+            return "消耗加速任务需要填写当前工作队列 id"
+        if "type" not in payload:
+            return "消耗加速任务需要填写加速 type（0=免费，1=钻石，2=道具）"
+    elif action_type in (3, 4, 5):
+        missing = [key for key in ("setoutType", "nodeType", "x", "y") if key not in payload]
+        if missing:
+            return "采集、讨伐或集结任务缺少行为参数：" + ", ".join(missing)
+    elif action_type == 6:
+        if not str(payload.get("id") or "").strip():
+            return "完成烽火台任务需要填写已完成事件 id"
+    return ""
+
+
+def validate_plan(plan, require_target=True, token_baseline=None):
     errors = []
     if not plan.get("request_protocol"):
         errors.append("请求协议名称不能为空")
@@ -784,6 +832,9 @@ def validate_plan(plan, require_target=True):
             errors.append("鱼饵制作统计必须使用 CgTokenEventActivityInfo / GcTokenEventActivityInfo")
         if plan.get("request_protocol") in ("", "CgTokenEventActivityInfo"):
             errors.append("请选择实际触发该任务的行为协议，不能只发送活动信息查询协议")
+        request_error = _token_action_request_error(plan, token_baseline)
+        if request_error:
+            errors.append(request_error)
         if plan.get("count", 0) > _MAX_COUNT:
             errors.append("单次测试最多执行 10000 次")
     return errors
@@ -791,9 +842,9 @@ def validate_plan(plan, require_target=True):
 
 def preview_plan(payload, client_root, excel_root):
     plan = normalize_plan(payload)
-    errors = validate_plan(plan, require_target=False)
     baseline = load_fishing_baseline(excel_root) if plan.get("fixture") == "fishing" else None
     token_baseline = load_token_event_baseline(excel_root) if plan.get("fixture") == "fishing-bait" else None
+    errors = validate_plan(plan, require_target=False, token_baseline=token_baseline)
     warnings = [
         "协议测试会真实消耗账号资源并改变游戏状态，请使用隔离测试账号。",
         "超时请求不会自动重试，避免重复消耗和污染概率统计。",
@@ -1193,7 +1244,8 @@ class ProtocolTestService:
 
     def start(self, payload, send_request):
         plan = normalize_plan(payload)
-        errors = validate_plan(plan, require_target=True)
+        token_baseline = load_token_event_baseline(self.excel_root) if plan.get("fixture") == "fishing-bait" else None
+        errors = validate_plan(plan, require_target=True, token_baseline=token_baseline)
         if errors:
             return {"ok": False, "code": "invalid_plan", "msg": "；".join(errors), "errors": errors}
         run_id = "pt-" + uuid.uuid4().hex[:16]

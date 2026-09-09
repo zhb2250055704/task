@@ -217,6 +217,36 @@ class ProtocolTestTest(unittest.TestCase):
         errors = protocol_test.validate_plan(plan, require_target=False)
         self.assertTrue(any('串行' in item for item in errors))
 
+    def test_fishing_bait_rejects_empty_behavior_payload_before_execution(self):
+        plan = protocol_test.normalize_plan({
+            'fixture': 'fishing-bait',
+            'request': {
+                'protocol': 'CgItemBuy',
+                'payload': {},
+                'response_protocol': 'GcItemBuy',
+            },
+            'token_event': {'activity_meta_id': 'meta-1', 'action_id': '29'},
+        })
+        errors = protocol_test.validate_plan(plan, require_target=False, token_baseline={
+            'actions_by_id': {'29': {'action_type': 1}},
+        })
+        self.assertTrue(any('items' in item and 'metaId' in item for item in errors))
+
+    def test_fishing_bait_accepts_item_buy_payload(self):
+        plan = protocol_test.normalize_plan({
+            'fixture': 'fishing-bait',
+            'request': {
+                'protocol': 'CgItemBuy',
+                'payload': {'items': [{'metaId': '19948008', 'count': 1}]},
+                'response_protocol': 'GcItemBuy',
+            },
+            'token_event': {'activity_meta_id': 'meta-1', 'action_id': '29'},
+        })
+        errors = protocol_test.validate_plan(plan, require_target=False, token_baseline={
+            'actions_by_id': {'29': {'action_type': 1}},
+        })
+        self.assertFalse(any('items' in item for item in errors))
+
     def test_run_persists_events_and_fish_report(self):
         with tempfile.TemporaryDirectory() as runtime_dir:
             service = protocol_test.ProtocolTestService(runtime_dir, 'missing-client', 'missing-excel')
