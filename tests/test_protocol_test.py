@@ -1,6 +1,7 @@
 import tempfile
 import time
 import unittest
+from unittest.mock import patch
 
 import protocol_test
 
@@ -71,6 +72,115 @@ class ProtocolTestTest(unittest.TestCase):
         interval = protocol_test.wilson_interval(300, 1000)
         self.assertLess(interval['low'], 0.3)
         self.assertGreater(interval['high'], 0.3)
+
+    def test_token_event_baseline_loads_fishing_bait_actions(self):
+        baseline = protocol_test.load_token_event_baseline(r'C:\Users\TU\Documents\excel')
+        self.assertTrue(baseline['exists'])
+        self.assertEqual(baseline['event']['event_id'], '5')
+        self.assertEqual(baseline['event']['action_ids'], ['29', '30', '31', '32', '33', '34'])
+        self.assertEqual(baseline['bait_item']['item_id'], '19948008')
+        self.assertEqual(len(baseline['actions']), 6)
+        self.assertEqual(baseline['actions_by_id']['29']['action_param'], 200)
+        self.assertEqual(baseline['actions_by_id']['29']['configured_probability'], 0.02)
+        self.assertEqual(baseline['actions_by_id']['30']['action_num'], 50)
+        self.assertEqual(baseline['actions_by_id']['30']['limit'], 15)
+        self.assertEqual(baseline['actions_by_id']['33']['configured_probability'], 0.4)
+
+    def test_token_event_measurement_excludes_failed_and_reset_snapshots(self):
+        action = {
+            'action_id': '30', 'action_name': '消耗加速', 'token_item_id': '19948008',
+            'token_item_name': '精制鱼饵', 'configured_probability': 0.03, 'limit': 15,
+        }
+        stats = protocol_test._new_stats()
+        stats['requested'] = 100
+        protocol_test._init_token_event_stats(stats, action)
+        success = {'ok': True, 'response': {'metaId': 'a', 'tokenNumMap': {'30': 4}}}
+        hit = {'ok': True, 'response': {'metaId': 'a', 'tokenNumMap': {'30': {'value': 5}}}}
+        miss = {'ok': True, 'response': {'metaId': 'a', 'tokenNumMap': {'30': 5}}}
+        reset = {'ok': True, 'response': {'metaId': 'a', 'tokenNumMap': {'30': 3}}}
+        protocol_test._record_token_event_measurement(stats, success, hit, action)
+        protocol_test._record_token_event_measurement(stats, hit, miss, action)
+        protocol_test._record_token_event_measurement(stats, miss, reset, action)
+        protocol_test._record_token_event_measurement(stats, miss, {'ok': False}, action)
+        report = protocol_test._token_event_report(
+            stats,
+            {'event': {'event_id': '5'}, 'actions': [action], 'actions_by_id': {'30': action}},
+            {'token_event': {'query_protocol': 'CgTokenEventActivityInfo'}},
+        )
+        self.assertEqual(report['observed_samples'], 2)
+        self.assertEqual(report['bait_hits'], 1)
+        self.assertEqual(report['bait_total'], 1)
+        self.assertEqual(report['probability'], 0.5)
+        self.assertEqual(report['counter_resets'], 1)
+        self.assertEqual(report['snapshot_failures'], 1)
+        self.assertEqual(report['coverage'], 0.02)
+
+    def test_fishing_bait_service_queries_before_and_after_each_action(self):
+        action = {
+            'action_id': '29', 'action_type': 1, 'action_name': '消耗元宝',
+            'action_num': 0, 'action_param': 200, 'configured_probability': 0.02,
+            'token_item_id': '19948008', 'token_item_name': '精制鱼饵',
+            'token_count': 1, 'limit': None,
+        }
+        baseline = {
+            'event': {'event_id': '5'},
+            'actions': [action],
+            'actions_by_id': {'29': action},
+            'bait_item': {'item_id': '19948008', 'name': '精制鱼饵'},
+        }
+        with tempfile.TemporaryDirectory() as runtime_dir, patch.object(
+            protocol_test, 'load_token_event_baseline', return_value=baseline
+        ):
+            calls = []
+            token_count = 0
+            action_count = 0
+
+            def send_request(request_protocol, payload, response_protocol, timeout_ms, response_match):
+                nonlocal token_count, action_count
+                calls.append((request_protocol, dict(payload)))
+                if request_protocol == 'CgTokenEventActivityInfo':
+                    return {'ok': True, 'response_protocol': response_protocol, 'response': {
+                        'metaId': payload['metaId'], 'tokenNumMap': {'29': token_count},
+                    }}
+                action_count += 1
+                if action_count in (1, 3):
+                    token_count += 1
+                return {'ok': True, 'response_protocol': response_protocol, 'response': {'code': 0}}
+
+            service = protocol_test.ProtocolTestService(runtime_dir, 'missing-client', 'missing-excel')
+            result = service.start({
+                'title': 'bait',
+                'fixture': 'fishing-bait',
+                'target_specs': [{'connection_id': 'direct:test'}],
+                'request': {
+                    'protocol': 'CgSpendGold',
+                    'payload': {'amount': 200},
+                    'response_protocol': 'GcSpendGoldResult',
+                    'success_condition': 'code == 0',
+                },
+                'token_event': {
+                    'activity_meta_id': 'activity-a',
+                    'action_id': '29',
+                },
+                'count': 3,
+            }, send_request)
+            run_id = result['run']['id']
+            deadline = time.time() + 3
+            while service.get(run_id).get('status') in ('queued', 'running') and time.time() < deadline:
+                time.sleep(0.01)
+            report = service.report(run_id)
+            token_report = report['token_event']
+            self.assertEqual([item[0] for item in calls], [
+                'CgTokenEventActivityInfo', 'CgSpendGold', 'CgTokenEventActivityInfo',
+                'CgTokenEventActivityInfo', 'CgSpendGold', 'CgTokenEventActivityInfo',
+                'CgTokenEventActivityInfo', 'CgSpendGold', 'CgTokenEventActivityInfo',
+            ])
+            self.assertTrue(all(item[1]['metaId'] == 'activity-a' for item in calls if item[0] == 'CgTokenEventActivityInfo'))
+            self.assertEqual(token_report['action_successes'], 3)
+            self.assertEqual(token_report['observed_samples'], 3)
+            self.assertEqual(token_report['bait_hits'], 2)
+            self.assertEqual(token_report['bait_total'], 2)
+            self.assertAlmostEqual(token_report['probability'], 2 / 3)
 
     def test_generic_report_uses_response_statistics_without_fish_data(self):
         stats = protocol_test._new_stats()

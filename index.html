@@ -10357,6 +10357,7 @@ FORM: Operate mode, Stitch high-fidelity prototype, source order 1, no concept s
               <label for="protocolTestTemplate">测试模板</label>
               <select id="protocolTestTemplate" onchange="selectProtocolTestTemplate(this.value)">
                 <option value="fishing">钓鱼活动掉落抽样</option>
+                <option value="fishing-bait">鱼饵制作任务抽样</option>
                 <option value="generic">通用协议测试</option>
               </select>
             </div>
@@ -10366,21 +10367,26 @@ FORM: Operate mode, Stitch high-fidelity prototype, source order 1, no concept s
               <span id="protocolTestTargetMeta" class="protocol-test-field-hint">正在读取客户端账号</span>
             </div>
             <div class="protocol-test-field">
-              <label for="protocolTestRequestProtocol">请求协议</label>
+              <label for="protocolTestRequestProtocol">行为请求协议</label>
               <select id="protocolTestRequestProtocol"></select>
             </div>
             <div class="protocol-test-field">
-              <label for="protocolTestResponseProtocol">响应协议</label>
+              <label for="protocolTestResponseProtocol">行为响应协议</label>
               <select id="protocolTestResponseProtocol"></select>
             </div>
-            <div class="protocol-test-field protocol-test-field-wide protocol-test-fishing-only">
+            <div class="protocol-test-field protocol-test-field-wide protocol-test-activity-only">
               <label for="protocolTestActivityMetaId">活动 Meta ID</label>
               <input id="protocolTestActivityMetaId" type="text" placeholder="打开游戏活动后自动获取，也可手动填写" autocomplete="off" oninput="markProtocolTestActivityMetaIdManual()">
-              <span class="protocol-test-field-hint">打开对应活动后自动回填；手动输入后保留手动值</span>
+              <span id="protocolTestActivityMetaHint" class="protocol-test-field-hint">打开对应活动后自动回填；手动输入后保留手动值</span>
             </div>
             <div class="protocol-test-field protocol-test-fishing-only">
               <label for="protocolTestScene">场景</label>
               <input id="protocolTestScene" type="number" min="1" value="1" step="1">
+            </div>
+            <div class="protocol-test-field protocol-test-token-only" style="display:none">
+              <label for="protocolTestTokenAction">鱼饵制作任务</label>
+              <select id="protocolTestTokenAction" onchange="renderProtocolTestTokenActionMeta()"></select>
+              <span id="protocolTestTokenActionMeta" class="protocol-test-field-hint">正在读取 ActivityTokenAction 配置</span>
             </div>
             <div class="protocol-test-field">
               <label for="protocolTestCountInput">执行次数</label>
@@ -10395,11 +10401,11 @@ FORM: Operate mode, Stitch high-fidelity prototype, source order 1, no concept s
               <input id="protocolTestInterval" type="number" min="0" max="60000" value="0" step="100">
             </div>
             <div class="protocol-test-field protocol-test-field-wide">
-              <label for="protocolTestRequestPayload">请求参数 JSON</label>
+              <label for="protocolTestRequestPayload">行为请求参数 JSON</label>
               <textarea id="protocolTestRequestPayload" class="protocol-test-code" spellcheck="false"></textarea>
             </div>
             <div class="protocol-test-field protocol-test-field-wide">
-              <label for="protocolTestResponseMatch">响应匹配条件 JSON（可选）</label>
+              <label for="protocolTestResponseMatch">行为响应匹配条件 JSON（可选）</label>
               <textarea id="protocolTestResponseMatch" class="protocol-test-code protocol-test-code-short" spellcheck="false"></textarea>
             </div>
             <div class="protocol-test-field protocol-test-field-wide protocol-test-fishing-only">
@@ -10408,7 +10414,7 @@ FORM: Operate mode, Stitch high-fidelity prototype, source order 1, no concept s
           </div>
           <div class="protocol-test-warning">
             <span class="protocol-test-warning-icon">!</span>
-            <div><strong>真实数据变更提醒</strong><p>测试会消耗道具并改变图鉴、重量和保底状态。请只使用隔离测试账号，超时请求不会自动重试。</p></div>
+            <div><strong>真实数据变更提醒</strong><p>测试会发送真实游戏行为并改变账号资源、任务进度或活动状态。请只使用隔离测试账号，超时请求不会自动重试。</p></div>
           </div>
           <div id="protocolTestPreview" class="protocol-test-preview" aria-live="polite">
             <div class="protocol-test-empty">先点击“预检计划”，确认目标和参数后再开始执行。</div>
@@ -10433,10 +10439,16 @@ FORM: Operate mode, Stitch high-fidelity prototype, source order 1, no concept s
             <div><span>成功</span><strong>0</strong></div><div><span>失败</span><strong>0</strong></div><div><span>超时</span><strong>0</strong></div><div><span id="protocolTestKpiTotalLabel">掉落总数</span><strong>0</strong></div>
           </div>
           <div id="protocolTestFishingResults">
-          <div class="protocol-test-result-section">
-            <div class="protocol-test-section-head"><h3>掉落分布</h3><span id="protocolTestDropMeta">完成测试后显示</span></div>
-            <div class="protocol-test-table-wrap"><table class="protocol-test-table"><thead><tr><th>渔场</th><th>Fish ID</th><th>鱼名称</th><th>品质</th><th>实测重量</th><th>配置重量</th><th>冠鱼重量</th><th>奖励 ID</th><th>数量</th><th>概率</th><th>Wilson 95%</th></tr></thead><tbody id="protocolTestDropBody"><tr><td colspan="11" class="protocol-test-table-empty">暂无数据</td></tr></tbody></table></div>
+            <div class="protocol-test-result-section">
+              <div class="protocol-test-section-head"><h3>掉落分布</h3><span id="protocolTestDropMeta">完成测试后显示</span></div>
+              <div class="protocol-test-table-wrap"><table class="protocol-test-table"><thead><tr><th>渔场</th><th>Fish ID</th><th>鱼名称</th><th>品质</th><th>实测重量</th><th>配置重量</th><th>冠鱼重量</th><th>奖励 ID</th><th>数量</th><th>概率</th><th>Wilson 95%</th></tr></thead><tbody id="protocolTestDropBody"><tr><td colspan="11" class="protocol-test-table-empty">暂无数据</td></tr></tbody></table></div>
+            </div>
           </div>
+          <div id="protocolTestTokenResults" style="display: none;">
+            <div class="protocol-test-result-section">
+              <div class="protocol-test-section-head"><h3>鱼饵制作任务结果</h3><span id="protocolTestTokenMeta">完成测试后显示</span></div>
+              <div class="protocol-test-table-wrap"><table class="protocol-test-table"><thead><tr><th>Action ID</th><th>任务名称</th><th>行为参数</th><th>配置概率</th><th>计划次数</th><th>行为成功</th><th>有效快照</th><th>鱼饵命中</th><th>鱼饵总数</th><th>实测概率</th><th>Wilson 95%</th><th>覆盖率</th><th>上限</th><th>状态</th></tr></thead><tbody id="protocolTestTokenBody"><tr><td colspan="14" class="protocol-test-table-empty">暂无任务数据</td></tr></tbody></table></div>
+            </div>
           </div>
           <div id="protocolTestGenericResults" style="display: none;">
             <div class="protocol-test-result-section">
@@ -16414,8 +16426,10 @@ function protocolTestSetOptions(selectId, items, selected, placeholder) {
   const select = document.getElementById(selectId);
   if (!select) return;
   const list = Array.isArray(items) ? items : [];
+  const hasSelected = list.some(item => String(item.value) === String(selected || ''));
   select.innerHTML = list.length
-    ? list.map(item => '<option value="' + esc(item.value) + '"' + (item.value === selected ? ' selected' : '') + '>' + esc(item.label) + '</option>').join('')
+    ? (!hasSelected ? '<option value="">' + esc(placeholder || '请选择') + '</option>' : '') +
+      list.map(item => '<option value="' + esc(item.value) + '"' + (String(item.value) === String(selected) ? ' selected' : '') + '>' + esc(item.label) + '</option>').join('')
     : '<option value="">' + esc(placeholder || '暂无可选项') + '</option>';
 }
 
@@ -16438,6 +16452,7 @@ function renderProtocolTestTargetMeta() {
   const meta = document.getElementById('protocolTestTargetMeta');
   const badge = document.getElementById('protocolTestChannelBadge');
   const activityMetaInput = document.getElementById('protocolTestActivityMetaId');
+  const activityMetaHint = document.getElementById('protocolTestActivityMetaHint');
   const targetChanged = targetId !== protocolTestActivityMetaIdTargetId;
   if (targetChanged) {
     protocolTestActivityMetaIdTargetId = targetId;
@@ -16449,12 +16464,16 @@ function renderProtocolTestTargetMeta() {
     if (badge) badge.textContent = '等待本机客户端';
     return;
   }
-  const activityMetaId = String(target.fish_activity_meta_id || '').trim();
+  const template = document.getElementById('protocolTestTemplate')?.value || 'fishing';
+  const isToken = template === 'fishing-bait';
+  const activityMetaId = String(isToken ? (target.token_event_activity_meta_id || '') : (target.fish_activity_meta_id || '')).trim();
   if (activityMetaInput && !protocolTestActivityMetaIdManual && activityMetaId) {
     if (activityMetaInput.value !== activityMetaId) {
       activityMetaInput.value = activityMetaId;
       protocolTestSyncActivityMetaId(activityMetaId);
     }
+  } else if (activityMetaInput && !protocolTestActivityMetaIdManual) {
+    activityMetaInput.value = '';
   }
   if (meta) meta.textContent = [
     target.environment_name || '未识别环境',
@@ -16463,9 +16482,16 @@ function renderProtocolTestTargetMeta() {
     target.port ? '端口 ' + target.port : '',
   ].filter(Boolean).join(' · ');
   if (activityMetaInput && !activityMetaId && !protocolTestActivityMetaIdManual) {
-    activityMetaInput.placeholder = '请先在游戏中打开钓鱼活动，收到活动信息后会自动回填';
+    activityMetaInput.placeholder = isToken
+      ? '填写鱼饵制作页签对应的活动 Meta ID'
+      : '请先在游戏中打开钓鱼活动，收到活动信息后会自动回填';
   } else if (activityMetaInput) {
     activityMetaInput.placeholder = '打开游戏活动后自动获取，也可手动填写';
+  }
+  if (activityMetaHint) {
+    activityMetaHint.textContent = isToken
+      ? '必须使用“鱼饵制作”代币活动的 Meta ID，不能使用 FishingEventAchievement 成就活动 ID'
+      : '打开对应活动后自动回填；手动输入后保留手动值';
   }
   if (badge) badge.textContent = '本机 Cocos 已连接';
 }
@@ -16477,8 +16503,8 @@ function protocolTestProtocolOptions(direction) {
 }
 
 function renderProtocolTestProtocolSelectors(selectedRequest, selectedResponse) {
-  protocolTestSetOptions('protocolTestRequestProtocol', protocolTestProtocolOptions('request'), selectedRequest || 'CgFishStart', '暂无请求协议定义');
-  protocolTestSetOptions('protocolTestResponseProtocol', protocolTestProtocolOptions('response'), selectedResponse || 'GcFishStartResult', '暂无响应协议定义');
+  protocolTestSetOptions('protocolTestRequestProtocol', protocolTestProtocolOptions('request'), selectedRequest || '', '请选择实际行为请求协议');
+  protocolTestSetOptions('protocolTestResponseProtocol', protocolTestProtocolOptions('response'), selectedResponse || '', '请选择对应行为响应协议');
 }
 
 function protocolTestWriteJson(id, value) {
@@ -16488,7 +16514,7 @@ function protocolTestWriteJson(id, value) {
 
 function protocolTestSyncActivityMetaId(activityMetaId) {
   const template = document.getElementById('protocolTestTemplate')?.value;
-  if (template !== 'fishing' && template !== 'fishing-achievement') return;
+  if (template !== 'fishing') return;
   const value = String(activityMetaId || '').trim();
   ['protocolTestRequestPayload', 'protocolTestResponseMatch'].forEach(id => {
     const element = document.getElementById(id);
@@ -16510,19 +16536,82 @@ function protocolTestToggleFishingFields(isFishing) {
   });
 }
 
+function protocolTestToggleActivityFields(isActivity) {
+  document.querySelectorAll('.protocol-test-activity-only').forEach(element => {
+    element.style.display = isActivity ? '' : 'none';
+  });
+}
+
+function protocolTestToggleTokenFields(isToken) {
+  document.querySelectorAll('.protocol-test-token-only').forEach(element => {
+    element.style.display = isToken ? '' : 'none';
+  });
+}
+
+function protocolTestTokenActionParams(action) {
+  if (!action) return '未识别行为参数';
+  const parts = [];
+  const actionType = Number(action.action_type);
+  const actionParam = Number(action.action_param);
+  if (actionType === 1 && actionParam) parts.push('每次消耗 ' + actionParam + ' 元宝');
+  else if (actionType === 2 && actionParam) parts.push('每次加速 ' + actionParam + ' 分钟');
+  else if (actionType === 3 && actionParam) parts.push('每次采集 ' + actionParam + ' 资源');
+  else if (actionType === 4) parts.push('每次讨伐 1 次');
+  else if (actionType === 5) parts.push('每次发起集结 1 次');
+  else if (actionType === 6) parts.push('每次完成 1 个任务');
+  else if (actionParam) parts.push('行为参数 ' + actionParam);
+  if (Number(action.action_num)) parts.push('保底 ' + action.action_num + ' 次');
+  return parts.join(' · ') || '无额外参数';
+}
+
+function protocolTestTokenActions() {
+  return Array.isArray(protocolTestCatalog.baselines?.fishing_bait?.actions)
+    ? protocolTestCatalog.baselines.fishing_bait.actions : [];
+}
+
+function renderProtocolTestTokenActionMeta() {
+  const select = document.getElementById('protocolTestTokenAction');
+  const action = protocolTestTokenActions().find(item => String(item.action_id) === String(select?.value || ''));
+  const meta = document.getElementById('protocolTestTokenActionMeta');
+  if (meta) {
+    meta.textContent = action
+      ? [action.action_name, 'Action ' + action.action_id, protocolTestTokenActionParams(action),
+        '配置概率 ' + protocolTestPercent(action.configured_probability),
+        action.limit ? '单账号上限 ' + action.limit : '无单账号上限'].join(' · ')
+      : '正在读取 ActivityTokenAction 配置';
+  }
+}
+
+function renderProtocolTestTokenActions(selected) {
+  const actions = protocolTestTokenActions();
+  const current = selected || document.getElementById('protocolTestTokenAction')?.value || actions[0]?.action_id || '';
+  protocolTestSetOptions('protocolTestTokenAction', actions.map(action => ({
+    value: String(action.action_id),
+    label: action.action_name + ' · Action ' + action.action_id + ' · ' + protocolTestTokenActionParams(action) +
+      ' · 配置 ' + protocolTestPercent(action.configured_probability),
+  })), String(current), '暂无鱼饵制作任务配置');
+  renderProtocolTestTokenActionMeta();
+}
+
 function protocolTestSetResultMode(fixture) {
   const isFishing = fixture === 'fishing';
+  const isToken = fixture === 'fishing-bait';
   const fishingResults = document.getElementById('protocolTestFishingResults');
+  const tokenResults = document.getElementById('protocolTestTokenResults');
   const genericResults = document.getElementById('protocolTestGenericResults');
   const totalLabel = document.getElementById('protocolTestKpiTotalLabel');
   if (fishingResults) fishingResults.style.display = isFishing ? '' : 'none';
-  if (genericResults) genericResults.style.display = isFishing ? 'none' : '';
-  if (totalLabel) totalLabel.textContent = isFishing ? '掉落总数' : '响应数';
+  if (tokenResults) tokenResults.style.display = isToken ? '' : 'none';
+  if (genericResults) genericResults.style.display = isFishing || isToken ? 'none' : '';
+  if (totalLabel) totalLabel.textContent = isFishing ? '掉落总数' : (isToken ? '鱼饵总数' : '响应数');
 }
 
 function selectProtocolTestTemplate(template) {
   const isFishing = template === 'fishing';
+  const isToken = template === 'fishing-bait';
   protocolTestToggleFishingFields(isFishing);
+  protocolTestToggleActivityFields(isFishing || isToken);
+  protocolTestToggleTokenFields(isToken);
   protocolTestSetResultMode(template);
   if (protocolTestReport) renderProtocolTestReport(null);
   const title = document.getElementById('protocolTestTitle');
@@ -16539,13 +16628,25 @@ function selectProtocolTestTemplate(template) {
     protocolTestWriteJson('protocolTestResponseMatch', {
       activityMetaId: document.getElementById('protocolTestActivityMetaId')?.value.trim() || '',
     });
+  } else if (isToken) {
+    if (title) title.value = '鱼饵制作任务抽样';
+    renderProtocolTestProtocolSelectors();
+    renderProtocolTestTokenActions();
+    if (finish) finish.checked = false;
+    const count = document.getElementById('protocolTestCountInput');
+    if (count) count.value = 100;
+    protocolTestWriteJson('protocolTestRequestPayload', {});
+    protocolTestWriteJson('protocolTestResponseMatch', {});
   } else {
     if (title) title.value = '通用协议测试';
     renderProtocolTestProtocolSelectors();
     if (finish) finish.checked = false;
+    protocolTestToggleActivityFields(false);
+    protocolTestToggleTokenFields(false);
     protocolTestWriteJson('protocolTestRequestPayload', {});
     protocolTestWriteJson('protocolTestResponseMatch', {});
   }
+  renderProtocolTestTargetMeta();
 }
 
 function protocolTestParseJson(id, fallback) {
@@ -16583,6 +16684,20 @@ function buildProtocolTestPlan() {
       };
     }
   }
+  const tokenAction = template === 'fishing-bait'
+    ? protocolTestTokenActions().find(item => String(item.action_id) === String(document.getElementById('protocolTestTokenAction')?.value || ''))
+    : null;
+  const tokenEvent = template === 'fishing-bait' ? {
+    event_id: '5',
+    activity_meta_id: document.getElementById('protocolTestActivityMetaId')?.value.trim() || '',
+    action_id: tokenAction?.action_id || document.getElementById('protocolTestTokenAction')?.value || '',
+    token_item_id: tokenAction?.token_item_id || '',
+    query_protocol: 'CgTokenEventActivityInfo',
+    query_response_protocol: 'GcTokenEventActivityInfo',
+    query_payload: { metaId: document.getElementById('protocolTestActivityMetaId')?.value.trim() || '' },
+  } : undefined;
+  if (template === 'fishing-bait' && !tokenEvent.activity_meta_id) throw new Error('请填写活动 Meta ID');
+  if (template === 'fishing-bait' && !tokenEvent.action_id) throw new Error('请选择鱼饵制作任务');
   return {
     title: document.getElementById('protocolTestTitle')?.value.trim() || '协议测试',
     fixture: template,
@@ -16595,7 +16710,8 @@ function buildProtocolTestPlan() {
       success_condition: template === 'fishing' ? 'code == 0' : '',
     },
     finish,
-    count: Math.max(1, Math.min(10000, Number(document.getElementById('protocolTestCountInput')?.value || 1000))),
+    token_event: tokenEvent,
+    count: Math.max(1, Math.min(10000, Number(document.getElementById('protocolTestCountInput')?.value || (template === 'fishing-bait' ? 100 : 1000)))),
     concurrency: 1,
     interval_ms: Math.max(0, Math.min(60000, Number(document.getElementById('protocolTestInterval')?.value || 0))),
     timeout_ms: Math.max(1000, Math.min(12000, Number(document.getElementById('protocolTestTimeout')?.value || 10000))),
@@ -16614,6 +16730,13 @@ function renderProtocolTestPreview(data) {
     lines.push('目标：' + esc(plan.target_specs?.length === 1 ? '1 个本机 Cocos 客户端' : '未选择目标'));
     lines.push('流程：' + esc([plan.request_protocol, plan.response_protocol, plan.finish_protocol].filter(Boolean).join(' → ')));
     lines.push('执行：' + esc((plan.count || 0) + ' 次 · 串行 · 超时 ' + (plan.timeout_ms || 0) + ' ms'));
+    if (plan.fixture === 'fishing-bait' && data.token_event) {
+      const token = data.token_event;
+      const action = token.action || {};
+      lines.push('任务：' + esc((action.action_name || '未识别任务') + ' · Action ' + (action.action_id || '—')));
+      lines.push('配置：' + esc('鱼饵 ' + (token.bait_item?.name || '未识别') + '（' + (token.bait_item?.item_id || '—') + '） · 概率 ' + protocolTestPercent(action.configured_probability)));
+      lines.push('流程：' + esc('活动快照前 → 行为协议 → 活动快照后；按 tokenNumMap[' + (action.action_id || 'actionId') + '] 增量统计'));
+    }
   }
   warnings.slice(0, 3).forEach(item => lines.push('<span>' + esc(item) + '</span>'));
   box.classList.toggle('is-error', errors.length > 0);
@@ -16697,13 +16820,14 @@ function protocolTestRenderKpis(report) {
   const drops = report?.drops || {};
   const fixture = report?.fixture || document.getElementById('protocolTestTemplate')?.value || 'fishing';
   const generic = report?.generic || {};
+  const tokenEvent = report?.token_event || {};
   protocolTestSetResultMode(fixture);
   const kpis = document.querySelectorAll('#protocolTestKpis strong');
   if (kpis.length >= 4) {
     kpis[0].textContent = String(actions.success || 0);
     kpis[1].textContent = String((actions.business_failed || 0) + (actions.transport_failed || 0) + (actions.timeout || 0));
     kpis[2].textContent = String(actions.timeout || 0);
-    kpis[3].textContent = String(fixture === 'fishing' ? (drops.fish_total || 0) : (generic.response_total || 0));
+    kpis[3].textContent = String(fixture === 'fishing' ? (drops.fish_total || 0) : (fixture === 'fishing-bait' ? (tokenEvent.bait_total || 0) : (generic.response_total || 0)));
   }
 }
 
@@ -16791,6 +16915,31 @@ function renderProtocolTestReport(report) {
   }
   const meta = document.getElementById('protocolTestDropMeta');
   if (meta) meta.textContent = report ? (report.drops?.fish_total || 0) + ' 条鱼 · 按掉落数计算概率' : '完成测试后显示';
+  const tokenEvent = report?.token_event || null;
+  const tokenBody = document.getElementById('protocolTestTokenBody');
+  if (tokenBody) {
+    const action = tokenEvent?.action || null;
+    if (action) {
+      const interval = tokenEvent.interval || {};
+      const status = tokenEvent.counter_resets ? '计数回退' : tokenEvent.cap_reached ? '达到上限' : tokenEvent.snapshot_failures ? '存在快照失败' : '统计有效';
+      const cap = action.cap_value === undefined || action.cap_value === null ? '无' : String(action.cap_value);
+      tokenBody.innerHTML = '<tr><td><code>' + esc(String(action.action_id || '—')) + '</code></td><td>' +
+        esc(action.action_name || '未识别任务') + '</td><td>' + esc(protocolTestTokenActionParams(action)) + '</td><td>' +
+        protocolTestPercent(action.configured_probability) + '</td><td>' + (Number(tokenEvent.samples_requested) || 0) + '</td><td>' +
+        (Number(tokenEvent.action_successes) || 0) + '</td><td>' + (Number(tokenEvent.observed_samples) || 0) + '</td><td>' +
+        (Number(tokenEvent.bait_hits) || 0) + '</td><td>' + (Number(tokenEvent.bait_total) || 0) + '</td><td>' +
+        protocolTestPercent(tokenEvent.probability) + '</td><td>' + protocolTestPercent(interval.low) + ' – ' + protocolTestPercent(interval.high) +
+        '</td><td>' + protocolTestPercent(tokenEvent.coverage) + '</td><td>' + esc(cap) + '</td><td>' + esc(status) + '</td></tr>';
+    } else {
+      tokenBody.innerHTML = '<tr><td colspan="14" class="protocol-test-table-empty">暂无任务数据</td></tr>';
+    }
+  }
+  const tokenMeta = document.getElementById('protocolTestTokenMeta');
+  if (tokenMeta) {
+    tokenMeta.textContent = report && tokenEvent
+      ? (tokenEvent.action?.action_name || '未识别任务') + ' · 鱼饵 ' + (tokenEvent.bait_item?.name || '未识别') + '（' + (tokenEvent.bait_item?.item_id || '未填写') + '）'
+      : '完成测试后显示';
+  }
   const actions = report?.actions || {};
   const latency = report?.latency_ms || {};
   const fishingGround = report?.fishing_ground || {};
@@ -16805,7 +16954,18 @@ function renderProtocolTestReport(report) {
     .map(([protocol, count]) => protocol + '=' + (Number(count) || 0)).join(' · ') || '无';
   const responseCodeSummary = Object.entries(generic.response_code_by_protocol || {})
     .map(([protocol, counts]) => protocol + ': ' + Object.entries(counts || {}).map(([code, count]) => code + '=' + count).join(', ')).join(' · ') || '无';
-  const lines = report ? (isFishing ? [
+  const lines = report ? (fixture === 'fishing-bait' ? [
+    '测试类型：鱼饵制作任务抽样（ActivityTokenEvent 5）',
+    '总动作：' + (actions.completed || 0) + ' / ' + (actions.requested || 0),
+    '任务：' + (tokenEvent?.action?.action_name || '未识别') + '（Action ' + (tokenEvent?.action?.action_id || '—') + '）',
+    '配置概率：' + protocolTestPercent(tokenEvent?.action?.configured_probability) + ' · 实测概率：' + protocolTestPercent(tokenEvent?.probability),
+    '有效快照：' + (tokenEvent?.observed_samples || 0) + ' · 鱼饵命中：' + (tokenEvent?.bait_hits || 0) + ' · 鱼饵总数：' + (tokenEvent?.bait_total || 0),
+    '快照失败：' + (tokenEvent?.snapshot_failures || 0) + ' · 计数回退：' + (tokenEvent?.counter_resets || 0) + ' · 覆盖率：' + protocolTestPercent(tokenEvent?.coverage),
+    '统计口径：' + (tokenEvent?.definition || '按行为前后 tokenNumMap[actionId] 增量统计。'),
+    '业务失败：' + (actions.business_failed || 0) + ' · 传输失败：' + (actions.transport_failed || 0) + ' · 超时：' + (actions.timeout || 0),
+    '响应耗时：平均 ' + Math.round(latency.average || 0) + ' ms · P50 ' + (latency.p50 || 0) + ' ms · P95 ' + (latency.p95 || 0) + ' ms · P99 ' + (latency.p99 || 0) + ' ms',
+    '错误码：' + (Object.entries(actions.error_codes || {}).map(([key, value]) => key + '=' + value).join(' · ') || '无'),
+  ] : (isFishing ? [
     '总动作：' + (actions.completed || 0) + ' / ' + (actions.requested || 0),
     '成功率：' + protocolTestPercent(actions.success_rate),
     '测试渔场：' + (fishingGround.name || '未知渔场') + (fishingGround.id ? '（ID ' + fishingGround.id + '）' : ''),
@@ -16824,7 +16984,7 @@ function renderProtocolTestReport(report) {
     '业务失败：' + (actions.business_failed || 0) + ' · 传输失败：' + (actions.transport_failed || 0) + ' · 超时：' + (actions.timeout || 0),
     '响应耗时：平均 ' + Math.round(latency.average || 0) + ' ms · P50 ' + (latency.p50 || 0) + ' ms · P95 ' + (latency.p95 || 0) + ' ms · P99 ' + (latency.p99 || 0) + ' ms',
     '错误码：' + (Object.entries(actions.error_codes || {}).map(([key, value]) => key + '=' + value).join(' · ') || '无'),
-  ]).join('\n') : '完成一次测试后，这里会显示响应成功率、耗时分位数和异常分布。';
+  ])).join('\n') : '完成一次测试后，这里会显示响应成功率、耗时分位数和异常分布。';
   const summary = document.getElementById('protocolTestSummary');
   if (summary) summary.textContent = lines;
 }
@@ -16911,7 +17071,10 @@ async function startProtocolTest() {
   const checked = await previewProtocolTest(true);
   if (!checked) return;
   const plan = checked.plan;
-  if (!confirm('将对 1 个本机 Cocos 账号执行 ' + plan.count + ' 次真实协议请求，可能消耗道具并改变账号数据。确认继续？')) return;
+  const confirmText = plan.fixture === 'fishing-bait'
+    ? '将对 1 个本机 Cocos 账号执行 ' + plan.count + ' 次真实行为，并在每次行为前后查询鱼饵累计数。操作会改变账号数据，确认继续？'
+    : '将对 1 个本机 Cocos 账号执行 ' + plan.count + ' 次真实协议请求，可能消耗道具并改变账号数据。确认继续？';
+  if (!confirm(confirmText)) return;
   try {
     const res = await fetch(PROTOCOL_TEST_API + '/runs', {
       method: 'POST',

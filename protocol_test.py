@@ -51,6 +51,23 @@ FISHING_TEMPLATE = {
     "timeout_ms": 10000,
 }
 
+FISHING_BAIT_TEMPLATE = {
+    "id": "fishing-bait-sampling",
+    "name": "鱼饵制作任务抽样",
+    "fixture": "fishing-bait",
+    "token_event": {
+        "event_id": "5",
+        "activity_meta_id": "",
+        "query_protocol": "CgTokenEventActivityInfo",
+        "query_response_protocol": "GcTokenEventActivityInfo",
+        "actions": [],
+    },
+    "count": 100,
+    "concurrency": 1,
+    "interval_ms": 0,
+    "timeout_ms": 10000,
+}
+
 PROTOCOL_FIELD_HINTS = {
     "CgFishStart": [
         {"name": "activityMetaId", "type": "string", "required": True},
@@ -71,6 +88,13 @@ PROTOCOL_FIELD_HINTS = {
         {"name": "activityMetaId", "type": "string", "required": True},
         {"name": "code", "type": "number", "required": False},
     ],
+    "CgTokenEventActivityInfo": [
+        {"name": "metaId", "type": "string", "required": True},
+    ],
+    "GcTokenEventActivityInfo": [
+        {"name": "metaId", "type": "string", "required": True},
+        {"name": "tokenNumMap", "type": "map<int, Int64>", "required": False},
+    ],
 }
 
 _STATIC_PROTOCOLS = {
@@ -78,6 +102,8 @@ _STATIC_PROTOCOLS = {
     "GcFishStartResult": {"description": "钓鱼开始结果", "direction": "response"},
     "CgFishFinish": {"description": "钓鱼结束", "direction": "request"},
     "GcFishFinishResult": {"description": "钓鱼结束结果", "direction": "response"},
+    "CgTokenEventActivityInfo": {"description": "请求鱼饵制作活动累计数据", "direction": "request"},
+    "GcTokenEventActivityInfo": {"description": "返回鱼饵制作活动累计数据", "direction": "response"},
 }
 
 
@@ -345,6 +371,76 @@ def _extract_config_records(rows, keys):
     return []
 
 
+def _extract_records_by_keys(rows, keys, min_data_row_offset=8):
+    """Extract rows from config sheets whose records do not have a name column."""
+    wanted = set(keys)
+    for index, row in enumerate(rows or []):
+        values = row.get("values", [])
+        positions = {
+            str(value).strip(): column
+            for column, value in enumerate(values)
+            if str(value).strip() in wanted
+        }
+        if "id" not in positions:
+            continue
+        header_row = _as_int(row.get("row"), 0)
+        records = []
+        for candidate in rows[index + 1:]:
+            candidate_row = _as_int(candidate.get("row"), 0)
+            if candidate_row and header_row and candidate_row < header_row + min_data_row_offset:
+                continue
+            candidate_values = candidate.get("values", [])
+            id_value = str(candidate_values[positions["id"]]).strip() if positions["id"] < len(candidate_values) else ""
+            if not re.fullmatch(r"-?\d+(?:\.\d+)?", id_value):
+                continue
+            if not any(str(value).strip() for value in candidate_values):
+                continue
+            record = {
+                key: str(candidate_values[column]).strip() if column < len(candidate_values) else ""
+                for key, column in positions.items()
+            }
+            record["id"] = id_value
+            records.append(record)
+        if records:
+            return records
+    return []
+
+
+def _item_display_name(record):
+    return str(
+        record.get("nameComment")
+        or record.get("nickname")
+        or record.get("display_name")
+        or record.get("name")
+        or record.get("name_key")
+        or ""
+    ).strip()
+
+
+def _load_item_configs(excel_root):
+    path = os.path.join(excel_root, "csv", "common", "COA_Item.xlsx")
+    sheets = _load_xlsx_rows(path)
+    sheet = next((item for item in sheets if item["name"] == "Item"), None)
+    if not sheet:
+        return {}
+    records = _extract_records_by_keys(
+        sheet.get("rows", []),
+        ["id", "name", "nameComment", "nickname", "desc"],
+    )
+    result = {}
+    for record in records:
+        item_id = str(record.get("id") or "").strip()
+        if not item_id:
+            continue
+        result[item_id] = {
+            "item_id": item_id,
+            "name": _item_display_name(record) or ("道具 " + item_id),
+            "name_key": str(record.get("name") or ""),
+            "desc_key": str(record.get("desc") or ""),
+        }
+    return result
+
+
 _FISH_QUALITY_LABELS = {
     "1": "普通",
     "2": "普通",
@@ -442,6 +538,14 @@ def load_fishing_baseline(excel_root):
         for config in (_fish_config_view(record) for record in pool_records)
         if config["fish_id"]
     }
+    item_configs = _load_item_configs(excel_root)
+    bait_item_id = str(fields.get("itemId") or "").strip()
+    bait_config = item_configs.get(bait_item_id) or {
+        "item_id": bait_item_id,
+        "name": "鱼饵" if bait_item_id else "",
+        "name_key": "",
+        "desc_key": "",
+    }
     return {
         "file": path,
         "exists": bool(sheets),
@@ -452,6 +556,108 @@ def load_fishing_baseline(excel_root):
         "expected_fish_count": expected_fish_per_action * 1000,
         "fishing_grounds": fishing_grounds,
         "fish_configs": fish_configs,
+        "bait_item": bait_config,
+        "item_configs": item_configs,
+    }
+
+
+_TOKEN_EVENT_ACTION_NAMES = {
+    1: "消耗元宝",
+    2: "消耗加速",
+    3: "采集资源",
+    4: "讨伐流寇",
+    5: "发起集结讨伐山贼营寨",
+    6: "完成烽火台任务",
+}
+
+
+def _parse_token_item(value):
+    parts = [item.strip() for item in str(value or "").split("|", 1)]
+    item_id = parts[0] if parts and parts[0] else ""
+    return item_id, max(0, _as_int(parts[1], 1)) if len(parts) > 1 else 1
+
+
+def _token_action_view(record, item_configs):
+    action_id = str(record.get("id") or "").strip()
+    action_type = _as_int(record.get("actionType"), 0)
+    token_item_id, token_count = _parse_token_item(record.get("tokenId"))
+    probability_raw = str(record.get("actionProb") or "").strip()
+    try:
+        configured_probability = float(probability_raw) if probability_raw else 0
+    except (TypeError, ValueError):
+        configured_probability = 0
+    limit_raw = str(record.get("limit") or "").strip()
+    return {
+        "action_id": action_id,
+        "action_type": action_type,
+        "action_name": _TOKEN_EVENT_ACTION_NAMES.get(action_type, "行为 " + action_id),
+        "action_name_key": str(record.get("actionName") or ""),
+        "action_desc_key": str(record.get("actionDesc") or ""),
+        "action_num": max(0, _as_int(record.get("actionNum"), 0)),
+        "action_param": max(0, _as_int(record.get("actionParam"), 0)),
+        "configured_probability": configured_probability,
+        "configured_probability_raw": probability_raw,
+        "token_item_id": token_item_id,
+        "token_item_name": (item_configs.get(token_item_id) or {}).get("name") or ("道具 " + token_item_id if token_item_id else ""),
+        "token_count": token_count,
+        "limit": _as_int(limit_raw, 0) if limit_raw else None,
+        "jump": _as_int(record.get("jump"), 0),
+    }
+
+
+def load_token_event_baseline(excel_root):
+    path = os.path.join(excel_root, "csv", "common", "COA_ActivityTokenEvent.xlsx")
+    sheets = _load_xlsx_rows(path)
+    names = [sheet["name"] for sheet in sheets]
+    event_sheet = next((sheet for sheet in sheets if sheet["name"] == "ActivityTokenEvent"), None)
+    action_sheet = next((sheet for sheet in sheets if sheet["name"] == "ActivityTokenAction"), None)
+    item_configs = _load_item_configs(excel_root)
+    event_records = _extract_records_by_keys(
+        event_sheet.get("rows", []) if event_sheet else [],
+        ["id", "eventSwitch", "actionId", "tokenId", "titleKey", "subTitleKey", "ruleKey", "banner", "themePic", "themeColor"],
+    )
+    action_records = _extract_records_by_keys(
+        action_sheet.get("rows", []) if action_sheet else [],
+        ["id", "actionType", "actionNum", "actionParam", "actionProb", "tokenId", "limit", "actionName", "actionDesc", "icon", "jump"],
+    )
+    fish_event = next(
+        (item for item in event_records if str(item.get("id")) == "5" or str(item.get("tokenId")) == "19948008"),
+        {},
+    )
+    bait_item_id = str(fish_event.get("tokenId") or "19948008").strip()
+    action_ids = [item.strip() for item in str(fish_event.get("actionId") or "").split("|") if item.strip()]
+    records_by_id = {
+        str(record.get("id")): record
+        for record in action_records
+        if str(record.get("id") or "").strip()
+    }
+    actions = [
+        _token_action_view(records_by_id[action_id], item_configs)
+        for action_id in action_ids
+        if action_id in records_by_id
+    ]
+    bait_config = item_configs.get(bait_item_id) or {
+        "item_id": bait_item_id,
+        "name": "精制鱼饵" if bait_item_id == "19948008" else "道具 " + bait_item_id,
+        "name_key": "",
+        "desc_key": "",
+    }
+    return {
+        "file": path,
+        "exists": bool(event_sheet and action_sheet),
+        "sheets": names,
+        "event": {
+            "event_id": str(fish_event.get("id") or "5"),
+            "event_switch": str(fish_event.get("eventSwitch") or ""),
+            "action_ids": action_ids,
+            "token_item_id": bait_item_id,
+            "title_key": str(fish_event.get("titleKey") or "TOKEN_EVENT_TITLE_5"),
+            "sub_title_key": str(fish_event.get("subTitleKey") or "TOKEN_EVENT_SUBTITLE_5"),
+            "rule_key": str(fish_event.get("ruleKey") or "TOKEN_EVENT_RULE_5"),
+        },
+        "actions": actions,
+        "actions_by_id": {item["action_id"]: item for item in actions},
+        "bait_item": bait_config,
     }
 
 
@@ -489,13 +695,17 @@ def discover_protocols(client_root):
 def protocol_catalog(client_root, excel_root):
     return {
         "protocols": discover_protocols(client_root),
-        "templates": [FISHING_TEMPLATE],
-        "baselines": {"fishing": load_fishing_baseline(excel_root)},
+        "templates": [FISHING_TEMPLATE, FISHING_BAIT_TEMPLATE],
+        "baselines": {
+            "fishing": load_fishing_baseline(excel_root),
+            "fishing_bait": load_token_event_baseline(excel_root),
+        },
     }
 
 
 def normalize_plan(payload):
     payload = payload if isinstance(payload, dict) else {}
+    fixture = str(payload.get("fixture") or "generic").strip().lower()
     request = payload.get("request") if isinstance(payload.get("request"), dict) else {}
     finish = payload.get("finish") if isinstance(payload.get("finish"), dict) else {}
     target_specs = payload.get("target_specs")
@@ -510,9 +720,20 @@ def normalize_plan(payload):
     response_match = request.get("response_match", payload.get("response_match", {}))
     if not isinstance(response_match, dict):
         response_match = {}
+    token_event = payload.get("token_event")
+    if not isinstance(token_event, dict):
+        token_event = {}
+    query_payload = token_event.get("query_payload", {})
+    if not isinstance(query_payload, dict):
+        query_payload = {}
+    action_id = str(token_event.get("action_id") or "29").strip()[:40]
+    activity_meta_id = str(token_event.get("activity_meta_id") or request_payload.get("activityMetaId") or request_payload.get("metaId") or "").strip()[:200]
+    query_payload = _json_safe(query_payload)
+    if activity_meta_id:
+        query_payload["metaId"] = activity_meta_id
     return {
         "title": str(payload.get("title") or "协议测试").strip()[:120],
-        "fixture": str(payload.get("fixture") or "generic").strip().lower(),
+        "fixture": fixture,
         "target_specs": [item for item in target_specs if isinstance(item, dict)],
         "request_protocol": _protocol_name(request.get("protocol") or payload.get("request_protocol")),
         "request_payload": _json_safe(request_payload),
@@ -522,7 +743,16 @@ def normalize_plan(payload):
         "finish_protocol": _protocol_name(finish.get("protocol") or payload.get("finish_protocol")),
         "finish_payload": _json_safe(finish_payload),
         "finish_response_protocol": _protocol_name(finish.get("response_protocol") or payload.get("finish_response_protocol")),
-        "count": max(1, min(_MAX_COUNT, _as_int(payload.get("count"), 1000))),
+        "token_event": {
+            "event_id": str(token_event.get("event_id") or "5").strip()[:40],
+            "activity_meta_id": activity_meta_id,
+            "action_id": action_id,
+            "token_item_id": str(token_event.get("token_item_id") or "19948008").strip()[:40],
+            "query_protocol": _protocol_name(token_event.get("query_protocol") or "CgTokenEventActivityInfo"),
+            "query_response_protocol": _protocol_name(token_event.get("query_response_protocol") or "GcTokenEventActivityInfo"),
+            "query_payload": query_payload,
+        },
+        "count": max(1, min(_MAX_COUNT, _as_int(payload.get("count"), 100 if fixture == "fishing-bait" else 1000))),
         "concurrency": max(1, _as_int(payload.get("concurrency"), 1)),
         "interval_ms": max(0, min(60000, _as_int(payload.get("interval_ms"), 0))),
         "timeout_ms": max(1000, min(12000, _as_int(payload.get("timeout_ms"), 10000))),
@@ -544,6 +774,18 @@ def validate_plan(plan, require_target=True):
             errors.append("钓鱼模板必须使用 CgFishStart / GcFishStartResult")
         if plan.get("count", 0) > 10000:
             errors.append("单次测试最多执行 10000 次")
+    if plan.get("fixture") == "fishing-bait":
+        token_event = plan.get("token_event") or {}
+        if not token_event.get("action_id"):
+            errors.append("请选择鱼饵制作任务")
+        if not token_event.get("activity_meta_id"):
+            errors.append("请填写鱼饵制作活动 Meta ID")
+        if token_event.get("query_protocol") != "CgTokenEventActivityInfo" or token_event.get("query_response_protocol") != "GcTokenEventActivityInfo":
+            errors.append("鱼饵制作统计必须使用 CgTokenEventActivityInfo / GcTokenEventActivityInfo")
+        if plan.get("request_protocol") in ("", "CgTokenEventActivityInfo"):
+            errors.append("请选择实际触发该任务的行为协议，不能只发送活动信息查询协议")
+        if plan.get("count", 0) > _MAX_COUNT:
+            errors.append("单次测试最多执行 10000 次")
     return errors
 
 
@@ -551,6 +793,7 @@ def preview_plan(payload, client_root, excel_root):
     plan = normalize_plan(payload)
     errors = validate_plan(plan, require_target=False)
     baseline = load_fishing_baseline(excel_root) if plan.get("fixture") == "fishing" else None
+    token_baseline = load_token_event_baseline(excel_root) if plan.get("fixture") == "fishing-bait" else None
     warnings = [
         "协议测试会真实消耗账号资源并改变游戏状态，请使用隔离测试账号。",
         "超时请求不会自动重试，避免重复消耗和污染概率统计。",
@@ -560,12 +803,33 @@ def preview_plan(payload, client_root, excel_root):
             "钓鱼测试会改变道具、图鉴、总重量及金鱼/传奇鱼场保底状态。",
             "times 建议保持为 1，1000 次应由测试框架拆成 1000 个独立动作。",
         ])
+    token_preview = None
+    if plan.get("fixture") == "fishing-bait":
+        token_event = plan.get("token_event") or {}
+        action = (token_baseline or {}).get("actions_by_id", {}).get(token_event.get("action_id"))
+        token_preview = {
+            "event": (token_baseline or {}).get("event") or {},
+            "action": action,
+            "actions": (token_baseline or {}).get("actions") or [],
+            "bait_item": (token_baseline or {}).get("bait_item") or {},
+            "query_protocol": token_event.get("query_protocol"),
+            "query_response_protocol": token_event.get("query_response_protocol"),
+        }
+        warnings.extend([
+            "鱼饵制作页签的任务是被动行为统计，不存在统一的完成任务协议；行为协议执行后通过 tokenNumMap[actionId] 增量确认是否获得鱼饵。",
+            "每次样本会执行：动作前查询 → 行为协议 → 动作后查询；查询失败的样本不会计入概率分母。",
+        ])
+        if not action:
+            errors.append("当前配置没有匹配的鱼饵制作任务，请刷新配置或重新选择任务。")
+        elif action.get("limit"):
+            warnings.append(f"该任务单账号鱼饵上限为 {action['limit']} 个；达到上限后的样本无法用于估计真实概率。")
     return {
         "ok": not errors,
         "plan": plan,
         "errors": errors,
         "warnings": warnings,
         "baseline": baseline,
+        "token_event": token_preview,
         "protocols": discover_protocols(client_root),
     }
 
@@ -687,6 +951,120 @@ def _record_fishes(stats, fishes, scene_id=None):
             _increment(stats["item_by_id"], item_id, _as_int(item.get("num", item.get("count", 1)), 1))
 
 
+def _token_num_map(response):
+    if not isinstance(response, dict):
+        return {}
+    value = response.get("tokenNumMap", response.get("token_num_map", {}))
+    return value if isinstance(value, dict) else {}
+
+
+def _token_num_value(value):
+    if isinstance(value, dict):
+        value = value.get("value", value.get("valueOf", value.get("num", 0)))
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _token_event_count(response, action_id):
+    action_id = str(action_id or "").strip()
+    values = _token_num_map(response)
+    for key, value in values.items():
+        if str(key).strip() == action_id:
+            return max(0, _token_num_value(value))
+    return 0
+
+
+def _init_token_event_stats(stats, action):
+    action = action or {}
+    stats["token_event"] = {
+        "action_id": str(action.get("action_id") or ""),
+        "action_name": str(action.get("action_name") or ""),
+        "token_item_id": str(action.get("token_item_id") or ""),
+        "token_item_name": str(action.get("token_item_name") or ""),
+        "samples_requested": int(stats.get("requested") or 0),
+        "action_successes": 0,
+        "observed_samples": 0,
+        "snapshot_failures": 0,
+        "bait_hits": 0,
+        "bait_total": 0,
+        "counter_resets": 0,
+        "cap_reached": False,
+        "cap_value": action.get("limit"),
+        "pre_query_requests": 0,
+        "post_query_requests": 0,
+        "query_failures": 0,
+        "error_codes": {},
+    }
+
+
+def _record_token_event_measurement(stats, before_result, after_result, action):
+    token_stats = stats["token_event"]
+    if not before_result or not before_result.get("ok") or not after_result or not after_result.get("ok"):
+        token_stats["snapshot_failures"] += 1
+        token_stats["query_failures"] += 1
+        return {"ok": False, "code": "token_snapshot_failed", "error": "动作前后活动数据快照不完整"}
+    before = _token_event_count(before_result.get("response"), action.get("action_id"))
+    after = _token_event_count(after_result.get("response"), action.get("action_id"))
+    limit = action.get("limit")
+    if limit is not None and before >= int(limit):
+        token_stats["cap_reached"] = True
+        return {"ok": False, "code": "token_cap_reached", "error": "动作执行前已达到该任务的单账号鱼饵上限，样本未计入概率"}
+    if limit is not None and after >= int(limit):
+        token_stats["cap_reached"] = True
+    if after < before:
+        token_stats["counter_resets"] += 1
+        return {"ok": False, "code": "token_counter_reset", "error": "活动累计计数在动作前后发生回退，样本未计入概率"}
+    delta = after - before
+    token_stats["observed_samples"] += 1
+    if delta > 0:
+        token_stats["bait_hits"] += 1
+        token_stats["bait_total"] += delta
+    return {
+        "ok": True,
+        "before": before,
+        "after": after,
+        "delta": delta,
+        "hit": delta > 0,
+    }
+
+
+def _token_event_report(stats, baseline, plan):
+    token_stats = stats.get("token_event") or {}
+    configured = ((baseline or {}).get("actions_by_id") or {}).get(str(token_stats.get("action_id") or ""), {})
+    observed = int(token_stats.get("observed_samples") or 0)
+    hits = int(token_stats.get("bait_hits") or 0)
+    item_id = str(token_stats.get("token_item_id") or configured.get("token_item_id") or "")
+    item_name = str(token_stats.get("token_item_name") or configured.get("token_item_name") or "")
+    return {
+        "event": (baseline or {}).get("event") or {},
+        "bait_item": {
+            "item_id": item_id,
+            "name": item_name,
+        },
+        "query_protocol": ((plan or {}).get("token_event") or {}).get("query_protocol") or "CgTokenEventActivityInfo",
+        "query_response_protocol": ((plan or {}).get("token_event") or {}).get("query_response_protocol") or "GcTokenEventActivityInfo",
+        "action": {**configured, **_json_safe(token_stats)},
+        "actions": (baseline or {}).get("actions") or [],
+        "samples_requested": int(token_stats.get("samples_requested") or 0),
+        "observed_samples": observed,
+        "bait_hits": hits,
+        "bait_total": int(token_stats.get("bait_total") or 0),
+        "action_successes": int(token_stats.get("action_successes") or 0),
+        "action_success_rate": int(token_stats.get("action_successes") or 0) / int(token_stats.get("samples_requested") or 0) if token_stats.get("samples_requested") else 0,
+        "probability": hits / observed if observed else 0,
+        "interval": wilson_interval(hits, observed),
+        "coverage": observed / int(token_stats.get("samples_requested") or 0) if token_stats.get("samples_requested") else 0,
+        "cap_reached": bool(token_stats.get("cap_reached")),
+        "counter_resets": int(token_stats.get("counter_resets") or 0),
+        "snapshot_failures": int(token_stats.get("snapshot_failures") or 0),
+        "query_failures": int(token_stats.get("query_failures") or 0),
+        "definition": "实测鱼饵概率 = 动作前后 tokenNumMap[actionId] 增加的样本数 / 动作前后快照均成功的样本数；配置概率来自 ActivityTokenAction.actionProb。",
+        "valid_for_probability": bool(observed and not token_stats.get("cap_reached") and not token_stats.get("counter_resets")),
+    }
+
+
 def _report_fishing_ground(baseline, stats, state):
     configured_grounds = (baseline or {}).get("fishing_grounds") or {}
     observed_ids = list((stats.get("fishing_ground_ids") or {}).keys())
@@ -785,6 +1163,8 @@ def _build_report(state, stats, baseline):
             "response_code_by_protocol": stats["response_code_by_protocol"],
             "samples": stats["response_samples"],
         },
+        "token_event": _token_event_report(stats, baseline, state.get("plan") or {})
+        if fixture == "fishing-bait" else None,
         "config_baseline": baseline,
     }
 
@@ -870,9 +1250,41 @@ class ProtocolTestService:
         stats = _new_stats()
         stats["requested"] = plan["count"]
         self._save_state(state)
-        baseline = load_fishing_baseline(self.excel_root) if plan["fixture"] == "fishing" else None
+        if plan["fixture"] == "fishing":
+            baseline = load_fishing_baseline(self.excel_root)
+        elif plan["fixture"] == "fishing-bait":
+            baseline = load_token_event_baseline(self.excel_root)
+        else:
+            baseline = None
+
+        def call_protocol(protocol, payload, response_protocol, response_match=None):
+            try:
+                return send_request(
+                    protocol,
+                    _json_safe(payload or {}),
+                    response_protocol,
+                    plan["timeout_ms"],
+                    _json_safe(response_match or {}),
+                )
+            except Exception as exc:
+                return {"ok": False, "code": "transport_exception", "error": str(exc)}
+
+        token_action = None
+        if plan["fixture"] == "fishing-bait":
+            token_event = plan.get("token_event") or {}
+            token_action = ((baseline or {}).get("actions_by_id") or {}).get(token_event.get("action_id"))
+            _init_token_event_stats(stats, token_action or {
+                "action_id": token_event.get("action_id"),
+                "token_item_id": token_event.get("token_item_id"),
+            })
+            if not token_action:
+                state["status"] = "failed"
+                state["message"] = "当前配置中没有找到所选鱼饵制作任务"
+
         try:
             for sequence in range(1, plan["count"] + 1):
+                if state.get("status") in ("failed", "stopped"):
+                    break
                 if stop_event.is_set():
                     state["status"] = "stopped"
                     state["message"] = "测试已停止"
@@ -888,6 +1300,126 @@ class ProtocolTestService:
                     "response_protocol": plan["response_protocol"],
                 }
                 stats["completed"] += 1
+                if plan["fixture"] == "fishing-bait":
+                    token_event = plan.get("token_event") or {}
+                    query_protocol = token_event.get("query_protocol") or "CgTokenEventActivityInfo"
+                    query_response_protocol = token_event.get("query_response_protocol") or "GcTokenEventActivityInfo"
+                    activity_meta_id = str(token_event.get("activity_meta_id") or "")
+                    query_payload = dict(token_event.get("query_payload") or {})
+                    query_payload["metaId"] = activity_meta_id
+                    query_match = {"metaId": activity_meta_id}
+                    token_stats = stats["token_event"]
+
+                    token_stats["pre_query_requests"] += 1
+                    before_result = call_protocol(
+                        query_protocol, query_payload, query_response_protocol, query_match
+                    )
+                    event["token_before"] = _json_safe(before_result)
+                    if before_result and before_result.get("ok"):
+                        _record_response(
+                            stats,
+                            before_result.get("response_protocol") or query_response_protocol,
+                            before_result.get("response"),
+                        )
+                    else:
+                        event["token_measurement"] = _json_safe(
+                            _record_token_event_measurement(stats, before_result, None, token_action)
+                        )
+
+                    result = before_result
+                    if before_result and before_result.get("ok"):
+                        before_count = _token_event_count(
+                            before_result.get("response"), token_action.get("action_id")
+                        )
+                        limit = token_action.get("limit")
+                        if limit is not None and before_count >= int(limit):
+                            token_stats["cap_reached"] = True
+                            result = {
+                                "ok": False,
+                                "code": "token_cap_reached",
+                                "error": "该任务已达到单账号鱼饵上限，未继续发送行为协议",
+                            }
+                            event["token_measurement"] = _json_safe(result)
+                        else:
+                            result = call_protocol(
+                                plan["request_protocol"], request_payload,
+                                plan["response_protocol"], plan["response_match"],
+                            )
+                        event["transport"] = _json_safe(result or {})
+                        if result and result.get("ok"):
+                            response = result.get("response")
+                            event["response"] = _json_safe(response)
+                            _record_response(
+                                stats,
+                                result.get("response_protocol") or plan["response_protocol"],
+                                response,
+                            )
+                            if plan["response_match"] and not _matches(response, plan["response_match"]):
+                                result = {"ok": False, "code": "response_mismatch", "error": "响应字段不符合预期"}
+                            else:
+                                condition_ok, condition_error = evaluate_condition(response, plan["success_condition"])
+                                if not condition_ok:
+                                    result = {"ok": False, "code": "assertion_failed", "error": condition_error or "响应断言失败"}
+                                else:
+                                    stats["success"] += 1
+                                    token_stats["action_successes"] += 1
+                                    token_stats["post_query_requests"] += 1
+                                    after_result = call_protocol(
+                                        query_protocol, query_payload,
+                                        query_response_protocol, query_match,
+                                    )
+                                    event["token_after"] = _json_safe(after_result)
+                                    if after_result and after_result.get("ok"):
+                                        _record_response(
+                                            stats,
+                                            after_result.get("response_protocol") or query_response_protocol,
+                                            after_result.get("response"),
+                                        )
+                                    measurement = _record_token_event_measurement(
+                                        stats, before_result, after_result, token_action
+                                    )
+                                    event["token_measurement"] = _json_safe(measurement)
+
+                    received_at = _now_ms()
+                    event["received_at_ms"] = received_at
+                    event["latency_ms"] = max(0, received_at - sent_at)
+                    if result and result.get("ok"):
+                        stats["response_latencies_ms"].append(event["latency_ms"])
+                    else:
+                        code = str((result or {}).get("code") or "unknown")
+                        if code != "token_cap_reached":
+                            _increment(stats["error_codes"], code)
+                            if code in ("timeout", "protocol_timeout") or "超时" in str((result or {}).get("error") or ""):
+                                stats["timeout"] += 1
+                            elif code in ("transport_exception", "transport_failed", "rpc_failed"):
+                                stats["transport_failed"] += 1
+                            else:
+                                stats["business_failed"] += 1
+                        event["error"] = _json_safe((result or {}).get("error") or "协议测试失败")
+
+                    state["failed"] = stats["business_failed"] + stats["transport_failed"] + stats["timeout"]
+                    state["completed"] = stats["completed"]
+                    state["success"] = stats["success"]
+                    state["timeout"] = stats["timeout"]
+                    state["progress"] = round(stats["completed"] / plan["count"] * 100, 2)
+                    state["event_count"] = sequence
+                    state["message"] = f"已完成 {sequence}/{plan['count']} 次"
+                    self._append_event(run_id, event)
+                    self._save_state(state)
+                    if token_stats.get("cap_reached") and sequence < plan["count"]:
+                        state["status"] = "stopped"
+                        state["message"] = "已达到该任务的单账号鱼饵上限，测试已停止"
+                        self._save_state(state)
+                        break
+                    if not (result and result.get("ok")) and code in _FATAL_ERROR_CODES:
+                        state["status"] = "failed"
+                        state["message"] = str((result or {}).get("error") or "协议测试连接已不可用")
+                        self._save_state(state)
+                        break
+                    if plan["interval_ms"] and sequence < plan["count"]:
+                        stop_event.wait(plan["interval_ms"] / 1000)
+                    continue
+
                 result = None
                 try:
                     result = send_request(
@@ -923,11 +1455,16 @@ class ProtocolTestService:
                                 _record_fishes(stats, _extract_fishes(response), scene_id)
                             finish_result = None
                             if plan["finish_protocol"]:
-                                finish_result = send_request(
+                                finish_result = call_protocol(
                                     plan["finish_protocol"], plan["finish_payload"],
-                                    plan["finish_response_protocol"] or "", plan["timeout_ms"],
-                                    {},
+                                    plan["finish_response_protocol"] or "", {},
                                 )
+                                if finish_result and finish_result.get("ok"):
+                                    _record_response(
+                                        stats,
+                                        finish_result.get("response_protocol") or plan["finish_response_protocol"],
+                                        finish_result.get("response"),
+                                    )
                                 if not finish_result or not finish_result.get("ok"):
                                     stats["finish_failures"] += 1
                                 event["finish"] = _json_safe(finish_result)
