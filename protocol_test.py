@@ -1357,7 +1357,10 @@ class ProtocolTestService:
                             if plan["response_match"] and not _matches(response, plan["response_match"]):
                                 result = {"ok": False, "code": "response_mismatch", "error": "响应字段不符合预期"}
                             else:
-                                condition_ok, condition_error = evaluate_condition(response, plan["success_condition"])
+                                success_condition = plan["success_condition"]
+                                if not success_condition and isinstance(response, dict) and "code" in response:
+                                    success_condition = "code == 0"
+                                condition_ok, condition_error = evaluate_condition(response, success_condition)
                                 if not condition_ok:
                                     result = {"ok": False, "code": "assertion_failed", "error": condition_error or "响应断言失败"}
                                 else:
